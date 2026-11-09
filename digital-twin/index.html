@@ -60,10 +60,12 @@
   <h1>浙江医院 · 数字孪生白膜</h1>
   <div class="sub">数据：医院总平1.jpg（1:500，约10.5px/m）+ 建筑DWG标高/层数标注</div>
   <div class="toggles">
+    <label><input type="checkbox" id="tg-real" checked> 写实模型</label>
+    <label><input type="checkbox" id="tg-white"> 白膜</label>
     <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
     <label><input type="checkbox" id="tg-line" checked> 楼层线</label>
     <label><input type="checkbox" id="tg-label" checked> 名称标注</label>
-    <label><input type="checkbox" id="tg-tree" checked> 3D树木</label>
+    <label><input type="checkbox" id="tg-tree"> 3D树木</label>
     <label><input type="checkbox" id="tg-alpha"> 半透明</label>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
   </div>
@@ -326,6 +328,7 @@ function updateSnow(dt, cam, t) {
 
 // ---------- 3D 树木 ----------
 const treesGroup = new THREE.Group();
+treesGroup.visible = false; // 写实模型为主视图，树木默认隐藏（可开启）
 scene.add(treesGroup);
 fetch('./data/trees.json').then((r) => r.json()).then(buildTrees).catch((e) => console.warn('树木数据加载失败', e));
 
@@ -464,6 +467,38 @@ for (const b of BUILDINGS) {
   }
 }
 
+// 白膜默认隐藏（"白膜"开关可打开），主视图改为写实模型
+buildingsGroup.visible = false;
+labelsGroup.visible = false;
+
+// ---------- 写实模型（12号楼） ----------
+const realGroup = new THREE.Group();
+scene.add(realGroup);
+let realLoaded = false;
+new GLTFLoader().loadAsync('/models/models/12号楼.glb').then((gltf) => {
+  const obj = gltf.scene;
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  let s = 1;
+  if (Math.max(size.x, size.y, size.z) > 100) s = 0.001; // 单位 mm → m
+  const c = box.getCenter(new THREE.Vector3());
+  obj.scale.setScalar(s);
+  obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
+  obj.traverse((o) => {
+    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+  });
+  realGroup.add(obj);
+  realLoaded = true;
+  const r = Math.max(size.x, size.y, size.z) * s;
+  camera.position.set(r * 1.1, r * 0.85, r * 1.7);
+  controls.target.set(0, r * 0.35, 0);
+  controls.maxDistance = Math.max(controls.maxDistance, r * 12);
+}).catch((e) => {
+  console.warn('12号楼模型加载失败，回退显示白膜', e);
+  buildingsGroup.visible = true;
+  labelsGroup.visible = true;
+});
+
 // ---------- 透视模式：1号楼内部模拟（模拟数据） ----------
 const xrayState = { on: false };
 const interiorGroup = new THREE.Group();
@@ -568,10 +603,10 @@ function updateElevators(dt) {
 // 机器人（8台：4种设备外观各2台，模拟数据）
 const ROBOTS = [];
 const ROBOT_DEFS = [
-  { file: '/models/models/meal.glb', count: 2 },
-  { file: '/models/models/medicine.glb', count: 2 },
-  { file: '/models/models/waste.glb', count: 2 },
-  { file: '/models/models/platform.glb', count: 2 },
+  { file: '/models/models/detail/meal.glb', count: 2 },
+  { file: '/models/models/detail/medicine.glb', count: 2 },
+  { file: '/models/models/detail/waste.glb', count: 2 },
+  { file: '/models/models/detail/platform.glb', count: 2 },
 ];
 let robotsReady = false;
 async function loadRobots() {
@@ -700,7 +735,15 @@ function refreshMeshMaterial(m) {
 function applyXray(on) {
   xrayState.on = on;
   interiorGroup.visible = on;
-  if (on) { setHighlight(null); syncList(); }
+  if (on) {
+    setHighlight(null);
+    syncList();
+    buildingsGroup.visible = true; // 透视需要白膜楼体
+    labelsGroup.visible = true;
+  } else {
+    buildingsGroup.visible = $('tg-white').checked;
+    labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
+  }
   for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
   const btn = $('xray-btn');
   btn.textContent = on ? '退出透视（1号楼）' : '🔍 透视 1号楼（内部模拟）';
@@ -711,10 +754,10 @@ function flyToPos(pos, look) { flyTarget = { pos, look }; }
 
 // ---------- 物流设备模型 ----------
 const DEVICES = [
-  { file: '/models/models/meal.glb', name: '送餐车' },
-  { file: '/models/models/medicine.glb', name: '送药车' },
-  { file: '/models/models/waste.glb', name: '污物车' },
-  { file: '/models/models/platform.glb', name: '物流平台' },
+  { file: '/models/models/detail/meal.glb', name: '送餐车' },
+  { file: '/models/models/detail/medicine.glb', name: '送药车' },
+  { file: '/models/models/detail/waste.glb', name: '污物车' },
+  { file: '/models/models/detail/platform.glb', name: '物流平台' },
 ];
 const devicesGroup = new THREE.Group();
 devicesGroup.visible = false;
@@ -776,7 +819,11 @@ const hlPlain = [hlMat, hlMat, hlMat, hlMat, hlMat, hlMat];
 function setHighlight(building) {
   if (selected) for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
   selected = building;
-  if (selected) for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
+  if (selected) {
+    buildingsGroup.visible = true; // 选中建筑时显示白膜
+    labelsGroup.visible = true;
+    for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
+  }
 }
 
 function flyTo(building) {
@@ -851,7 +898,12 @@ $('tg-tex').onchange = (e) => { ground.material = e.target.checked ? groundMapMa
 $('tg-line').onchange = (e) => {
   for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
 };
-$('tg-label').onchange = (e) => { labelsGroup.visible = e.target.checked; };
+$('tg-label').onchange = (e) => { labelsGroup.visible = e.target.checked && $('tg-white').checked; };
+$('tg-white').onchange = (e) => {
+  buildingsGroup.visible = e.target.checked;
+  labelsGroup.visible = e.target.checked && $('tg-label').checked;
+};
+$('tg-real').onchange = (e) => { realGroup.visible = e.target.checked; };
 $('tg-tree').onchange = (e) => { treesGroup.visible = e.target.checked; };
 $('tg-alpha').onchange = (e) => {
   for (const mt of allMats) { mt.transparent = e.target.checked; mt.opacity = e.target.checked ? 0.55 : 1; mt.depthWrite = !e.target.checked; }
