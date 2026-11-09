@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>浙江医院 数字孪生白膜</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  #app { position: fixed; inset: 0; }
+  #hint { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(20,30,40,.72); color: #dfe8f0; font-size: 12px; padding: 5px 14px; border-radius: 14px; pointer-events: none; }
+  #panel { position: fixed; top: 10px; left: 10px; width: 300px; max-height: calc(100% - 20px); overflow-y: auto; background: rgba(255,255,255,.94); border-radius: 10px; box-shadow: 0 2px 14px rgba(0,0,0,.25); font-size: 13px; color: #24303c; }
+  #panel h1 { font-size: 15px; margin: 0; padding: 12px 14px 8px; }
+  #panel .sub { font-size: 11px; color: #6b7785; padding: 0 14px 6px; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; border-bottom: 1px solid #e3e8ee; }
+  .toggles label { font-size: 12px; display: flex; align-items: center; gap: 3px; cursor: pointer; background: #eef2f6; padding: 3px 8px; border-radius: 12px; }
+  .timebox, .weatherbox { padding: 8px 14px 8px; border-bottom: 1px solid #e3e8ee; }
+  .timebox .row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }
+  .timebox b, .weatherbox b { font-size: 12px; color: #44505c; }
+  .timebox input[type=range] { width: 100%; accent-color: #2b7fd4; }
+  #time-val { font-weight: bold; min-width: 38px; }
+  .timebox button, .weatherbox button { font-size: 12px; border: 1px solid #c3ccd6; background: #f4f7fa; border-radius: 10px; padding: 2px 9px; cursor: pointer; }
+  .weatherbox { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .weatherbox button.on { background: #2b7fd4; color: #fff; border-color: #2b7fd4; }
+  .simbox { padding: 8px 14px 10px; border-bottom: 1px solid #e3e8ee; }
+  .simbox button { width: 100%; font-size: 13px; border: 1px solid #2b7fd4; background: #2b7fd4; color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; }
+  .simbox button.on { background: #b4552f; border-color: #b4552f; }
+  .simbox .sub { font-size: 11px; color: #6b7785; padding-top: 6px; }
+  #bld-list { padding: 6px 0; border-bottom: 1px solid #e3e8ee; }
+  .bld-item { display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer; }
+  .bld-item:hover { background: #f2f6fa; }
+  .bld-item.sel { background: #fff3cd; }
+  .bld-item .nm { flex: 1; }
+  .bld-item .meta { font-size: 11px; color: #6b7785; }
+  .badge { font-size: 10px; background: #00bcd4; color: #fff; border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
+  .badge.no { background: #d5dbe2; color: #5b6672; }
+  #detail { padding: 10px 14px; border-bottom: 1px solid #e3e8ee; }
+  #detail h2 { font-size: 14px; margin: 0 0 4px; }
+  #detail .info { font-size: 12px; color: #44505c; margin-bottom: 4px; }
+  #detail .src { font-size: 11px; color: #8a94a0; margin-bottom: 6px; }
+  #detail table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  #detail td, #detail th { border: 1px solid #e3e8ee; padding: 2px 5px; text-align: left; }
+  #detail .elev { margin-top: 6px; font-size: 12px; background: #e8f7fa; border-left: 3px solid #00bcd4; padding: 5px 8px; border-radius: 0 6px 6px 0; }
+  #detail .elev b { color: #008396; }
+  #sec { padding: 8px 14px 12px; }
+  #sec h3 { font-size: 12px; color: #44505c; margin: 8px 0 4px; }
+  #sec ul { margin: 0; padding-left: 18px; font-size: 11px; color: #5b6672; line-height: 1.6; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="panel">
+  <h1>浙江医院 · 数字孪生白膜</h1>
+  <div class="sub">数据：医院总平1.jpg（1:500，约10.5px/m）+ 建筑DWG标高/层数标注</div>
+  <div class="toggles">
+    <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
+    <label><input type="checkbox" id="tg-line" checked> 楼层线</label>
+    <label><input type="checkbox" id="tg-label" checked> 名称标注</label>
+    <label><input type="checkbox" id="tg-tree" checked> 3D树木</label>
+    <label><input type="checkbox" id="tg-alpha"> 半透明</label>
+    <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
+  </div>
+  <div class="timebox">
+    <div class="row"><b>时间 / 太阳</b><span id="time-val">14:00</span><button id="time-play">▶ 播放</button></div>
+    <input type="range" id="time-slider" min="0" max="24" step="0.05" value="14">
+  </div>
+  <div class="weatherbox">
+    <b>天气</b>
+    <button data-w="sunny" class="on">晴天</button>
+    <button data-w="rain">小雨</button>
+    <button data-w="snow">大雪</button>
+  </div>
+  <div class="simbox">
+    <button id="xray-btn">🔍 透视 1号楼（内部模拟）</button>
+    <div class="sub" id="sim-hint" style="display:none">模拟数据：8台机器人（4种设备外观）在各楼层移动并乘梯 · 2部电梯上下运行/开关门</div>
+  </div>
+  <div id="bld-list"></div>
+  <div id="detail"><div class="info" style="color:#8a94a0">点击左侧列表或场景中的建筑查看详情</div></div>
+  <div id="sec">
+    <h3>电梯信息汇总</h3>
+    <ul id="elev-sum"></ul>
+    <h3>未能定位的建筑/设施</h3>
+    <ul id="unloc"></ul>
+    <h3>备注</h3>
+    <ul id="notes"></ul>
+  </div>
+</div>
+<div id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击建筑查看详情</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { BUILDINGS, IMG, UNLOCATED, NOTES } from './data/buildings.js';
+
+const M = IMG.pxPerM;
+const W = IMG.w / M, H = IMG.h / M;                 // 场地尺寸(米) 561.7 x 289
+const toX = (px) => (px - IMG.w / 2) / M;
+const toZ = (py) => (py - IMG.h / 2) / M;
+
+// ---------- 场景 ----------
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xcfe2f2);
+scene.fog = new THREE.Fog(0xcfe2f2, 900, 2200);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 4000);
+camera.position.set(W * 0.05, 300, H * 1.15);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 20, 0);
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minDistance = 30;
+controls.maxDistance = 1500;
+controls.enableDamping = true;
+
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c6d4, 0.95);
+scene.add(hemi);
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(4096, 4096);
+sunLight.shadow.camera.near = 120;
+sunLight.shadow.camera.far = 1800;
+sunLight.shadow.camera.left = -300;
+sunLight.shadow.camera.right = 300;
+sunLight.shadow.camera.top = 300;
+sunLight.shadow.camera.bottom = -300;
+sunLight.shadow.bias = -0.0004;
+scene.add(sunLight);
+scene.add(sunLight.target);
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+fillLight.position.set(-320, 160, -260);
+scene.add(fillLight);
+const sunDisc = new THREE.Mesh(
+  new THREE.SphereGeometry(30, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0xffe9b0, fog: false })
+);
+scene.add(sunDisc);
+
+// ---------- 地面（总平图纹理） ----------
+const groundGroup = new THREE.Group();
+scene.add(groundGroup);
+const groundGeo = new THREE.PlaneGeometry(W, H);
+const groundPlainMat = new THREE.MeshLambertMaterial({ color: 0xe8ecf0 });
+const ground = new THREE.Mesh(groundGeo, groundPlainMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+groundGroup.add(ground);
+const groundMapMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+new THREE.TextureLoader().load('/digital-twin/assets/site-plan.jpg', (t) => {
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  groundMapMat.map = t;
+  groundMapMat.needsUpdate = true;
+  if ($('tg-tex').checked) ground.material = groundMapMat;
+});
+
+// ---------- 时间 / 太阳 ----------
+const timeState = { hour: 14, playing: false, speed: 0.35 }; // 小时/秒（约70秒一整天）
+const sunDir = new THREE.Vector3();
+const skyCol = new THREE.Color();
+const fogCol = new THREE.Color();
+const NIGHT = new THREE.Color(0x0b1020);
+const SUNSET = new THREE.Color(0xf0a35f);
+const HORIZON = new THREE.Color(0xb8c6d8);
+const DAY = new THREE.Color(0x8fb8dd);
+const SUN_LOW = new THREE.Color(0xff9a4d);
+let weatherDim = 1, weatherBlend = 0;
+
+function sunDirAt(hour) {
+  const a = Math.PI * Math.max(0, Math.min(1, (hour - 6) / 12)); // 6点日出(东)→18点日落(西)
+  const el = Math.sin(a) * 1.22;                                  // 最大仰角约70°
+  return new THREE.Vector3(Math.cos(el) * Math.cos(a), Math.sin(el), Math.cos(el) * Math.sin(a));
+}
+function sunElvAt(hour) {
+  const a = Math.PI * (hour - 6) / 12; // 不截断：18点后为负 → 黄昏余晖
+  return Math.sin(a) * 1.22;
+}
+function updateSun() {
+  const tgt = controls.target;
+  sunDir.copy(sunDirAt(timeState.hour));
+  const elv = sunElvAt(timeState.hour);
+  if (elv > 0.02) {
+    sunLight.intensity = (0.35 + elv * 1.8) * weatherDim;
+    sunLight.color.copy(SUN_LOW).lerp(new THREE.Color(0xffffff), Math.min(1, elv * 1.6));
+    sunDisc.visible = true;
+  } else {
+    sunLight.intensity = 0;
+    sunDisc.visible = false;
+  }
+  sunLight.position.set(tgt.x + sunDir.x * 620, Math.max(tgt.y + sunDir.y * 620, 60), tgt.z + sunDir.z * 620);
+  sunLight.target.position.copy(tgt);
+  sunLight.target.updateMatrixWorld();
+  sunDisc.position.set(tgt.x + sunDir.x * 2100, tgt.y + sunDir.y * 2100 + 40, tgt.z + sunDir.z * 2100);
+  if (elv > 0.32) skyCol.copy(DAY);
+  else if (elv > 0.14) skyCol.copy(HORIZON).lerp(DAY, (elv - 0.14) / 0.18);
+  else if (elv > 0) skyCol.copy(SUNSET).lerp(HORIZON, elv / 0.14);
+  else if (elv > -0.14) skyCol.copy(NIGHT).lerp(SUNSET, (elv + 0.14) / 0.14);
+  else skyCol.copy(NIGHT);
+  hemi.intensity = 0.22 + Math.max(0, elv) * 0.8;
+}
+
+// ---------- 天气 ----------
+const WEATHER = {
+  sunny: { dim: 1, blend: 0, sky: 0xffffff, fogNear: 900, fogFar: 2600, tint: 0xffffff },
+  rain: { dim: 0.42, blend: 0.78, sky: 0x6f7f8e, fogNear: 420, fogFar: 1500, tint: 0xb2bcc6 },
+  snow: { dim: 0.6, blend: 0.6, sky: 0xb9c4cf, fogNear: 380, fogFar: 1400, tint: 0xe3e9ee },
+};
+const weatherState = { mode: 'sunny' };
+scene.fog = new THREE.Fog(0xffffff, 900, 2600);
+
+function setWeather(mode) {
+  weatherState.mode = mode;
+  const w = WEATHER[mode];
+  weatherDim = w.dim;
+  weatherBlend = w.blend;
+  rain.visible = mode === 'rain';
+  snow.visible = mode === 'snow';
+  document.querySelectorAll('.weatherbox button').forEach((b) => b.classList.toggle('on', b.dataset.w === mode));
+}
+function updateSkyFog() {
+  const w = WEATHER[weatherState.mode];
+  fogCol.copy(skyCol).lerp(new THREE.Color(w.sky), weatherBlend);
+  scene.background.copy(fogCol);
+  scene.fog.color.copy(fogCol);
+  scene.fog.near = w.fogNear;
+  scene.fog.far = w.fogFar;
+  groundMapMat.color.setHex(w.tint);
+  groundPlainMat.color.setHex(w.tint);
+}
+
+// ---------- 雨 ----------
+const RAIN_N = 2600, R_R = 280, R_H = 140;
+const rainArr = new Float32Array(RAIN_N * 6);
+const rainSpd = new Float32Array(RAIN_N);
+for (let i = 0; i < RAIN_N; i++) {
+  rainArr[i * 6] = (Math.random() * 2 - 1) * R_R;
+  rainArr[i * 6 + 2] = (Math.random() * 2 - 1) * R_R;
+  rainArr[i * 6 + 1] = Math.random() * R_H;
+  rainArr[i * 6 + 3] = rainArr[i * 6];
+  rainArr[i * 6 + 5] = rainArr[i * 6 + 2];
+  rainArr[i * 6 + 4] = rainArr[i * 6 + 1] - 1.6;
+  rainSpd[i] = 55 + Math.random() * 25;
+}
+const rainGeo = new THREE.BufferGeometry();
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainArr, 3));
+const rain = new THREE.LineSegments(
+  rainGeo,
+  new THREE.LineBasicMaterial({ color: 0x8fa8bd, transparent: true, opacity: 0.5 })
+);
+rain.frustumCulled = false;
+rain.visible = false;
+scene.add(rain);
+
+function updateRain(dt, cam) {
+  for (let i = 0; i < RAIN_N; i++) {
+    const o = i * 6;
+    let y = rainArr[o + 1] - rainSpd[i] * dt;
+    if (y < 0) y += R_H;
+    rainArr[o + 1] = y;
+    rainArr[o + 4] = y - 1.6;
+    let x = rainArr[o];
+    if (x - cam.x > R_R) x -= R_R * 2; else if (x - cam.x < -R_R) x += R_R * 2;
+    rainArr[o] = x; rainArr[o + 3] = x;
+    let z = rainArr[o + 2];
+    if (z - cam.z > R_R) z -= R_R * 2; else if (z - cam.z < -R_R) z += R_R * 2;
+    rainArr[o + 2] = z; rainArr[o + 5] = z;
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+}
+
+// ---------- 雪 ----------
+const SNOW_N = 2400, S_R = 280, S_H = 150;
+const snowArr = new Float32Array(SNOW_N * 3);
+const snowSpd = new Float32Array(SNOW_N);
+const snowPh = new Float32Array(SNOW_N);
+const snowAmp = new Float32Array(SNOW_N);
+for (let i = 0; i < SNOW_N; i++) {
+  snowArr[i * 3] = (Math.random() * 2 - 1) * S_R;
+  snowArr[i * 3 + 1] = Math.random() * S_H;
+  snowArr[i * 3 + 2] = (Math.random() * 2 - 1) * S_R;
+  snowSpd[i] = 2.5 + Math.random() * 4;
+  snowPh[i] = Math.random() * Math.PI * 2;
+  snowAmp[i] = 0.6 + Math.random() * 2.2;
+}
+const snowGeo = new THREE.BufferGeometry();
+snowGeo.setAttribute('position', new THREE.BufferAttribute(snowArr, 3));
+const snow = new THREE.Points(
+  snowGeo,
+  new THREE.PointsMaterial({ color: 0xffffff, size: 2.4, transparent: true, opacity: 0.95, depthWrite: false })
+);
+snow.frustumCulled = false;
+snow.visible = false;
+scene.add(snow);
+
+function updateSnow(dt, cam, t) {
+  for (let i = 0; i < SNOW_N; i++) {
+    const o = i * 3;
+    let y = snowArr[o + 1] - snowSpd[i] * dt;
+    if (y < 0) y += S_H;
+    snowArr[o + 1] = y;
+    let x = snowArr[o] + Math.sin(t * 1.1 + snowPh[i]) * snowAmp[i] * dt * 1.4;
+    if (x - cam.x > S_R) x -= S_R * 2; else if (x - cam.x < -S_R) x += S_R * 2;
+    snowArr[o] = x;
+    let z = snowArr[o + 2] + Math.cos(t * 0.9 + snowPh[i]) * snowAmp[i] * dt;
+    if (z - cam.z > S_R) z -= S_R * 2; else if (z - cam.z < -S_R) z += S_R * 2;
+    snowArr[o + 2] = z;
+  }
+  snowGeo.attributes.position.needsUpdate = true;
+}
+
+// ---------- 3D 树木 ----------
+const treesGroup = new THREE.Group();
+scene.add(treesGroup);
+fetch('./data/trees.json').then((r) => r.json()).then(buildTrees).catch((e) => console.warn('树木数据加载失败', e));
+
+function buildTrees(td) {
+  const N = td.length;
+  const trunkGeo = new THREE.CylinderGeometry(0.24, 0.38, 3.6, 6);
+  const canGeo = new THREE.ConeGeometry(2.9, 8, 7);
+  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x7c5c40 }), N);
+  const cans = new THREE.InstancedMesh(canGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), N);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+  const col = new THREE.Color();
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  for (let i = 0; i < N; i++) {
+    const t = td[i], s = t.s;
+    v.set(t.x, 1.8 * s, t.z);
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2);
+    sc.setScalar(s);
+    m4.compose(v, q, sc);
+    trunks.setMatrixAt(i, m4);
+    v.set(t.x, 7 * s, t.z);
+    m4.compose(v, q, sc);
+    cans.setMatrixAt(i, m4);
+    col.setHSL(0.31 + rnd(-0.03, 0.04), 0.45 + rnd(-0.06, 0.06), rnd(0.28, 0.4));
+    cans.setColorAt(i, col);
+  }
+  trunks.castShadow = true;
+  cans.castShadow = true;
+  cans.instanceColor.needsUpdate = true;
+  treesGroup.add(trunks, cans);
+}
+
+// ---------- 材质工具 ----------
+const texCache = new Map();
+function floorTex(floors) {
+  if (texCache.has(floors)) return texCache.get(floors);
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = Math.max(8, floors * 8);
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = 'rgba(90,105,120,0.5)';
+  for (let i = 0; i <= floors; i++) g.fillRect(0, i * 8, c.width, 2);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  texCache.set(floors, t);
+  return t;
+}
+function makeMats(part) {
+  const sided = new THREE.MeshLambertMaterial({ color: 0xffffff, map: floorTex(part.floors) });
+  const top = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const lined = [sided, sided, top, top, sided, sided];
+  const plainS = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const plain = [plainS, plainS, top, top, plainS, plainS];
+  return { lined, plain, all: [sided, top, plainS] };
+}
+
+// ---------- 建筑 ----------
+const buildingsGroup = new THREE.Group();
+scene.add(buildingsGroup);
+const labelsGroup = new THREE.Group();
+scene.add(labelsGroup);
+const elevGroup = new THREE.Group();
+scene.add(elevGroup);
+const pickables = [];
+const partMeshes = new Map(); // building -> parts[]
+const allMats = [];
+
+function makeLabel(text, bg = 'rgba(255,255,255,0.9)', fg = '#33404d') {
+  const c = document.createElement('canvas');
+  const fs = 42;
+  const g = c.getContext('2d');
+  g.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
+  const w = Math.ceil(g.measureText(text).width) + 26;
+  c.width = w; c.height = 60;
+  const g2 = c.getContext('2d');
+  g2.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
+  g2.fillStyle = bg; g2.fillRect(0, 0, w, 60);
+  g2.strokeStyle = 'rgba(60,75,90,0.55)'; g2.lineWidth = 2; g2.strokeRect(1, 1, w - 2, 58);
+  g2.fillStyle = fg; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+  g2.fillText(text, w / 2, 31);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, fog: false }));
+  sp.renderOrder = 10;
+  const h = 8;
+  sp.scale.set((w / 60) * h, h, 1);
+  return sp;
+}
+
+for (const b of BUILDINGS) {
+  const parts = [];
+  let maxH = 0, minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const part of b.parts) {
+    const [x1, y1, x2, y2] = part.px;
+    const w = (x2 - x1) / M, d = (y2 - y1) / M;
+    const cx = toX((x1 + x2) / 2), cz = toZ((y1 + y2) / 2);
+    const geo = new THREE.BoxGeometry(w, part.height, d);
+    const mats = makeMats(part);
+    allMats.push(...mats.all);
+    const mesh = new THREE.Mesh(geo, mats.lined);
+    mesh.position.set(cx, part.height / 2, cz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = { building: b, part, mats };
+    buildingsGroup.add(mesh);
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x8b96a2, transparent: true, opacity: 0.55 })
+    );
+    edges.position.copy(mesh.position);
+    edges.userData = { building: b };
+    buildingsGroup.add(edges);
+    pickables.push(mesh, edges);
+    parts.push(mesh);
+    maxH = Math.max(maxH, part.height);
+    minX = Math.min(minX, cx - w / 2); maxX = Math.max(maxX, cx + w / 2);
+    minZ = Math.min(minZ, cz - d / 2); maxZ = Math.max(maxZ, cz + d / 2);
+  }
+  partMeshes.set(b.id, parts);
+
+  const label = makeLabel(b.short);
+  label.position.set((minX + maxX) / 2, maxH + 8, (minZ + maxZ) / 2);
+  labelsGroup.add(label);
+
+  if (b.elevator && b.elevator.count > 0) {
+    const mk = new THREE.Mesh(
+      new THREE.BoxGeometry(1.6, Math.min(7, maxH + 2), 1.6),
+      new THREE.MeshBasicMaterial({ color: 0x00bcd4 })
+    );
+    const [x1, y1, x2, y2] = b.parts[0].px;
+    mk.position.set(toX(x2) - 1, Math.min(7, maxH + 2) / 2, toZ(y2) - 1);
+    mk.userData = { building: b };
+    elevGroup.add(mk);
+    pickables.push(mk);
+  }
+}
+
+// ---------- 透视模式：1号楼内部模拟（模拟数据） ----------
+const xrayState = { on: false };
+const interiorGroup = new THREE.Group();
+interiorGroup.visible = false;
+scene.add(interiorGroup);
+
+const b1 = BUILDINGS.find((b) => b.id === 'b1');
+const towerPart = b1.parts.find((p) => p.floors === 25);
+const TW = (towerPart.px[2] - towerPart.px[0]) / M;
+const TD = (towerPart.px[3] - towerPart.px[1]) / M;
+const TCX = toX((towerPart.px[0] + towerPart.px[2]) / 2);
+const TCZ = toZ((towerPart.px[1] + towerPart.px[3]) / 2);
+const FLOOR_H = 3.8;
+const TOWER_FLOORS = 25;
+const floorTopY = (f) => f * FLOOR_H + 0.12;
+const carCenterY = (f) => floorTopY(f) + 1.15;
+
+// 楼层板（半透明，透视时可见）
+(function buildFloors() {
+  const mat = new THREE.MeshLambertMaterial({ color: 0xa8c8e8, transparent: true, opacity: 0.3, depthWrite: false });
+  for (let f = 0; f < TOWER_FLOORS; f++) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(TW - 2, 0.12, TD - 2), mat);
+    slab.position.set(TCX, f * FLOOR_H + 0.06, TCZ);
+    interiorGroup.add(slab);
+  }
+})();
+
+// 电梯（2部：井道+轿厢+双开门，模拟数据）
+const ELEVS = [];
+(function buildElevators() {
+  const shaftMat = new THREE.MeshLambertMaterial({ color: 0x7fb2d9, transparent: true, opacity: 0.18, depthWrite: false });
+  const carMat = new THREE.MeshLambertMaterial({ color: 0xe9eff5 });
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x93a7bc });
+  const SW = 3, SD = 3.2, SH = TOWER_FLOORS * FLOOR_H;
+  const CW = SW - 0.5, CD = SD - 0.5;
+  for (let i = 0; i < 2; i++) {
+    const shaftX = TCX - 5.5 + i * 11, shaftZ = TCZ - 4;
+    const wallG = new THREE.Group();
+    const mk = (w, h, d, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), shaftMat);
+      m.position.set(x, y, z);
+      wallG.add(m);
+    };
+    mk(SW, SH, 0.1, 0, SH / 2, -SD / 2);
+    mk(SW, SH, 0.1, 0, SH / 2, SD / 2);
+    mk(0.1, SH, SD, -SW / 2, SH / 2, 0);
+    mk(0.1, SH, SD, SW / 2, SH / 2, 0);
+    wallG.position.set(shaftX, 0, shaftZ);
+    interiorGroup.add(wallG);
+    const car = new THREE.Mesh(new THREE.BoxGeometry(CW, 2.3, CD), carMat);
+    car.position.set(shaftX, carCenterY(0), shaftZ);
+    interiorGroup.add(car);
+    const doorL = new THREE.Mesh(new THREE.BoxGeometry(CW / 2, 2.0, 0.07), doorMat);
+    const doorR = doorL.clone();
+    doorL.position.set(-CW / 4, 0, CD / 2 + 0.03);
+    doorR.position.set(CW / 4, 0, CD / 2 + 0.03);
+    car.add(doorL, doorR);
+    ELEVS.push({ shaftX, shaftZ, floor: 0, targetFloor: 0, doors: 0, state: 'idle', hold: 0, car, doorL, doorR, riders: [] });
+  }
+})();
+
+function pickNextFloor(ev) {
+  for (const r of ev.riders) return r.targetFloor;
+  const w = ROBOTS.find((r) => r.state === 'waitElev' && r.elev === ev && r.floor !== ev.floor);
+  return w ? w.floor : null;
+}
+function updateElevators(dt) {
+  for (const ev of ELEVS) {
+    if (ev.state === 'moving') {
+      const ty = carCenterY(ev.targetFloor);
+      const dy = ty - ev.car.position.y;
+      const step = 4.2 * dt;
+      if (Math.abs(dy) <= step) {
+        ev.car.position.y = ty;
+        ev.floor = ev.targetFloor;
+        ev.state = 'open';
+        ev.hold = 1.7;
+      } else {
+        ev.car.position.y += Math.sign(dy) * step;
+      }
+    } else if (ev.state === 'open') {
+      ev.doors = Math.min(1, ev.doors + dt * 1.7);
+      ev.hold -= dt;
+      if (ev.hold <= 0) ev.state = 'close';
+    } else if (ev.state === 'close') {
+      ev.doors = Math.max(0, ev.doors - dt * 1.7);
+      if (ev.doors <= 0) {
+        ev.state = 'idle';
+        const nxt = pickNextFloor(ev);
+        if (nxt !== null) { ev.targetFloor = nxt; ev.state = 'moving'; }
+      }
+    } else {
+      const nxt = pickNextFloor(ev);
+      if (nxt !== null) { ev.targetFloor = nxt; ev.state = 'moving'; }
+    }
+    const cw = ev.car.geometry.parameters.width;
+    ev.doorL.position.x = -cw / 4 - ev.doors * (cw / 2);
+    ev.doorR.position.x = cw / 4 + ev.doors * (cw / 2);
+  }
+}
+
+// 机器人（8台：4种设备外观各2台，模拟数据）
+const ROBOTS = [];
+const ROBOT_DEFS = [
+  { file: '/models/models/meal.glb', count: 2 },
+  { file: '/models/models/medicine.glb', count: 2 },
+  { file: '/models/models/waste.glb', count: 2 },
+  { file: '/models/models/platform.glb', count: 2 },
+];
+let robotsReady = false;
+async function loadRobots() {
+  if (robotsReady) return;
+  robotsReady = true;
+  const loader = new GLTFLoader();
+  for (const def of ROBOT_DEFS) {
+    try {
+      const gltf = await loader.loadAsync(def.file);
+      for (let k = 0; k < def.count; k++) spawnRobot(gltf.scene);
+    } catch (e) {
+      console.warn('机器人模型加载失败', def.file, e);
+    }
+  }
+}
+function randWP() {
+  return {
+    x: TCX + (Math.random() * 2 - 1) * (TW / 2 - 5),
+    z: TCZ + (Math.random() * 2 - 1) * (TD / 2 - 5),
+  };
+}
+function lobbyOf(ev) { return { x: ev.shaftX, z: ev.shaftZ + 4.6 }; }
+function spawnRobot(src) {
+  const model = src.clone(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const s = 1.5 / Math.max(size.y, 0.01);
+  const g = new THREE.Group();
+  model.scale.setScalar(s);
+  model.position.set(0, -box.min.y * s, 0);
+  g.add(model);
+  interiorGroup.add(g);
+  const f = 1 + Math.floor(Math.random() * (TOWER_FLOORS - 2));
+  const r = {
+    obj: g, floor: f, state: 'wander', wp: randWP(),
+    speed: 1.1 + Math.random() * 0.7, elev: null, targetFloor: null, rideIdx: 0,
+  };
+  r.obj.position.set(r.wp.x, floorTopY(f) + 0.75, r.wp.z);
+  ROBOTS.push(r);
+}
+function stepRobot(r, dx, dz, dist, dt) {
+  const st = Math.min(r.speed * dt, dist);
+  r.obj.position.x += (dx / dist) * st;
+  r.obj.position.z += (dz / dist) * st;
+  r.obj.rotation.y = Math.atan2(dx, dz);
+}
+function updateRobots(dt) {
+  for (const r of ROBOTS) {
+    if (r.state === 'ride') {
+      const ev = r.elev;
+      r.obj.position.set(
+        ev.shaftX + (r.rideIdx === 0 ? -0.7 : 0.7),
+        ev.car.position.y - 0.4,
+        ev.shaftZ + 0.3
+      );
+      r.obj.rotation.y = 0;
+      if (ev.floor === r.targetFloor && ev.doors > 0.7) {
+        ev.riders = ev.riders.filter((x) => x !== r);
+        r.state = 'wander';
+        r.elev = null;
+        r.floor = ev.floor;
+        const l = lobbyOf(ev);
+        r.obj.position.set(l.x, floorTopY(r.floor) + 0.75, l.z);
+        r.wp = randWP();
+      }
+      continue;
+    }
+    if (r.state === 'waitElev') {
+      if (!r.elev) { r.state = 'wander'; r.wp = randWP(); continue; }
+      const ev = r.elev;
+      if (ev.floor === r.floor && ev.state === 'open' && ev.doors > 0.7 && ev.riders.length < 2) {
+        r.state = 'ride';
+        r.rideIdx = ev.riders.length;
+        ev.riders.push(r);
+      }
+      continue;
+    }
+    if (r.state === 'toLobby') {
+      const l = lobbyOf(r.elev);
+      const dx = l.x - r.obj.position.x, dz = l.z - r.obj.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.6) { r.state = 'waitElev'; continue; }
+      stepRobot(r, dx, dz, dist, dt);
+      continue;
+    }
+    const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.5) {
+      if (Math.random() < 0.4 && ELEVS.length) {
+        const ev = ELEVS[Math.floor(Math.random() * ELEVS.length)];
+        let tf = 1 + Math.floor(Math.random() * (TOWER_FLOORS - 1));
+        if (tf === r.floor) tf = (tf % (TOWER_FLOORS - 1)) + 1;
+        r.elev = ev;
+        r.targetFloor = tf;
+        r.state = 'toLobby';
+      } else {
+        r.wp = randWP();
+      }
+      continue;
+    }
+    stepRobot(r, dx, dz, dist, dt);
+  }
+}
+
+// 材质刷新（选中 / 透视 / 楼层线 三态）
+function refreshMeshMaterial(m) {
+  const mats = m.userData.mats;
+  if (selected === m.userData.building) { m.material = hlPlain; return; }
+  if (xrayState.on && m.userData.building.id === 'b1') {
+    if (!mats.xray) {
+      const sx = mats.lined[0].clone();
+      sx.transparent = true;
+      sx.opacity = 0.16;
+      sx.depthWrite = false;
+      const tx = mats.lined[2].clone();
+      tx.transparent = true;
+      tx.opacity = 0.1;
+      tx.depthWrite = false;
+      mats.xray = [sx, sx, tx, tx, sx, sx];
+    }
+    m.material = mats.xray;
+    return;
+  }
+  m.material = $('tg-line').checked ? mats.lined : mats.plain;
+}
+function applyXray(on) {
+  xrayState.on = on;
+  interiorGroup.visible = on;
+  if (on) { setHighlight(null); syncList(); }
+  for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
+  const btn = $('xray-btn');
+  btn.textContent = on ? '退出透视（1号楼）' : '🔍 透视 1号楼（内部模拟）';
+  btn.classList.toggle('on', on);
+  $('sim-hint').style.display = on ? 'block' : 'none';
+}
+function flyToPos(pos, look) { flyTarget = { pos, look }; }
+
+// ---------- 物流设备模型 ----------
+const DEVICES = [
+  { file: '/models/models/meal.glb', name: '送餐车' },
+  { file: '/models/models/medicine.glb', name: '送药车' },
+  { file: '/models/models/waste.glb', name: '污物车' },
+  { file: '/models/models/platform.glb', name: '物流平台' },
+];
+const devicesGroup = new THREE.Group();
+devicesGroup.visible = false;
+scene.add(devicesGroup);
+let devicesLoaded = false;
+const devStatus = document.createElement('div');
+devStatus.style.cssText = 'position:fixed;top:10px;right:10px;background:rgba(20,30,40,.72);color:#dfe8f0;font-size:12px;padding:5px 12px;border-radius:14px;display:none';
+document.body.appendChild(devStatus);
+
+async function loadDevices() {
+  if (devicesLoaded) return;
+  devicesLoaded = true;
+  const strip = new THREE.Mesh(
+    new THREE.PlaneGeometry(130, 26),
+    new THREE.MeshLambertMaterial({ color: 0xdfe5ea })
+  );
+  strip.rotation.x = -Math.PI / 2;
+  strip.position.set(0, 0.05, H / 2 + 16);
+  devicesGroup.add(strip);
+
+  const loader = new GLTFLoader();
+  let done = 0;
+  for (let i = 0; i < DEVICES.length; i++) {
+    const d = DEVICES[i];
+    devStatus.style.display = 'block';
+    devStatus.textContent = `加载物流设备模型 ${done}/${DEVICES.length}…`;
+    try {
+      const gltf = await loader.loadAsync(d.file);
+      const obj = gltf.scene;
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = box.getSize(new THREE.Vector3());
+      const s = 3.2 / Math.max(size.y, 1e-6);
+      obj.scale.setScalar(s);
+      const c = box.getCenter(new THREE.Vector3());
+      const x = -48 + i * 32;
+      obj.position.set(x - c.x * s, -box.min.y * s + 0.1, H / 2 + 16 - c.z * s);
+      devicesGroup.add(obj);
+      const lb = makeLabel(d.name, 'rgba(20,30,40,0.75)', '#ffffff');
+      lb.position.set(x, 6.5, H / 2 + 26);
+      devicesGroup.add(lb);
+      done++;
+      devStatus.textContent = `加载物流设备模型 ${done}/${DEVICES.length}`;
+    } catch (e) {
+      console.warn('设备模型加载失败:', d.file, e);
+      done++;
+    }
+  }
+  setTimeout(() => { devStatus.style.display = 'none'; }, 1500);
+}
+
+// ---------- 交互 ----------
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let downPos = null, selected = null;
+
+const hlMat = new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffc107, emissiveIntensity: 0.35 });
+const hlPlain = [hlMat, hlMat, hlMat, hlMat, hlMat, hlMat];
+
+function setHighlight(building) {
+  if (selected) for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
+  selected = building;
+  if (selected) for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
+}
+
+function flyTo(building) {
+  let cx = 0, cz = 0, top = 0;
+  const ms = partMeshes.get(building.id) || [];
+  for (const m of ms) { cx += m.position.x; cz += m.position.z; top = Math.max(top, m.position.y); }
+  cx /= ms.length; cz /= ms.length;
+  const dist = Math.max(80, top * 2.4 + 60);
+  flyTarget = { pos: new THREE.Vector3(cx + dist * 0.55, dist * 0.72, cz + dist * 0.75), look: new THREE.Vector3(cx, top * 0.4, cz) };
+}
+let flyTarget = null;
+
+renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
+  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(pickables, false);
+  if (hits.length) {
+    const b = hits[0].object.userData.building;
+    if (b) { setHighlight(b); flyTo(b); showDetail(b); syncList(); }
+  } else { setHighlight(null); showDetail(null); syncList(); }
+});
+
+// ---------- 面板 ----------
+const $ = (id) => document.getElementById(id);
+const listEl = $('bld-list'), detailEl = $('detail');
+
+function syncList() {
+  listEl.innerHTML = '';
+  for (const b of BUILDINGS) {
+    const item = document.createElement('div');
+    item.className = 'bld-item' + (selected === b ? ' sel' : '');
+    const nm = document.createElement('div'); nm.className = 'nm';
+    nm.textContent = b.short;
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const top = Math.max(...b.parts.map((p) => p.floors));
+    meta.textContent = `${top}F / ${Math.max(...b.parts.map((p) => p.height))}m`;
+    item.appendChild(nm); item.appendChild(meta);
+    if (b.elevator && b.elevator.count > 0) {
+      const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = `梯×${b.elevator.count}`;
+      item.appendChild(bd);
+    }
+    item.onclick = () => { setHighlight(b); flyTo(b); showDetail(b); syncList(); };
+    listEl.appendChild(item);
+  }
+}
+
+function showDetail(b) {
+  if (!b) { detailEl.innerHTML = '<div class="info" style="color:#8a94a0">点击左侧列表或场景中的建筑查看详情</div>'; return; }
+  const rows = b.parts.map((p) => `<tr><td>${p.floors}F</td><td>${p.height}m</td><td>${p.note || '—'}</td></tr>`).join('');
+  detailEl.innerHTML = `
+    <h2>${b.name}</h2>
+    <div class="info">${b.info}</div>
+    <div class="src">来源：${b.source}（可信度 ${Math.round(b.certainty * 100)}%）</div>
+    <table><tr><th>层数</th><th>高度</th><th>备注</th></tr>${rows}</table>
+    ${b.elevator && b.elevator.count > 0
+      ? `<div class="elev"><b>电梯：</b>${b.elevator.detail}</div>`
+      : '<div class="elev" style="background:#f3f5f7;border-color:#c3ccd6"><b>电梯：</b>未见标注</div>'}
+  `;
+}
+
+$('elev-sum').innerHTML = BUILDINGS
+  .filter((b) => b.elevator && b.elevator.count > 0)
+  .map((b) => `<li><b>${b.short}</b>：${b.elevator.detail}</li>`).join('');
+$('unloc').innerHTML = UNLOCATED.map((u) => `<li>${u}</li>`).join('');
+$('notes').innerHTML = NOTES.map((n) => `<li>${n}</li>`).join('');
+syncList();
+
+// ---------- 开关 ----------
+$('tg-tex').onchange = (e) => { ground.material = e.target.checked ? groundMapMat : groundPlainMat; };
+$('tg-line').onchange = (e) => {
+  for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
+};
+$('tg-label').onchange = (e) => { labelsGroup.visible = e.target.checked; };
+$('tg-tree').onchange = (e) => { treesGroup.visible = e.target.checked; };
+$('tg-alpha').onchange = (e) => {
+  for (const mt of allMats) { mt.transparent = e.target.checked; mt.opacity = e.target.checked ? 0.55 : 1; mt.depthWrite = !e.target.checked; }
+};
+$('tg-dev').onchange = (e) => {
+  devicesGroup.visible = e.target.checked;
+  if (e.target.checked) loadDevices();
+};
+
+// ---------- 时间/天气 UI ----------
+const timeSlider = $('time-slider'), timeVal = $('time-val'), timePlay = $('time-play');
+function fmtTime(h) {
+  const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+function syncTimeUI() {
+  timeSlider.value = timeState.hour;
+  timeVal.textContent = fmtTime(timeState.hour);
+}
+timeSlider.oninput = () => { timeState.hour = +timeSlider.value; syncTimeUI(); };
+timePlay.onclick = () => {
+  timeState.playing = !timeState.playing;
+  timePlay.textContent = timeState.playing ? '⏸ 暂停' : '▶ 播放';
+};
+document.querySelectorAll('.weatherbox button').forEach((b) => {
+  b.onclick = () => setWeather(b.dataset.w);
+});
+$('xray-btn').onclick = () => {
+  if (!xrayState.on) {
+    loadRobots();
+    applyXray(true);
+    flyToPos(new THREE.Vector3(TCX + 85, 62, TCZ + 95), new THREE.Vector3(TCX, 45, TCZ));
+  } else {
+    applyXray(false);
+  }
+};
+setWeather('sunny');
+syncTimeUI();
+
+// ---------- 渲染循环 ----------
+const timer = new THREE.Timer();
+function animate() {
+  requestAnimationFrame(animate);
+  timer.update();
+  const dt = Math.min(timer.getDelta(), 0.1);
+  const elapsed = timer.getElapsed();
+  if (timeState.playing) {
+    timeState.hour = (timeState.hour + timeState.speed * dt) % 24;
+    syncTimeUI();
+  }
+  updateSun();
+  updateSkyFog();
+  updateRain(dt, camera.position);
+  updateSnow(dt, camera.position, elapsed);
+  updateElevators(dt);
+  updateRobots(dt);
+  if (flyTarget) {
+    camera.position.lerp(flyTarget.pos, 0.06);
+    controls.target.lerp(flyTarget.look, 0.06);
+    if (camera.position.distanceTo(flyTarget.pos) < 2) flyTarget = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

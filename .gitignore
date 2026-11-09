@@ -1,0 +1,12 @@
+node_modules/
+.dwgref/
+医院建筑平面/
+*.rar
+_*.json
+_*.txt
+_*.png
+_*.bmp
+_*.zip
+*.log
+digital-twin/assets/trees-debug.png
+__MACOSX/

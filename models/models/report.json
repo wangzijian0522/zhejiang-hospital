@@ -1,0 +1,22 @@
+[
+  {
+    "kind": "medicine",
+    "triangles": 44999,
+    "bytes": 4075884
+  },
+  {
+    "kind": "meal",
+    "triangles": 44971,
+    "bytes": 4722104
+  },
+  {
+    "kind": "waste",
+    "triangles": 44995,
+    "bytes": 4435384
+  },
+  {
+    "kind": "platform",
+    "triangles": 68311,
+    "bytes": 7106912
+  }
+]
