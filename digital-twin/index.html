@@ -25,6 +25,8 @@
   .simbox button { width: 100%; font-size: 13px; border: 1px solid #2b7fd4; background: #2b7fd4; color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; }
   .simbox button.on { background: #b4552f; border-color: #b4552f; }
   .simbox .sub { font-size: 11px; color: #6b7785; padding-top: 6px; }
+  .simbox .flr-btn { flex: 1; font-size: 12px; border: 1px solid #2b7fd4; background: #fff; color: #2b7fd4; border-radius: 8px; padding: 4px 0; cursor: pointer; }
+  .simbox .flr-btn:hover { background: #eaf3fd; }
   #bld-list { padding: 6px 0; border-bottom: 1px solid #e3e8ee; }
   .bld-item { display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer; }
   .bld-item:hover { background: #f2f6fa; }
@@ -60,7 +62,7 @@
   <h1>浙江医院 · 数字孪生白膜</h1>
   <div class="sub">数据：医院总平1.jpg（1:500，约10.5px/m）+ 建筑DWG标高/层数标注</div>
   <div class="toggles">
-    <label><input type="checkbox" id="tg-real" checked> 写实模型</label>
+    <label><input type="checkbox" id="tg-real" checked> 整体模型</label>
     <label><input type="checkbox" id="tg-white"> 白膜</label>
     <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
     <label><input type="checkbox" id="tg-line" checked> 楼层线</label>
@@ -82,6 +84,10 @@
   <div class="simbox">
     <button id="xray-btn">🔍 透视 1号楼（内部模拟）</button>
     <div class="sub" id="sim-hint" style="display:none">模拟数据：8台机器人（4种设备外观）在各楼层移动并乘梯 · 2部电梯上下运行/开关门</div>
+    <div class="sub" style="display:flex; gap:8px; padding-top:8px">
+      <button class="flr-btn" data-flr="2号楼">2号楼 分层</button>
+      <button class="flr-btn" data-flr="6号楼">6号楼 分层</button>
+    </div>
   </div>
   <div id="bld-list"></div>
   <div id="detail"><div class="info" style="color:#8a94a0">点击左侧列表或场景中的建筑查看详情</div></div>
@@ -94,7 +100,13 @@
     <ul id="notes"></ul>
   </div>
 </div>
-<div id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击建筑查看详情</div>
+<div id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击 2号楼/6号楼 分层展示</div>
+<div id="floor-ui" style="display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%); background:rgba(20,30,40,.85); color:#fff; padding:8px 16px; border-radius:12px; align-items:center; gap:12px; z-index:10; font-size:13px;">
+  <b id="floor-title">分层展示</b>
+  <span style="font-size:12px;opacity:.8">展开</span>
+  <input type="range" id="floor-spread" min="0" max="100" value="60" style="width:150px; accent-color:#2b7fd4">
+  <button id="floor-back" style="background:#2b7fd4;color:#fff;border:none;border-radius:8px;padding:4px 12px;cursor:pointer">返回整体</button>
+</div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -471,21 +483,32 @@ for (const b of BUILDINGS) {
 buildingsGroup.visible = false;
 labelsGroup.visible = false;
 
-// ---------- 写实模型（12号楼） ----------
+// ---------- 整体模型（初始加载） ----------
 const realGroup = new THREE.Group();
 scene.add(realGroup);
+const realBuildings = new Map(); // 楼名 -> mesh（2号楼/6号楼 可点击分层）
 let realLoaded = false;
-new GLTFLoader().loadAsync('/models/models/12号楼.glb').then((gltf) => {
+let overviewCam = null;
+
+new GLTFLoader().loadAsync('/models/models/整体.glb').then((gltf) => {
   const obj = gltf.scene;
   const box = new THREE.Box3().setFromObject(obj);
   const size = box.getSize(new THREE.Vector3());
   let s = 1;
-  if (Math.max(size.x, size.y, size.z) > 100) s = 0.001; // 单位 mm → m
+  if (Math.max(size.x, size.y, size.z) > 1000) s = 0.001; // 单位 mm → m（院区级模型为米制，不缩放）
   const c = box.getCenter(new THREE.Vector3());
   obj.scale.setScalar(s);
   obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
   obj.traverse((o) => {
-    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+    if ((o.name === '2号楼' || o.name === '6号楼') && o.isGroup) {
+      o.userData.buildingName = o.name;
+      o.traverse((c) => { if (c.isMesh) c.userData.buildingName = o.name; });
+      realBuildings.set(o.name, o);
+    }
   });
   realGroup.add(obj);
   realLoaded = true;
@@ -493,11 +516,170 @@ new GLTFLoader().loadAsync('/models/models/12号楼.glb').then((gltf) => {
   camera.position.set(r * 1.1, r * 0.85, r * 1.7);
   controls.target.set(0, r * 0.35, 0);
   controls.maxDistance = Math.max(controls.maxDistance, r * 12);
+  overviewCam = { pos: camera.position.clone(), look: controls.target.clone() };
 }).catch((e) => {
-  console.warn('12号楼模型加载失败，回退显示白膜', e);
+  console.warn('整体模型加载失败，回退显示白膜', e);
   buildingsGroup.visible = true;
   labelsGroup.visible = true;
 });
+
+// ---------- 分层展示（2号楼 / 6号楼） ----------
+const FLOOR_CONFIG = { '2号楼': null, '6号楼': null }; // null = 按3.8m层高自动估算
+const floorGroup = new THREE.Group();
+floorGroup.visible = false;
+scene.add(floorGroup);
+const gltfCache = new Map();
+const floorState = { active: false, name: null, layers: [], bandH: 3.8 };
+
+function floorCountFor(name, heightM) {
+  if (FLOOR_CONFIG[name]) return FLOOR_CONFIG[name];
+  return Math.max(3, Math.min(30, Math.round(heightM / 3.8)));
+}
+
+function pushVert(e, posAttr, uvAttr, i, M, v) {
+  v.set(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)).applyMatrix4(M);
+  e.pos.push(v.x, v.y, v.z);
+  if (uvAttr) e.uv.push(uvAttr.getX(i), uvAttr.getY(i));
+}
+
+// 把建筑网格按高度切成 numFloors 层（顶点转世界坐标，分块异步避免卡顿）
+async function splitBuilding(gltfScene, numFloors) {
+  const meshes = [];
+  gltfScene.updateMatrixWorld(true);
+  gltfScene.traverse((o) => { if (o.isMesh && o.geometry) meshes.push(o); });
+  const box = new THREE.Box3().setFromObject(gltfScene);
+  const bandH = (box.max.y - box.min.y) / numFloors;
+  const entries = Array.from({ length: numFloors }, () => []);
+  const v = new THREE.Vector3();
+  for (const m of meshes) {
+    const g = m.geometry;
+    const posAttr = g.attributes.position;
+    if (!posAttr) continue;
+    const uvAttr = g.attributes.uv;
+    const idx = g.index;
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    const groups = g.groups.length
+      ? g.groups
+      : [{ start: 0, count: idx ? idx.count : posAttr.count, materialIndex: 0 }];
+    m.updateWorldMatrix(true, false);
+    const M = m.matrixWorld;
+    for (const grp of groups) {
+      const mat = mats[grp.materialIndex] || mats[0];
+      const total = grp.count === Infinity ? (idx ? idx.count : posAttr.count) - grp.start : grp.count;
+      const triCount = Math.floor(total / 3);
+      for (let t0 = 0; t0 < triCount; t0 += 150000) {
+        const tEnd = Math.min(triCount, t0 + 150000);
+        for (let t = t0; t < tEnd; t++) {
+          const i0 = idx ? idx.getX(grp.start + t * 3) : grp.start + t * 3;
+          const i1 = idx ? idx.getX(grp.start + t * 3 + 1) : grp.start + t * 3 + 1;
+          const i2 = idx ? idx.getX(grp.start + t * 3 + 2) : grp.start + t * 3 + 2;
+          v.set(posAttr.getX(i0), posAttr.getY(i0), posAttr.getZ(i0)).applyMatrix4(M);
+          const cy = (v.y
+            + v.set(posAttr.getX(i1), posAttr.getY(i1), posAttr.getZ(i1)).applyMatrix4(M).y
+            + v.set(posAttr.getX(i2), posAttr.getY(i2), posAttr.getZ(i2)).applyMatrix4(M).y) / 3;
+          let bi = Math.floor((cy - box.min.y) / bandH);
+          if (bi < 0) bi = 0;
+          else if (bi >= numFloors) bi = numFloors - 1;
+          let e = entries[bi].find((x) => x.mat === mat);
+          if (!e) { e = { mat, pos: [], uv: [] }; entries[bi].push(e); }
+          pushVert(e, posAttr, uvAttr, i0, M, v);
+          pushVert(e, posAttr, uvAttr, i1, M, v);
+          pushVert(e, posAttr, uvAttr, i2, M, v);
+        }
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+  }
+  const layers = [];
+  for (let i = 0; i < numFloors; i++) {
+    const lg = new THREE.Group();
+    for (const e of entries[i]) {
+      if (!e.pos.length) continue;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(e.pos, 3));
+      if (e.uv.length) geo.setAttribute('uv', new THREE.Float32BufferAttribute(e.uv, 2));
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, e.mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      lg.add(mesh);
+    }
+    layers.push(lg);
+    floorGroup.add(lg);
+  }
+  return { layers, bandH, baseY: box.min.y };
+}
+
+async function enterFloorMode(name) {
+  if (floorState.active) exitFloorMode();
+  if (xrayState.on) applyXray(false);
+  floorState.active = true;
+  floorState.name = name;
+  realGroup.visible = false;
+  buildingsGroup.visible = false;
+  labelsGroup.visible = false;
+  $('floor-title').textContent = name + ' 分层展示';
+  $('floor-ui').style.display = 'flex';
+  devStatus.style.display = 'block';
+  devStatus.textContent = '加载 ' + name + ' 模型并计算分层…';
+  try {
+    let gltf = gltfCache.get(name);
+    if (!gltf) {
+      gltf = await new GLTFLoader().loadAsync('/models/models/' + name + '.glb');
+      gltfCache.set(name, gltf);
+    }
+    const h = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3()).y;
+    const n = floorCountFor(name, h);
+    const { layers, bandH } = await splitBuilding(gltf.scene, n);
+    floorState.layers = layers;
+    floorState.bandH = bandH;
+    // 居中放置
+    const b = new THREE.Box3();
+    layers.forEach((l) => b.expandByObject(l));
+    floorGroup.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+    // 楼层标签
+    for (let i = 0; i < layers.length; i++) {
+      const lb = makeLabel((i + 1) + 'F');
+      const lbB = new THREE.Box3().setFromObject(layers[i]);
+      lb.position.set(lbB.max.x + 2.5, (lbB.min.y + lbB.max.y) / 2, (lbB.min.z + lbB.max.z) / 2);
+      layers[i].add(lb);
+    }
+    floorGroup.visible = true;
+    // 相机框选
+    const fbox = new THREE.Box3();
+    layers.forEach((l) => fbox.expandByObject(l));
+    const ctr = fbox.getCenter(new THREE.Vector3());
+    const rad = Math.max(fbox.getSize(new THREE.Vector3()).length() * 0.55, 15);
+    flyToPos(
+      new THREE.Vector3(ctr.x + rad * 1.1, ctr.y + rad * 0.9, ctr.z + rad * 1.4),
+      ctr
+    );
+  } catch (err) {
+    console.warn('分层展示加载失败', err);
+    exitFloorMode();
+    return;
+  }
+  devStatus.style.display = 'none';
+}
+
+function exitFloorMode() {
+  if (!floorState.active) return;
+  floorState.active = false;
+  floorGroup.visible = false;
+  while (floorGroup.children.length) floorGroup.remove(floorGroup.children[0]);
+  floorState.layers = [];
+  realGroup.visible = true;
+  buildingsGroup.visible = $('tg-white').checked;
+  labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
+  $('floor-ui').style.display = 'none';
+  if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
+}
+
+// 支持 URL 直达分层视图：?floor=2号楼 / ?floor=6号楼
+const initFloor = new URLSearchParams(location.search).get('floor');
+if (initFloor === '2号楼' || initFloor === '6号楼') {
+  setTimeout(() => enterFloorMode(initFloor), 2500);
+}
 
 // ---------- 透视模式：1号楼内部模拟（模拟数据） ----------
 const xrayState = { on: false };
@@ -837,10 +1019,25 @@ function flyTo(building) {
 let flyTarget = null;
 
 renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!realLoaded || floorState.active) return;
   pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects([...realBuildings.values()], true)[0];
+  renderer.domElement.style.cursor = hit ? 'pointer' : '';
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
+  if (floorState.active) return; // 分层模式下不响应场景点击
+  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  if (realLoaded) {
+    const bHit = raycaster.intersectObjects([...realBuildings.values()], true)[0];
+    if (bHit) {
+      const nm = bHit.object.userData.buildingName;
+      if (nm) { enterFloorMode(nm); return; }
+    }
+  }
   const hits = raycaster.intersectObjects(pickables, false);
   if (hits.length) {
     const b = hits[0].object.userData.building;
@@ -940,6 +1137,10 @@ $('xray-btn').onclick = () => {
     applyXray(false);
   }
 };
+$('floor-back').onclick = () => exitFloorMode();
+document.querySelectorAll('.flr-btn').forEach((b) => {
+  b.onclick = () => enterFloorMode(b.dataset.flr);
+});
 setWeather('sunny');
 syncTimeUI();
 
@@ -960,6 +1161,14 @@ function animate() {
   updateSnow(dt, camera.position, elapsed);
   updateElevators(dt);
   updateRobots(dt);
+  if (floorState.active && floorState.layers.length) {
+    const spread = +$('floor-spread').value / 100;
+    const step = floorState.bandH * 1.6;
+    floorState.layers.forEach((l, i) => {
+      const target = i * step * spread;
+      l.position.y += (target - l.position.y) * 0.12;
+    });
+  }
   if (flyTarget) {
     camera.position.lerp(flyTarget.pos, 0.06);
     controls.target.lerp(flyTarget.look, 0.06);
