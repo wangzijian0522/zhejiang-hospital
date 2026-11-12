@@ -72,17 +72,21 @@
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
   </div>
   <div class="timebox">
-    <div class="row"><b>时间 / 太阳</b><span id="time-val">14:00</span><button id="time-play">▶ 播放</button></div>
+    <div class="row"><b>时间 / 太阳</b><span id="time-val">14:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime" checked> 实时</label></div>
     <input type="range" id="time-slider" min="0" max="24" step="0.05" value="14">
   </div>
   <div class="weatherbox">
     <b>天气</b>
     <button data-w="sunny" class="on">晴天</button>
+    <button data-w="cloudy">多云</button>
     <button data-w="rain">小雨</button>
+    <button data-w="storm">大雨</button>
     <button data-w="snow">大雪</button>
+    <button data-w="fog">雾</button>
   </div>
   <div class="simbox">
     <button id="xray-btn">🔍 透视 1号楼（内部模拟）</button>
+    <button id="cruise-btn" style="margin-top:6px">自动巡航（360°逆时针）</button>
     <div class="sub" id="sim-hint" style="display:none">模拟数据：8台机器人（4种设备外观）在各楼层移动并乘梯 · 2部电梯上下运行/开关门</div>
     <div class="sub" style="display:flex; gap:8px; padding-top:8px">
       <button class="flr-btn" data-flr="2号楼">2号楼 分层</button>
@@ -100,7 +104,25 @@
     <ul id="notes"></ul>
   </div>
 </div>
-<div id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击 2号楼/6号楼 分层展示</div>
+<div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转 · 点击 2号楼/6号楼 分层展示</div>
+<div id="realtime-hud" style="position:fixed; top:12px; right:12px; z-index:20; background:rgba(20,30,40,.78); color:#fff; padding:8px 14px; border-radius:12px; text-align:right; pointer-events:none;">
+  <div id="rt-clock" style="font-size:20px; font-weight:700; letter-spacing:1px; font-variant-numeric:tabular-nums; line-height:1.1;">--:--:--</div>
+  <div id="rt-weather" style="margin-top:3px; color:#b8c8d8; font-size:12px;">杭州 · 获取天气中…</div>
+</div>
+<style>
+  @keyframes lspin { to { transform: rotate(360deg); } }
+  @keyframes lspin-rev { to { transform: rotate(-360deg); } }
+  @keyframes lpulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+</style>
+<div id="loader" style="position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(160deg,#0e1626 0%,#1a2b45 55%,#0e1c30 100%); opacity:0; transition:opacity .8s ease;">
+  <div style="position:relative; width:96px; height:96px;">
+    <div style="position:absolute; inset:0; border-radius:50%; border:4px solid rgba(255,255,255,.1); border-top-color:#4da3ff; animation:lspin 1s linear infinite;"></div>
+    <div style="position:absolute; inset:12px; border-radius:50%; border:3px solid rgba(255,255,255,.08); border-bottom-color:#7fc0ff; animation:lspin-rev 1.4s linear infinite;"></div>
+    <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#e8f2fc; font-size:34px; font-weight:700; animation:lpulse 1.6s ease-in-out infinite;">浙</div>
+  </div>
+  <div id="loader-text" style="margin-top:20px; color:#cfe0f2; font-size:14px; letter-spacing:1px;">正在加载整体模型…</div>
+  <div id="loader-pct" style="margin-top:8px; color:#7f9cc0; font-size:12px; font-variant-numeric:tabular-nums; min-height:16px;"></div>
+</div>
 <div id="floor-ui" style="display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%); background:rgba(20,30,40,.85); color:#fff; padding:8px 16px; border-radius:12px; align-items:center; gap:12px; z-index:10; font-size:13px;">
   <b id="floor-title">分层展示</b>
   <span style="font-size:12px;opacity:.8">展开</span>
@@ -112,7 +134,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { BUILDINGS, IMG, UNLOCATED, NOTES } from './data/buildings.js';
+
+// GLB 模型使用 Draco 压缩，统一注入解码器
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('/node_modules/three/examples/jsm/libs/draco/');
+function makeGLTFLoader() {
+  const loader = new GLTFLoader();
+  loader.setDRACOLoader(dracoLoader);
+  return loader;
+}
 
 const M = IMG.pxPerM;
 const W = IMG.w / M, H = IMG.h / M;                 // 场地尺寸(米) 561.7 x 289
@@ -139,6 +171,11 @@ controls.maxPolarAngle = Math.PI * 0.495;
 controls.minDistance = 30;
 controls.maxDistance = 1500;
 controls.enableDamping = true;
+controls.mouseButtons = {
+  LEFT: THREE.MOUSE.PAN,
+  MIDDLE: THREE.MOUSE.ROTATE,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
 
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -165,6 +202,120 @@ const sunDisc = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xffe9b0, fog: false })
 );
 scene.add(sunDisc);
+
+// ---------- 天空穹顶（蓝天渐变 + 太阳光晕） ----------
+function makeGlowTexture(size = 160) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,246,220,1)');
+  g.addColorStop(0.12, 'rgba(255,240,205,0.85)');
+  g.addColorStop(0.35, 'rgba(255,235,190,0.32)');
+  g.addColorStop(1, 'rgba(255,235,190,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const skyDomeMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  depthWrite: false,
+  uniforms: {
+    topCol: { value: new THREE.Color(0x2f6fbf) },
+    midCol: { value: new THREE.Color(0x6fa3d8) },
+    botCol: { value: new THREE.Color(0xcfe4f2) },
+    sunDir: { value: new THREE.Vector3(0, 1, 0.3) },
+    sunGlow: { value: 0.4 },
+    weatherCol: { value: new THREE.Color(0xffffff) },
+    weatherBlend: { value: 0 },
+  },
+  vertexShader: `
+    varying vec3 vDir;
+    void main() {
+      vDir = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vDir;
+    uniform vec3 topCol, midCol, botCol;
+    uniform vec3 sunDir;
+    uniform float sunGlow;
+    uniform vec3 weatherCol;
+    uniform float weatherBlend;
+    void main() {
+      vec3 d = normalize(vDir);
+      float h = clamp(d.y, -0.05, 1.0);
+      vec3 col = mix(botCol, midCol, smoothstep(0.0, 0.22, h));
+      col = mix(col, topCol, smoothstep(0.12, 0.6, h));
+      float s = max(dot(d, normalize(sunDir)), 0.0);
+      col += vec3(1.0, 0.93, 0.75) * pow(s, 300.0) * 1.8;
+      col += vec3(1.0, 0.9, 0.72) * pow(s, 8.0) * sunGlow;
+      col = mix(col, weatherCol, weatherBlend);
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+});
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(3400, 32, 16), skyDomeMat);
+skyDome.frustumCulled = false;
+skyDome.renderOrder = -10;
+scene.add(skyDome);
+
+const sunHalo = new THREE.Sprite(
+  new THREE.SpriteMaterial({ map: makeGlowTexture(), color: 0xfff3d6, transparent: true, opacity: 0.8, depthTest: false, depthWrite: false, fog: false })
+);
+sunHalo.scale.set(460, 460, 1);
+scene.add(sunHalo);
+
+// ---------- 白云（3D 球簇，受太阳光着色） ----------
+const cloudGroup = new THREE.Group();
+scene.add(cloudGroup);
+const cloudPuffGeo = new THREE.SphereGeometry(1, 10, 8);
+const cloudPuffMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+function makeCloud() {
+  const n = 6 + Math.floor(Math.random() * 4);
+  const inst = new THREE.InstancedMesh(cloudPuffGeo, cloudPuffMat, n);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3();
+  const spread = 26 + Math.random() * 26;   // 云团半宽
+  const thick = 9 + Math.random() * 7;      // 云团半厚
+  for (let i = 0; i < n; i++) {
+    const r = 14 + Math.random() * 16;
+    const cx = (Math.random() * 2 - 1) * spread;
+    const cz = (Math.random() * 2 - 1) * spread * 0.85;
+    // 积云轮廓：中心隆起，边缘收薄缩小
+    const edge = Math.min(1, Math.hypot(cx, cz) / spread);
+    const cy = (Math.random() * 2 - 1) * thick * (1 - edge * 0.8) - edge * 4;
+    const sr = r * (1 - edge * 0.25);
+    v.set(cx, cy, cz);
+    q.identity();
+    s.set(sr, sr * 0.62, sr);
+    m4.compose(v, q, s);
+    inst.setMatrixAt(i, m4);
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  return inst;
+}
+const clouds = [];
+for (let i = 0; i < 14; i++) {
+  const c = makeCloud();
+  c.position.set((Math.random() * 2 - 1) * 1400, 150 + Math.random() * 130, (Math.random() * 2 - 1) * 1400);
+  c.userData.spd = 1.2 + Math.random() * 2.4;
+  c.userData.ph = Math.random() * Math.PI * 2;
+  cloudGroup.add(c);
+  clouds.push(c);
+}
+function updateClouds(dt, elapsed) {
+  for (const c of clouds) {
+    c.position.x += c.userData.spd * dt;
+    if (c.position.x - camera.position.x > 1700) c.position.x -= 3400;
+    else if (c.position.x - camera.position.x < -1700) c.position.x += 3400;
+    c.position.z += Math.sin(elapsed * 0.15 + c.userData.ph) * dt * 0.6;
+  }
+  skyDome.position.copy(camera.position);
+}
 
 // ---------- 地面（总平图纹理） ----------
 const groundGroup = new THREE.Group();
@@ -194,6 +345,11 @@ const SUNSET = new THREE.Color(0xf0a35f);
 const HORIZON = new THREE.Color(0xb8c6d8);
 const DAY = new THREE.Color(0x8fb8dd);
 const SUN_LOW = new THREE.Color(0xff9a4d);
+// 天空穹顶分时配色：白天 / 地平线 / 日落 / 夜晚
+const D_TOP = new THREE.Color(0x2f6fbf), D_MID = new THREE.Color(0x5f9ad6), D_BOT = new THREE.Color(0xbfdcf2);
+const H_TOP = new THREE.Color(0x35568f), H_MID = new THREE.Color(0x8fb8dd), H_BOT = new THREE.Color(0xd8e6f0);
+const S_TOP = new THREE.Color(0x27406a), S_MID = new THREE.Color(0xa8654f), S_BOT = new THREE.Color(0xf2a35f);
+const N_TOP = new THREE.Color(0x0a1226), N_MID = new THREE.Color(0x111a30), N_BOT = new THREE.Color(0x1c2740);
 let weatherDim = 1, weatherBlend = 0;
 
 function sunDirAt(hour) {
@@ -221,21 +377,42 @@ function updateSun() {
   sunLight.target.position.copy(tgt);
   sunLight.target.updateMatrixWorld();
   sunDisc.position.set(tgt.x + sunDir.x * 2100, tgt.y + sunDir.y * 2100 + 40, tgt.z + sunDir.z * 2100);
+  sunHalo.position.copy(sunDisc.position);
+  sunHalo.visible = sunDisc.visible;
   if (elv > 0.32) skyCol.copy(DAY);
   else if (elv > 0.14) skyCol.copy(HORIZON).lerp(DAY, (elv - 0.14) / 0.18);
   else if (elv > 0) skyCol.copy(SUNSET).lerp(HORIZON, elv / 0.14);
   else if (elv > -0.14) skyCol.copy(NIGHT).lerp(SUNSET, (elv + 0.14) / 0.14);
   else skyCol.copy(NIGHT);
   hemi.intensity = 0.22 + Math.max(0, elv) * 0.8;
+  // 天空穹顶配色
+  const u = skyDomeMat.uniforms;
+  const cT = u.topCol.value, cM = u.midCol.value, cB = u.botCol.value;
+  if (elv > 0.32) { cT.copy(D_TOP); cM.copy(D_MID); cB.copy(D_BOT); }
+  else if (elv > 0.14) {
+    const t = (elv - 0.14) / 0.18;
+    cT.copy(H_TOP).lerp(D_TOP, t); cM.copy(H_MID).lerp(D_MID, t); cB.copy(H_BOT).lerp(D_BOT, t);
+  } else if (elv > 0) {
+    const t = elv / 0.14;
+    cT.copy(S_TOP).lerp(H_TOP, t); cM.copy(S_MID).lerp(H_MID, t); cB.copy(S_BOT).lerp(H_BOT, t);
+  } else if (elv > -0.14) {
+    const t = (elv + 0.14) / 0.14;
+    cT.copy(N_TOP).lerp(S_TOP, t); cM.copy(N_MID).lerp(S_MID, t); cB.copy(N_BOT).lerp(S_BOT, t);
+  } else { cT.copy(N_TOP); cM.copy(N_MID); cB.copy(N_BOT); }
+  u.sunDir.value.copy(sunDir);
+  u.sunGlow.value = 0.12 + Math.max(0, elv) * 0.55;
 }
 
 // ---------- 天气 ----------
 const WEATHER = {
-  sunny: { dim: 1, blend: 0, sky: 0xffffff, fogNear: 900, fogFar: 2600, tint: 0xffffff },
-  rain: { dim: 0.42, blend: 0.78, sky: 0x6f7f8e, fogNear: 420, fogFar: 1500, tint: 0xb2bcc6 },
-  snow: { dim: 0.6, blend: 0.6, sky: 0xb9c4cf, fogNear: 380, fogFar: 1400, tint: 0xe3e9ee },
+  sunny:  { dim: 1, blend: 0, sky: 0xffffff, fogNear: 900, fogFar: 2600, tint: 0xffffff },
+  cloudy: { dim: 0.72, blend: 0.62, sky: 0x93a1ae, fogNear: 700, fogFar: 2100, tint: 0xc8ced4 },
+  rain:   { dim: 0.42, blend: 0.78, sky: 0x6f7f8e, fogNear: 420, fogFar: 1500, tint: 0xb2bcc6 },
+  storm:  { dim: 0.28, blend: 0.86, sky: 0x4a5560, fogNear: 300, fogFar: 1100, tint: 0x9aa4ae },
+  snow:   { dim: 0.6, blend: 0.6, sky: 0xb9c4cf, fogNear: 380, fogFar: 1400, tint: 0xe3e9ee },
+  fog:    { dim: 0.55, blend: 0.92, sky: 0xaeb6bd, fogNear: 50, fogFar: 520, tint: 0xb8bec4 },
 };
-const weatherState = { mode: 'sunny' };
+const weatherState = { mode: 'sunny', flash: 0, flashTimer: 0 };
 scene.fog = new THREE.Fog(0xffffff, 900, 2600);
 
 function setWeather(mode) {
@@ -243,8 +420,9 @@ function setWeather(mode) {
   const w = WEATHER[mode];
   weatherDim = w.dim;
   weatherBlend = w.blend;
-  rain.visible = mode === 'rain';
+  rain.visible = mode === 'rain' || mode === 'storm';
   snow.visible = mode === 'snow';
+  if (mode !== 'storm') weatherState.flash = 0;
   document.querySelectorAll('.weatherbox button').forEach((b) => b.classList.toggle('on', b.dataset.w === mode));
 }
 function updateSkyFog() {
@@ -256,6 +434,10 @@ function updateSkyFog() {
   scene.fog.far = w.fogFar;
   groundMapMat.color.setHex(w.tint);
   groundPlainMat.color.setHex(w.tint);
+  // 天空穹顶与天气融合；白云在晴天/多云显示
+  skyDomeMat.uniforms.weatherCol.value.set(w.sky);
+  skyDomeMat.uniforms.weatherBlend.value = weatherBlend;
+  cloudGroup.visible = weatherState.mode === 'sunny' || weatherState.mode === 'cloudy';
 }
 
 // ---------- 雨 ----------
@@ -282,9 +464,10 @@ rain.visible = false;
 scene.add(rain);
 
 function updateRain(dt, cam) {
+  const boost = weatherState.mode === 'storm' ? 1.7 : 1;
   for (let i = 0; i < RAIN_N; i++) {
     const o = i * 6;
-    let y = rainArr[o + 1] - rainSpd[i] * dt;
+    let y = rainArr[o + 1] - rainSpd[i] * dt * boost;
     if (y < 0) y += R_H;
     rainArr[o + 1] = y;
     rainArr[o + 4] = y - 1.6;
@@ -312,11 +495,47 @@ for (let i = 0; i < SNOW_N; i++) {
   snowPh[i] = Math.random() * Math.PI * 2;
   snowAmp[i] = 0.6 + Math.random() * 2.2;
 }
+function makeCottonSnowTexture(size = 96) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const half = size / 2;
+  const puff = (x, y, r, a) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.55, `rgba(255,255,255,${a * 0.72})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  // 不规则棉团：中心 + 错落的小棉絮
+  puff(half, half, half * 0.42, 0.92);
+  puff(half + half * 0.3, half - half * 0.1, half * 0.3, 0.85);
+  puff(half - half * 0.28, half + half * 0.14, half * 0.28, 0.85);
+  puff(half - half * 0.12, half - half * 0.32, half * 0.26, 0.8);
+  puff(half + half * 0.2, half + half * 0.3, half * 0.24, 0.8);
+  puff(half + half * 0.42, half + half * 0.14, half * 0.18, 0.62);
+  puff(half - half * 0.4, half - half * 0.16, half * 0.16, 0.58);
+  puff(half + half * 0.02, half - half * 0.42, half * 0.15, 0.52);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 const snowGeo = new THREE.BufferGeometry();
 snowGeo.setAttribute('position', new THREE.BufferAttribute(snowArr, 3));
 const snow = new THREE.Points(
   snowGeo,
-  new THREE.PointsMaterial({ color: 0xffffff, size: 2.4, transparent: true, opacity: 0.95, depthWrite: false })
+  new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 6.2,
+    map: makeCottonSnowTexture(),
+    transparent: true,
+    opacity: 0.92,
+    depthWrite: false,
+  })
 );
 snow.frustumCulled = false;
 snow.visible = false;
@@ -408,26 +627,28 @@ const pickables = [];
 const partMeshes = new Map(); // building -> parts[]
 const allMats = [];
 
-function makeLabel(text, bg = 'rgba(255,255,255,0.9)', fg = '#33404d') {
+function makeLabel(text, bg = 'rgba(255,255,255,0.9)', fg = '#33404d', scale = 1) {
   const c = document.createElement('canvas');
-  const fs = 42;
+  const fs = Math.round(42 * scale);
+  const pad = Math.round(26 * scale);
+  const ch = Math.round(60 * scale);
   const g = c.getContext('2d');
   g.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
-  const w = Math.ceil(g.measureText(text).width) + 26;
-  c.width = w; c.height = 60;
+  const w = Math.ceil(g.measureText(text).width) + pad;
+  c.width = w; c.height = ch;
   const g2 = c.getContext('2d');
   g2.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
-  g2.fillStyle = bg; g2.fillRect(0, 0, w, 60);
-  g2.strokeStyle = 'rgba(60,75,90,0.55)'; g2.lineWidth = 2; g2.strokeRect(1, 1, w - 2, 58);
+  g2.fillStyle = bg; g2.fillRect(0, 0, w, ch);
+  g2.strokeStyle = 'rgba(60,75,90,0.55)'; g2.lineWidth = 2; g2.strokeRect(1, 1, w - 2, ch - 2);
   g2.fillStyle = fg; g2.textAlign = 'center'; g2.textBaseline = 'middle';
-  g2.fillText(text, w / 2, 31);
+  g2.fillText(text, w / 2, ch / 2);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, fog: false }));
   sp.renderOrder = 10;
-  const h = 8;
-  sp.scale.set((w / 60) * h, h, 1);
+  const h = 8 * scale;
+  sp.scale.set((w / ch) * h, h, 1);
   return sp;
 }
 
@@ -462,7 +683,7 @@ for (const b of BUILDINGS) {
   }
   partMeshes.set(b.id, parts);
 
-  const label = makeLabel(b.short);
+  const label = makeLabel(b.short, undefined, undefined, 0.62);
   label.position.set((minX + maxX) / 2, maxH + 8, (minZ + maxZ) / 2);
   labelsGroup.add(label);
 
@@ -479,49 +700,91 @@ for (const b of BUILDINGS) {
   }
 }
 
-// 白膜默认隐藏（"白膜"开关可打开），主视图改为写实模型
+// 默认加载精模，白膜隐藏（勾选"白膜"可打开）
 buildingsGroup.visible = false;
 labelsGroup.visible = false;
 
-// ---------- 整体模型（初始加载） ----------
+// ---------- 加载过渡 ----------
+// 注意：此处位于 $ 助手定义之前，直接用 document.getElementById
+const loaderEl = document.getElementById('loader'), loaderText = document.getElementById('loader-text'), loaderPct = document.getElementById('loader-pct');
+let loaderBusy = 0;
+function showLoader(text) {
+  loaderBusy++;
+  loaderText.textContent = text;
+  loaderPct.textContent = '';
+  loaderEl.style.display = 'flex';
+  loaderEl.style.pointerEvents = 'auto';
+  requestAnimationFrame(() => { loaderEl.style.opacity = '1'; });
+}
+function hideLoader() {
+  loaderBusy = Math.max(0, loaderBusy - 1);
+  if (loaderBusy > 0) return;
+  loaderEl.style.opacity = '0';
+  loaderEl.style.pointerEvents = 'none';
+  setTimeout(() => { if (loaderBusy === 0) loaderEl.style.display = 'none'; }, 900);
+}
+function setLoaderPct(p) { loaderPct.textContent = Math.round(p) + '%'; }
+// 让出主线程（MessageChannel 不受隐藏标签页定时器限流影响）
+const yieldToMain = () => new Promise((r) => {
+  const mc = new MessageChannel();
+  mc.port1.onmessage = () => r();
+  mc.port2.postMessage(0);
+});
+
+// ---------- 整体模型（按需加载） ----------
 const realGroup = new THREE.Group();
 scene.add(realGroup);
 const realBuildings = new Map(); // 楼名 -> mesh（2号楼/6号楼 可点击分层）
 let realLoaded = false;
+let realLoading = false;
 let overviewCam = null;
 
-new GLTFLoader().loadAsync('/models/models/整体.glb').then((gltf) => {
-  const obj = gltf.scene;
-  const box = new THREE.Box3().setFromObject(obj);
-  const size = box.getSize(new THREE.Vector3());
-  let s = 1;
-  if (Math.max(size.x, size.y, size.z) > 1000) s = 0.001; // 单位 mm → m（院区级模型为米制，不缩放）
-  const c = box.getCenter(new THREE.Vector3());
-  obj.scale.setScalar(s);
-  obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
-  obj.traverse((o) => {
-    if (o.isMesh) {
-      o.castShadow = true;
-      o.receiveShadow = true;
-    }
-    if ((o.name === '2号楼' || o.name === '6号楼') && o.isGroup) {
-      o.userData.buildingName = o.name;
-      o.traverse((c) => { if (c.isMesh) c.userData.buildingName = o.name; });
-      realBuildings.set(o.name, o);
-    }
+function loadRealModel() {
+  if (realLoaded || realLoading) return;
+  realLoading = true;
+  showLoader('正在加载整体模型…');
+  makeGLTFLoader().load('/models/models/整体.glb', (gltf) => {
+    const obj = gltf.scene;
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3());
+    let s = 1;
+    if (Math.max(size.x, size.y, size.z) > 1000) s = 0.001; // 单位 mm → m（院区级模型为米制，不缩放）
+    const c = box.getCenter(new THREE.Vector3());
+    obj.scale.setScalar(s);
+    obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
+    obj.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+      if ((o.name === '2号楼' || o.name === '6号楼') && o.isGroup) {
+        o.userData.buildingName = o.name;
+        o.traverse((c) => { if (c.isMesh) c.userData.buildingName = o.name; });
+        realBuildings.set(o.name, o);
+      }
+    });
+    realGroup.add(obj);
+    realLoaded = true;
+    realLoading = false;
+    realGroup.visible = document.getElementById('tg-real').checked;
+    const r = Math.max(size.x, size.y, size.z) * s;
+    flyToPos(new THREE.Vector3(r * 1.1, r * 0.85, r * 1.7), new THREE.Vector3(0, r * 0.35, 0));
+    controls.maxDistance = Math.max(controls.maxDistance, r * 12);
+    overviewCam = { pos: new THREE.Vector3(r * 1.1, r * 0.85, r * 1.7), look: new THREE.Vector3(0, r * 0.35, 0) };
+    hideLoader();
+  }, (ev) => {
+    if (ev.total) setLoaderPct((ev.loaded / ev.total) * 100);
+  }, (e) => {
+    console.warn('整体模型加载失败，回退显示白膜', e);
+    realLoading = false;
+    document.getElementById('tg-real').checked = false;
+    buildingsGroup.visible = true;
+    labelsGroup.visible = true;
+    hideLoader();
   });
-  realGroup.add(obj);
-  realLoaded = true;
-  const r = Math.max(size.x, size.y, size.z) * s;
-  camera.position.set(r * 1.1, r * 0.85, r * 1.7);
-  controls.target.set(0, r * 0.35, 0);
-  controls.maxDistance = Math.max(controls.maxDistance, r * 12);
-  overviewCam = { pos: camera.position.clone(), look: controls.target.clone() };
-}).catch((e) => {
-  console.warn('整体模型加载失败，回退显示白膜', e);
-  buildingsGroup.visible = true;
-  labelsGroup.visible = true;
-});
+}
+
+loadRealModel();
 
 // ---------- 分层展示（2号楼 / 6号楼） ----------
 const FLOOR_CONFIG = { '2号楼': null, '6号楼': null }; // null = 按3.8m层高自动估算
@@ -586,7 +849,7 @@ async function splitBuilding(gltfScene, numFloors) {
           pushVert(e, posAttr, uvAttr, i1, M, v);
           pushVert(e, posAttr, uvAttr, i2, M, v);
         }
-        await new Promise((r) => setTimeout(r, 0));
+        await yieldToMain();
       }
     }
   }
@@ -622,10 +885,11 @@ async function enterFloorMode(name) {
   $('floor-ui').style.display = 'flex';
   devStatus.style.display = 'block';
   devStatus.textContent = '加载 ' + name + ' 模型并计算分层…';
+  showLoader('正在加载 ' + name + ' 分层模型…');
   try {
     let gltf = gltfCache.get(name);
     if (!gltf) {
-      gltf = await new GLTFLoader().loadAsync('/models/models/' + name + '.glb');
+      gltf = await makeGLTFLoader().loadAsync('/models/models/' + name + '.glb');
       gltfCache.set(name, gltf);
     }
     const h = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3()).y;
@@ -657,8 +921,10 @@ async function enterFloorMode(name) {
   } catch (err) {
     console.warn('分层展示加载失败', err);
     exitFloorMode();
+    hideLoader();
     return;
   }
+  hideLoader();
   devStatus.style.display = 'none';
 }
 
@@ -668,7 +934,7 @@ function exitFloorMode() {
   floorGroup.visible = false;
   while (floorGroup.children.length) floorGroup.remove(floorGroup.children[0]);
   floorState.layers = [];
-  realGroup.visible = true;
+  realGroup.visible = $('tg-real').checked && realLoaded;
   buildingsGroup.visible = $('tg-white').checked;
   labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
   $('floor-ui').style.display = 'none';
@@ -794,7 +1060,7 @@ let robotsReady = false;
 async function loadRobots() {
   if (robotsReady) return;
   robotsReady = true;
-  const loader = new GLTFLoader();
+  const loader = makeGLTFLoader();
   for (const def of ROBOT_DEFS) {
     try {
       const gltf = await loader.loadAsync(def.file);
@@ -932,7 +1198,7 @@ function applyXray(on) {
   btn.classList.toggle('on', on);
   $('sim-hint').style.display = on ? 'block' : 'none';
 }
-function flyToPos(pos, look) { flyTarget = { pos, look }; }
+function flyToPos(pos, look) { if (cruiseState.on) stopCruise(); flyTarget = { pos, look }; }
 
 // ---------- 物流设备模型 ----------
 const DEVICES = [
@@ -946,7 +1212,7 @@ devicesGroup.visible = false;
 scene.add(devicesGroup);
 let devicesLoaded = false;
 const devStatus = document.createElement('div');
-devStatus.style.cssText = 'position:fixed;top:10px;right:10px;background:rgba(20,30,40,.72);color:#dfe8f0;font-size:12px;padding:5px 12px;border-radius:14px;display:none';
+devStatus.style.cssText = 'position:fixed;top:72px;right:12px;background:rgba(20,30,40,.72);color:#dfe8f0;font-size:12px;padding:5px 12px;border-radius:14px;display:none';
 document.body.appendChild(devStatus);
 
 async function loadDevices() {
@@ -960,7 +1226,7 @@ async function loadDevices() {
   strip.position.set(0, 0.05, H / 2 + 16);
   devicesGroup.add(strip);
 
-  const loader = new GLTFLoader();
+  const loader = makeGLTFLoader();
   let done = 0;
   for (let i = 0; i < DEVICES.length; i++) {
     const d = DEVICES[i];
@@ -1097,10 +1363,29 @@ $('tg-line').onchange = (e) => {
 };
 $('tg-label').onchange = (e) => { labelsGroup.visible = e.target.checked && $('tg-white').checked; };
 $('tg-white').onchange = (e) => {
+  if (e.target.checked) {
+    $('tg-real').checked = false;
+    realGroup.visible = false;
+  }
   buildingsGroup.visible = e.target.checked;
   labelsGroup.visible = e.target.checked && $('tg-label').checked;
 };
-$('tg-real').onchange = (e) => { realGroup.visible = e.target.checked; };
+$('tg-real').onchange = (e) => {
+  if (e.target.checked) {
+    $('tg-white').checked = false;
+    buildingsGroup.visible = false;
+    labelsGroup.visible = false;
+    if (!realLoaded) { loadRealModel(); return; }
+    realGroup.visible = true;
+  } else {
+    realGroup.visible = false;
+    if (!$('tg-white').checked) {
+      $('tg-white').checked = true;
+      buildingsGroup.visible = true;
+      labelsGroup.visible = $('tg-label').checked;
+    }
+  }
+};
 $('tg-tree').onchange = (e) => { treesGroup.visible = e.target.checked; };
 $('tg-alpha').onchange = (e) => {
   for (const mt of allMats) { mt.transparent = e.target.checked; mt.opacity = e.target.checked ? 0.55 : 1; mt.depthWrite = !e.target.checked; }
@@ -1128,6 +1413,35 @@ timePlay.onclick = () => {
 document.querySelectorAll('.weatherbox button').forEach((b) => {
   b.onclick = () => setWeather(b.dataset.w);
 });
+// ---------- 自动巡航（360° 逆时针环绕） ----------
+const cruiseState = { on: false, angle: 0, r: 400, h: 200 };
+const CRUISE_SPEED = 0.12; // 弧度/秒，约 52 秒一圈
+function startCruise() {
+  if (cruiseState.on) return;
+  if (floorState.active) exitFloorMode();
+  flyTarget = null;
+  const t = controls.target;
+  const dx = camera.position.x - t.x, dz = camera.position.z - t.z;
+  cruiseState.r = Math.max(60, Math.hypot(dx, dz));
+  cruiseState.h = Math.max(40, camera.position.y - t.y);
+  cruiseState.angle = Math.atan2(-dz, dx);
+  cruiseState.on = true;
+  controls.enabled = false;
+  const btn = $('cruise-btn');
+  btn.classList.add('on');
+  btn.textContent = '停止巡航';
+}
+function stopCruise() {
+  if (!cruiseState.on) return;
+  cruiseState.on = false;
+  controls.enabled = true;
+  const btn = $('cruise-btn');
+  btn.classList.remove('on');
+  btn.textContent = '自动巡航（360°逆时针）';
+}
+$('cruise-btn').onclick = () => (cruiseState.on ? stopCruise() : startCruise());
+renderer.domElement.addEventListener('pointerdown', () => { if (cruiseState.on) stopCruise(); });
+
 $('xray-btn').onclick = () => {
   if (!xrayState.on) {
     loadRobots();
@@ -1144,6 +1458,59 @@ document.querySelectorAll('.flr-btn').forEach((b) => {
 setWeather('sunny');
 syncTimeUI();
 
+// ---------- 实时时间 & 杭州实时天气 ----------
+const timeRealtime = $('time-realtime');
+const rtClock = $('rt-clock'), rtWeather = $('rt-weather');
+const TZ_HZ = 'Asia/Shanghai';
+function hangzhouNow() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: TZ_HZ }));
+}
+timeRealtime.onchange = () => {
+  timeSlider.disabled = timePlay.disabled = timeRealtime.checked;
+  if (timeRealtime.checked) {
+    timeState.playing = false;
+    timePlay.textContent = '▶ 播放';
+    timeState.hour = (() => { const d = hangzhouNow(); return d.getHours() + d.getMinutes() / 60; })();
+    syncTimeUI();
+  }
+};
+timeSlider.disabled = timePlay.disabled = true;
+setInterval(() => {
+  const d = hangzhouNow();
+  rtClock.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+  if (timeRealtime.checked) {
+    timeState.hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    syncTimeUI();
+  }
+}, 1000);
+
+const WMO_TXT = { 0: '晴', 1: '晴间多云', 2: '多云', 3: '阴', 45: '雾', 48: '雾凇', 51: '毛毛雨', 53: '小雨', 55: '中雨', 56: '冻雨', 57: '冻雨', 61: '小雨', 63: '中雨', 65: '大雨', 66: '冻雨', 67: '冻雨', 71: '小雪', 73: '中雪', 75: '大雪', 77: '雪粒', 80: '阵雨', 81: '阵雨', 82: '强阵雨', 85: '阵雪', 86: '阵雪', 95: '雷雨', 96: '雷雨伴冰雹', 99: '雷雨伴冰雹' };
+function weatherModeFromCode(code) {
+  if (code === 45 || code === 48) return 'fog';
+  if (code === 2 || code === 3) return 'cloudy';
+  if ([63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(code)) return 'storm';
+  if ((code >= 51 && code <= 61)) return 'rain';
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return 'snow';
+  return 'sunny';
+}
+async function fetchRealWeather() {
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=30.2741&longitude=120.1551&current=temperature_2m,weather_code&timezone=Asia%2FShanghai';
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('http ' + res.status);
+    const j = await res.json();
+    const code = j.current.weather_code;
+    const temp = Math.round(j.current.temperature_2m);
+    rtWeather.textContent = `杭州实时 · ${WMO_TXT[code] || '多云'} ${temp}°C`;
+    setWeather(weatherModeFromCode(code));
+  } catch (e) {
+    rtWeather.textContent = '杭州 · 天气获取失败，可手动切换';
+    console.warn('实时天气获取失败', e);
+  }
+}
+fetchRealWeather();
+setInterval(fetchRealWeather, 10 * 60 * 1000);
+
 // ---------- 渲染循环 ----------
 const timer = new THREE.Timer();
 function animate() {
@@ -1156,7 +1523,21 @@ function animate() {
     syncTimeUI();
   }
   updateSun();
+  // 雷雨闪电
+  if (weatherState.mode === 'storm') {
+    weatherState.flashTimer -= dt;
+    if (weatherState.flashTimer <= 0) {
+      weatherState.flash = 1;
+      weatherState.flashTimer = 3 + Math.random() * 6;
+    }
+  }
+  weatherState.flash = Math.max(0, weatherState.flash - dt * 7);
+  if (weatherState.flash > 0.05) {
+    sunLight.intensity += weatherState.flash * 2.2;
+    hemi.intensity += weatherState.flash * 0.6;
+  }
   updateSkyFog();
+  updateClouds(dt, elapsed);
   updateRain(dt, camera.position);
   updateSnow(dt, camera.position, elapsed);
   updateElevators(dt);
@@ -1173,6 +1554,16 @@ function animate() {
     camera.position.lerp(flyTarget.pos, 0.06);
     controls.target.lerp(flyTarget.look, 0.06);
     if (camera.position.distanceTo(flyTarget.pos) < 2) flyTarget = null;
+  }
+  if (cruiseState.on) {
+    cruiseState.angle += CRUISE_SPEED * dt;
+    const t = controls.target;
+    camera.position.set(
+      t.x + cruiseState.r * Math.cos(cruiseState.angle),
+      t.y + cruiseState.h,
+      t.z - cruiseState.r * Math.sin(cruiseState.angle)
+    );
+    camera.lookAt(t);
   }
   controls.update();
   renderer.render(scene, camera);
