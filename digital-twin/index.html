@@ -47,28 +47,66 @@
   #sec h3 { font-size: 12px; color: #44505c; margin: 8px 0 4px; }
   #sec ul { margin: 0; padding-left: 18px; font-size: 11px; color: #5b6672; line-height: 1.6; }
 
-  /* 左侧面板收起 */
-  #panel { transition: transform .35s ease; }
+  /* 顶部标题栏 */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 58px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, rgba(8,14,28,.95), rgba(10,18,34,.82)); border-bottom: 1px solid rgba(0,229,255,.22); box-shadow: 0 2px 16px rgba(0,0,0,.4); }
+  .tb-left { display: flex; align-items: center; gap: 12px; }
+  .tb-logo { width: 34px; height: 34px; background: linear-gradient(135deg, #00e5ff, #2b7fd4); clip-path: polygon(25% 2%, 75% 2%, 98% 50%, 75% 98%, 25% 98%, 2% 50%); display: flex; align-items: center; justify-content: center; color: #06283a; font-size: 20px; font-weight: 700; }
+  .tb-title .cn { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 2px; line-height: 1.15; }
+  .tb-title .en { font-size: 9px; color: #5b7a95; letter-spacing: 1.5px; }
+  .tb-center { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .tb-pill { background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.4); color: #7fd4ff; font-size: 12px; letter-spacing: 1px; padding: 4px 18px; border-radius: 16px; }
+  .tb-tag { font-size: 10px; color: #ffc84d; letter-spacing: 1px; }
+  .tb-right { display: flex; align-items: center; gap: 14px; }
+  .tb-weather { font-size: 12px; color: #8fb8d8; }
+  .tb-clock { text-align: right; line-height: 1.15; }
+  #rt-clock { font-size: 19px; font-weight: 700; color: #fff; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+  #rt-date { font-size: 10px; color: #5b7a95; }
+  .tb-live { font-size: 11px; color: #4cd98a; display: flex; align-items: center; gap: 5px; }
+  .tb-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #4cd98a; box-shadow: 0 0 6px #4cd98a; }
+  #panel { top: 68px; max-height: calc(100% - 78px); transition: transform .35s ease; }
   body.panel-hidden #panel { transform: translateX(-326px); }
-  #panel-toggle { position: fixed; left: 316px; top: 14px; z-index: 45; width: 30px; height: 30px; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #cfe0f2; font-size: 13px; cursor: pointer; transition: left .35s ease, background .2s; }
+  #panel-toggle { position: fixed; left: 316px; top: 72px; z-index: 45; width: 30px; height: 30px; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #cfe0f2; font-size: 13px; cursor: pointer; transition: left .35s ease, background .2s; }
   #panel-toggle:hover { background: rgba(43,127,212,.9); color: #fff; }
   body.panel-hidden #panel-toggle { left: 12px; }
 
   /* ECharts 指标面板（深色大屏风格） */
-  #charts-btn { position: fixed; right: 12px; top: 14px; z-index: 45; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #7fd4ff; font-size: 13px; padding: 6px 14px; cursor: pointer; letter-spacing: 1px; }
+  #charts-btn { position: fixed; right: 12px; top: 68px; z-index: 45; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #7fd4ff; font-size: 13px; padding: 6px 14px; cursor: pointer; letter-spacing: 1px; }
   #charts-btn:hover { background: rgba(10,60,100,.9); }
   #charts-btn.on { background: rgba(10,60,100,.9); color: #fff; }
-  #charts-panel { position: fixed; top: 14px; right: 12px; width: 306px; max-height: calc(100% - 28px); overflow-y: auto; z-index: 40; transform: translateX(340px); transition: transform .4s cubic-bezier(.22,.9,.3,1); }
+  #charts-panel { position: fixed; top: 68px; right: 12px; width: 306px; max-height: calc(100% - 78px); overflow-y: auto; z-index: 40; transform: translateX(340px); transition: transform .4s cubic-bezier(.22,.9,.3,1); }
   #charts-panel.show { transform: translateX(0); }
   #charts-panel::-webkit-scrollbar { width: 4px; }
   #charts-panel::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 2px; }
-  .chart-card { background: rgba(9,15,28,.88); border: 1px solid rgba(0,188,212,.25); border-radius: 10px; margin-bottom: 10px; padding: 10px 12px 8px; color: #cfe0f2; box-shadow: 0 0 18px rgba(0,188,212,.08); }
-  .chart-card h4 { margin: 0 0 6px; font-size: 13px; color: #7fd4ff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; }
-  .chart-card h4::before { content: ''; width: 4px; height: 14px; background: linear-gradient(#00e5ff,#2b7fd4); border-radius: 2px; }
-  .chart-box { height: 148px; }
-  .chart-card:first-child { margin-top: 48px; }
+  .chart-card { background: rgba(8,14,28,.9); border: 1px solid rgba(0,229,255,.2); border-radius: 10px; margin-bottom: 10px; padding: 10px 12px 8px; color: #cfe0f2; box-shadow: 0 0 18px rgba(0,188,212,.08); }
+  .chart-card h4 { margin: 0 0 6px; font-size: 13px; color: #7fd4ff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: baseline; gap: 8px; }
+  .chart-card h4 .num { font-size: 12px; color: #00e5ff; font-weight: 700; }
+  .chart-card h4 .en { font-size: 9px; color: #41617e; letter-spacing: 1.2px; }
+  .chart-card h4 .tag { margin-left: auto; font-size: 10px; color: #ffc84d; border: 1px solid rgba(255,200,77,.35); border-radius: 8px; padding: 0 6px; }
+  .big-num { font-size: 26px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+  .big-num small { font-size: 12px; color: #5b7a95; font-weight: 400; margin-left: 4px; }
+  .trend-up { color: #4cd98a; font-size: 12px; }
+  .metric-row { display: flex; gap: 8px; margin-top: 6px; }
+  .metric-item { flex: 1; background: rgba(0,229,255,.05); border-radius: 6px; padding: 5px 7px; }
+  .metric-item .k { font-size: 10px; color: #5b7a95; }
+  .metric-item .v { font-size: 13px; font-weight: 700; color: #cfe0f2; font-variant-numeric: tabular-nums; }
+  .chart-box { height: 132px; }
+  .chart-card:first-child { margin-top: 44px; }
   .charts-anim { opacity: 0; transform: translateX(30px); transition: opacity .45s ease, transform .45s ease; }
   #charts-panel.show .charts-anim { opacity: 1; transform: translateX(0); }
+  .cost-list { margin-top: 4px; }
+  .cost-list .row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+  .cost-list .dot { width: 8px; height: 8px; border-radius: 2px; }
+  .cost-list .val { margin-left: auto; color: #fff; font-variant-numeric: tabular-nums; }
+  .progress-row { margin: 5px 0; font-size: 11px; }
+  .progress-row .bar { height: 6px; background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden; margin-top: 2px; }
+  .progress-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#00e5ff,#2b7fd4); border-radius: 3px; transition: width .8s ease; }
+  .alert-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid rgba(127,212,255,.08); font-size: 12px; }
+  .alert-item .lv { flex-shrink: 0; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+  .lv.mid { background: rgba(255,200,77,.18); color: #ffc84d; border: 1px solid rgba(255,200,77,.4); }
+  .lv.low { background: rgba(0,229,255,.12); color: #00e5ff; border: 1px solid rgba(0,229,255,.35); }
+  .lv.res { background: rgba(76,217,138,.12); color: #4cd98a; border: 1px solid rgba(76,217,138,.35); }
+  .alert-item .sub { font-size: 10px; color: #5b7a95; margin-top: 2px; }
+  .badge-count { background: #ff6b6b; color: #fff; border-radius: 8px; font-size: 10px; padding: 0 6px; }
   .env-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .env-table td { padding: 4px 2px; border-bottom: 1px solid rgba(127,212,255,.12); }
   .env-table .v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -92,7 +130,7 @@
 <body>
 <div id="app"></div>
 <div id="panel">
-  <h1>浙江医院 · 数字孪生白膜</h1>
+  <h1>浙江省人民医院数字孪生项目</h1>
   <div class="sub">数据：医院总平1.jpg（1:500，约10.5px/m）+ 建筑DWG标高/层数标注</div>
   <div class="toggles">
     <label><input type="checkbox" id="tg-real" checked> 整体模型</label>
@@ -108,8 +146,8 @@
     <label><input type="checkbox" id="tg-map" title="需配置天地图 token"> 天地图底图</label>
   </div>
   <div class="timebox">
-    <div class="row"><b>时间 / 太阳</b><span id="time-val">14:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime" checked> 实时</label></div>
-    <input type="range" id="time-slider" min="0" max="24" step="0.05" value="14">
+    <div class="row"><b>时间 / 太阳</b><span id="time-val">12:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime"> 实时</label></div>
+    <input type="range" id="time-slider" min="0" max="24" step="0.05" value="12">
   </div>
   <div class="weatherbox">
     <b>天气</b>
@@ -123,6 +161,7 @@
   <div class="simbox">
     <button id="xray-btn">🔍 透视 1号楼（内部模拟）</button>
     <button id="cruise-btn" style="margin-top:6px">自动巡航（360°逆时针）</button>
+    <button id="demo6-btn" style="margin-top:6px">透视 6号楼（双机模拟）</button>
     <div class="sub" id="sim-hint" style="display:none">模拟数据：8台机器人（4种设备外观）在各楼层移动并乘梯 · 2部电梯上下运行/开关门</div>
     <div class="sub" style="display:flex; gap:8px; padding-top:8px">
       <button class="flr-btn" data-flr="2号楼">2号楼 分层</button>
@@ -140,11 +179,27 @@
     <ul id="notes"></ul>
   </div>
 </div>
-<div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转 · 点击 2号楼/6号楼 分层展示</div>
-<div id="realtime-hud" style="position:fixed; top:12px; right:12px; z-index:20; background:rgba(20,30,40,.78); color:#fff; padding:8px 14px; border-radius:12px; text-align:right; pointer-events:none;">
-  <div id="rt-clock" style="font-size:20px; font-weight:700; letter-spacing:1px; font-variant-numeric:tabular-nums; line-height:1.1;">--:--:--</div>
-  <div id="rt-weather" style="margin-top:3px; color:#b8c8d8; font-size:12px;">杭州 · 获取天气中…</div>
-  <div id="live-hud" style="margin-top:3px; color:#7fd4a2; font-size:12px;">实时机器人：连接中…</div>
+<div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转</div>
+<div id="topbar">
+  <div class="tb-left">
+    <div class="tb-logo">＋</div>
+    <div class="tb-title">
+      <div class="cn">浙江省人民医院数字孪生项目</div>
+      <div class="en">ZHEJIANG PROVINCIAL PEOPLE'S HOSPITAL · DIGITAL TWIN CAMPUS</div>
+    </div>
+  </div>
+  <div class="tb-center">
+    <div class="tb-pill">园区总览&nbsp;|&nbsp;CAMPUS OVERVIEW</div>
+    <div class="tb-tag">浙江省人民医院朝晖院区</div>
+  </div>
+  <div class="tb-right">
+    <div class="tb-weather" id="rt-weather">杭州 · 获取天气中…</div>
+    <div class="tb-clock">
+      <div id="rt-clock">--:--:--</div>
+      <div id="rt-date">----.--.--</div>
+    </div>
+    <div class="tb-live" id="live-hud">实时机器人：连接中…</div>
+  </div>
 </div>
 <style>
   @keyframes lspin { to { transform: rotate(360deg); } }
@@ -154,37 +209,59 @@
 <button id="panel-toggle" title="收起/展开操作面板">◀</button>
 <button id="charts-btn">指标面板</button>
 <div id="charts-panel">
-  <div class="chart-card charts-anim" style="transition-delay:.05s">
-    <h4>人员 / 车辆</h4>
-    <div class="people-row"><span class="nm">医护人员</span><span class="bar"><i id="pp-staff" style="width:0"></i></span><span class="val" id="pv-staff">0</span></div>
-    <div class="people-row"><span class="nm">访客</span><span class="bar"><i id="pp-visit" style="width:0"></i></span><span class="val" id="pv-visit">0</span></div>
-    <div class="people-row"><span class="nm">安保</span><span class="bar"><i id="pp-guard" style="width:0"></i></span><span class="val" id="pv-guard">0</span></div>
-    <div class="people-row"><span class="nm">车辆</span><span class="bar"><i id="pp-car" style="width:0"></i></span><span class="val" id="pv-car">0</span></div>
+  <div class="chart-card charts-anim" style="transition-delay:.04s">
+    <h4><span class="num">01</span>园区运营总览 <span class="en">CAMPUS OVERVIEW</span><span class="tag">实时</span></h4>
+    <div>今日用电量</div>
+    <div class="big-num"><span id="ov-power">19,833</span><small>kWh</small> <span class="trend-up" id="ov-trend">▲ 3.2%</span></div>
+    <div class="metric-row">
+      <div class="metric-item"><div class="k">在线设备</div><div class="v" id="ov-dev">328/342</div></div>
+      <div class="metric-item"><div class="k">设备在线率</div><div class="v" id="ov-rate">95.9%</div></div>
+      <div class="metric-item"><div class="k">实时告警</div><div class="v" id="ov-alert" style="color:#ffc84d">03 条</div></div>
+    </div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.12s">
-    <h4>今日工单（处理 / 待办）</h4>
-    <div class="chart-box" id="ch-orders"></div>
+  <div class="chart-card charts-anim" style="transition-delay:.1s">
+    <h4><span class="num">02</span>能源实时监测 <span class="en">ENERGY LIVE</span><span class="tag">实时 1s</span></h4>
+    <div class="metric-row">
+      <div class="metric-item"><div class="k">用电负荷</div><div class="v" id="en-pow">2,987 kW</div></div>
+      <div class="metric-item"><div class="k">用水流量</div><div class="v" id="en-wat">16.5 m³/h</div></div>
+      <div class="metric-item"><div class="k">用气流量</div><div class="v" id="en-gas">68.8 m³/h</div></div>
+    </div>
+    <div class="chart-box" id="ch-energy-live"></div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.19s">
-    <h4>环境监测</h4>
-    <table class="env-table">
-      <tr><td>温度</td><td class="v" id="ev-temp">--</td></tr>
-      <tr><td>湿度</td><td class="v" id="ev-hum">--</td></tr>
-      <tr><td>CO2</td><td class="v" id="ev-co2">--</td></tr>
-      <tr><td>PM2.5</td><td class="v" id="ev-pm">--</td></tr>
-    </table>
+  <div class="chart-card charts-anim" style="transition-delay:.16s">
+    <h4><span class="num">03</span>资源成本构成 <span class="en">RESOURCE COST</span><span class="tag">按成本</span></h4>
+    <div class="chart-box" id="ch-cost" style="height:120px"></div>
+    <div class="cost-list">
+      <div class="row"><span class="dot" style="background:#00e5ff"></span>用电 <span class="val" id="ct-pow">19,833 kWh</span></div>
+      <div class="row"><span class="dot" style="background:#ffc84d"></span>用水 <span class="val" id="ct-wat">334 m³</span></div>
+      <div class="row"><span class="dot" style="background:#4cd98a"></span>用气 <span class="val" id="ct-gas">1,314 m³</span></div>
+    </div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.26s">
-    <h4>能耗（今日）</h4>
-    <div class="chart-box" id="ch-energy"></div>
+  <div class="chart-card charts-anim" style="transition-delay:.22s">
+    <h4><span class="num">04</span>今日运营详情 <span class="en">DAILY OPERATIONS</span><span class="tag">运行平稳</span></h4>
+    <div>今日人流量</div>
+    <div class="big-num"><span id="op-flow">13,270</span><small>人次</small> <span class="trend-up" id="op-trend">+15.2%</span></div>
+    <div class="metric-row">
+      <div class="metric-item"><div class="k">当前在院</div><div class="v" id="op-in">1,162 人</div></div>
+      <div class="metric-item"><div class="k">门诊</div><div class="v" id="op-mz">740</div></div>
+      <div class="metric-item"><div class="k">住院</div><div class="v" id="op-zy">422</div></div>
+    </div>
+    <div class="chart-box" id="ch-flow" style="height:96px"></div>
+    <div class="progress-row"><span>停车占用 <b id="pk-v">1,256</b>/1,500</span><span class="bar"><i id="pk-b" style="width:83%"></i></span></div>
+    <div class="progress-row"><span>执勤在岗 <b id="gd-v">290</b> 人</span><span class="bar"><i id="gd-b" style="width:97%"></i></span></div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.33s">
-    <h4>安防告警（紧急 / 一般）</h4>
-    <div class="chart-box" id="ch-alert"></div>
+  <div class="chart-card charts-anim" style="transition-delay:.28s">
+    <h4><span class="num">05</span>楼宇能耗排行 <span class="en">BUILDING RANK</span><span class="tag">实时 kW</span></h4>
+    <div class="chart-box" id="ch-rank"></div>
+    <div style="font-size:11px;color:#5b7a95;margin-top:2px">总负荷 <b style="color:#ffc84d" id="rk-total">2,987 kW</b></div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.4s">
-    <h4>资产分类</h4>
-    <div class="chart-box" id="ch-asset"></div>
+  <div class="chart-card charts-anim" style="transition-delay:.34s">
+    <h4><span class="num">06</span>实时告警 <span class="en">ALERT CENTER</span><span class="badge-count" id="al-count">3</span></h4>
+    <div id="alert-list">
+      <div class="alert-item"><span class="lv mid">中</span><div>住院楼 7F 回风温度偏高<div class="sub">空调机组 AHU-07 · <span class="al-time">11:44</span></div></div></div>
+      <div class="alert-item"><span class="lv low">低</span><div>能源站 1# 配电柜电流波动<div class="sub">配电柜 A 相 · <span class="al-time">11:37</span></div></div></div>
+      <div class="alert-item"><span class="lv res">复</span><div>门诊楼 2F 候诊区 CO₂ 偏高<div class="sub">新风机组已联动 · <span class="al-time">11:30</span></div></div></div>
+    </div>
   </div>
 </div>
 <div id="loader" style="position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(160deg,#0e1626 0%,#1a2b45 55%,#0e1c30 100%); opacity:0; transition:opacity .8s ease;">
@@ -410,7 +487,7 @@ new THREE.TextureLoader().load('/digital-twin/assets/site-plan.jpg', (t) => {
 });
 
 // ---------- 时间 / 太阳 ----------
-const timeState = { hour: 14, playing: false, speed: 0.35 }; // 小时/秒（约70秒一整天）
+const timeState = { hour: 12, playing: false, speed: 0.35 }; // 默认 12:00，小时/秒（约70秒一整天）
 const sunDir = new THREE.Vector3();
 const skyCol = new THREE.Color();
 const fogCol = new THREE.Color();
@@ -1394,31 +1471,7 @@ function flyTo(building) {
 let flyTarget = null;
 
 renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('pointermove', (e) => {
-  if (!realLoaded || floorState.active) return;
-  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObjects([...realBuildings.values()], true)[0];
-  renderer.domElement.style.cursor = hit ? 'pointer' : '';
-});
-renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
-  if (floorState.active) return; // 分层模式下不响应场景点击
-  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  if (realLoaded) {
-    const bHit = raycaster.intersectObjects([...realBuildings.values()], true)[0];
-    if (bHit) {
-      const nm = bHit.object.userData.buildingName;
-      if (nm) { enterFloorMode(nm); return; }
-    }
-  }
-  const hits = raycaster.intersectObjects(pickables, false);
-  if (hits.length) {
-    const b = hits[0].object.userData.building;
-    if (b) { setHighlight(b); flyTo(b); showDetail(b); syncList(); }
-  } else { setHighlight(null); showDetail(null); syncList(); }
-});
+// 楼宇不响应点击事件（仅侧栏列表可查看详情）
 
 // ---------- 面板 ----------
 const $ = (id) => document.getElementById(id);
@@ -1558,6 +1611,7 @@ $('cruise-btn').onclick = () => (cruiseState.on ? stopCruise() : startCruise());
 renderer.domElement.addEventListener('pointerdown', () => { if (cruiseState.on) stopCruise(); });
 
 $('xray-btn').onclick = () => {
+  if (demo6State.active) stopDemo6();
   if (!xrayState.on) {
     loadRobots();
     applyXray(true);
@@ -1591,10 +1645,12 @@ timeRealtime.onchange = () => {
     syncTimeUI();
   }
 };
-timeSlider.disabled = timePlay.disabled = true;
+timeSlider.disabled = timePlay.disabled = timeRealtime.checked; // 默认非实时：手动模式可用
 setInterval(() => {
   const d = hangzhouNow();
   rtClock.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+  const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+  $('rt-date').textContent = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} 星期${week}`;
   if (timeRealtime.checked) {
     timeState.hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     syncTimeUI();
@@ -1816,121 +1872,139 @@ $('panel-toggle').onclick = () => {
 };
 
 // ---------- ECharts 指标面板 ----------
-const chartsState = { inited: false, charts: {} };
+const chartsState = { inited: false, charts: {}, series: {} };
 function initCharts() {
   if (chartsState.inited || !window.echarts) return;
   chartsState.inited = true;
   const mk = (id) => { const el = $(id); if (!el) return null; const c = window.echarts.init(el, null, { renderer: 'canvas' }); chartsState.charts[id] = c; return c; };
-  mk('ch-orders');
-  mk('ch-energy');
-  mk('ch-alert');
-  mk('ch-asset');
+  mk('ch-energy-live');
+  mk('ch-cost');
+  mk('ch-flow');
+  mk('ch-rank');
   refreshCharts();
   setInterval(refreshCharts, 3000);
   window.addEventListener('resize', () => { if ($('charts-panel').classList.contains('show')) Object.values(chartsState.charts).forEach((c) => c.resize()); });
 }
-const envState = { t: 23.4, h: 55, co2: 482, pm: 28 };
-const energyState = { 电: 78, 水: 56, 燃气: 42, 蒸汽: 35, 光伏: 18 };
-const ordersState = { done: 34, todo: 12 };
 const rnd = (a, b) => a + Math.random() * (b - a);
 const walk = (v, lo, hi, step) => Math.min(hi, Math.max(lo, v + rnd(-step, step)));
+const dashState = {
+  power: 19833, water: 334, gas: 1314,
+  load: 2987, flowWater: 16.5, flowGas: 68.8,
+  flow: 13270, inHosp: 1162, mz: 740, zy: 422,
+  pk: 1256, guard: 290,
+  live: { pow: [], wat: [], gas: [], t: [] },
+};
+const fmtK = (n) => Math.round(n).toLocaleString('en-US');
 function refreshCharts() {
   if (!chartsState.inited) return;
-  // 人员/车辆
-  const people = [
-    ['pv-staff', 'pp-staff', 271 + Math.floor(Math.random() * 25), 320],
-    ['pv-visit', 'pp-visit', 96 + Math.floor(Math.random() * 30), 320],
-    ['pv-guard', 'pp-guard', 15, 40],
-    ['pv-car', 'pp-car', 78 + Math.floor(Math.random() * 12), 200],
-  ];
-  people.forEach(([vid, pid, val, max]) => {
-    $(vid).textContent = val;
-    $(pid).style.width = (val / max * 100).toFixed(1) + '%';
-  });
-  // 环境
-  envState.t = walk(envState.t, 20, 27, 0.3);
-  envState.h = walk(envState.h, 40, 70, 1.5);
-  envState.co2 = walk(envState.co2, 380, 900, 30);
-  envState.pm = walk(envState.pm, 12, 80, 5);
-  const setEnv = (id, text, cls) => { const el = $(id); el.textContent = text; el.className = 'v ' + cls; };
-  setEnv('ev-temp', envState.t.toFixed(1) + '°C', envState.t > 26 ? 'env-bad' : 'env-ok');
-  setEnv('ev-hum', Math.round(envState.h) + '%', envState.h > 65 || envState.h < 30 ? 'env-warn' : 'env-ok');
-  setEnv('ev-co2', Math.round(envState.co2) + 'ppm', envState.co2 > 800 ? 'env-bad' : envState.co2 > 600 ? 'env-warn' : 'env-ok');
-  setEnv('ev-pm', Math.round(envState.pm) + 'μg/m³', envState.pm > 55 ? 'env-bad' : envState.pm > 35 ? 'env-warn' : 'env-ok');
-  // 工单折线
-  ordersState.done = walk(ordersState.done, 20, 60, 4);
-  ordersState.todo = walk(ordersState.todo, 5, 25, 3);
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00');
-  const o = chartsState.charts['ch-orders'];
-  if (o) o.setOption({
+  const s = dashState;
+  // 01 总览
+  s.power = walk(s.power, 17000, 23000, 220);
+  s.load = walk(s.load, 2700, 3300, 60);
+  s.flowWater = walk(s.flowWater, 12, 22, 1.2);
+  s.flowGas = walk(s.flowGas, 55, 85, 3);
+  $('ov-power').textContent = fmtK(s.power);
+  $('ov-trend').textContent = '▲ ' + rnd(1.5, 4.5).toFixed(1) + '%';
+  $('ov-dev').textContent = (326 + Math.floor(rnd(0, 6))) + '/342';
+  $('ov-rate').textContent = (94 + rnd(0.5, 2.5)).toFixed(1) + '%';
+  $('en-pow').textContent = fmtK(Math.round(s.load)) + ' kW';
+  $('en-wat').textContent = s.flowWater.toFixed(1) + ' m³/h';
+  $('en-gas').textContent = s.flowGas.toFixed(1) + ' m³/h';
+  // 02 能源实时折线
+  const now = new Date();
+  const tt = [now.getHours(), now.getMinutes(), now.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+  s.live.t.push(tt);
+  s.live.pow.push(Math.round(s.load + rnd(-80, 80)));
+  s.live.wat.push(+s.flowWater.toFixed(1));
+  s.live.gas.push(+s.flowGas.toFixed(1));
+  if (s.live.t.length > 20) { s.live.t.shift(); s.live.pow.shift(); s.live.wat.shift(); s.live.gas.shift(); }
+  const c2 = chartsState.charts['ch-energy-live'];
+  if (c2) c2.setOption({
     backgroundColor: 'transparent',
-    grid: { left: 34, right: 10, top: 14, bottom: 20 },
-    legend: { textStyle: { color: '#8fb8d8', fontSize: 10 }, itemWidth: 12, top: 0 },
+    grid: { left: 38, right: 8, top: 22, bottom: 18 },
+    legend: { top: 0, textStyle: { color: '#8fb8d8', fontSize: 9 }, itemWidth: 12, itemHeight: 6, data: ['用电', '用水', '用气'] },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: hours, axisLabel: { color: '#5b7a95', fontSize: 9, interval: 3 }, axisLine: { lineStyle: { color: 'rgba(127,212,255,.2)' } } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(127,212,255,.1)' } }, axisLabel: { color: '#5b7a95', fontSize: 9 } },
+    xAxis: { type: 'category', data: s.live.t, boundaryGap: false, axisLabel: { color: '#41617e', fontSize: 8, interval: 4 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
     series: [
-      { name: '已处理', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, areaStyle: { opacity: .18 },
-        data: hours.map(() => Math.round(ordersState.done + rnd(-8, 8))) },
-      { name: '待办', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, areaStyle: { opacity: .12 },
-        data: hours.map(() => Math.round(ordersState.todo + rnd(-4, 4))) },
+      { name: '用电', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 1.5 }, data: s.live.pow },
+      { name: '用水', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 1.5 }, data: s.live.wat },
+      { name: '用气', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 1.5 }, data: s.live.gas },
     ],
-    color: ['#00e5ff', '#ffc84d'],
+    color: ['#00e5ff', '#ffc84d', '#4cd98a'],
   });
-  // 能耗雷达
-  const e = chartsState.charts['ch-energy'];
-  if (e) e.setOption({
+  // 03 资源成本环形
+  const c3 = chartsState.charts['ch-cost'];
+  if (c3) c3.setOption({
     backgroundColor: 'transparent',
-    tooltip: {},
-    radar: {
-      indicator: Object.keys(energyState).map((k) => ({ name: k, max: 100 })),
-      radius: '62%', center: ['50%', '54%'],
-      axisName: { color: '#8fb8d8', fontSize: 10 },
-      splitLine: { lineStyle: { color: 'rgba(127,212,255,.15)' } },
-      splitArea: { areaStyle: { color: ['rgba(0,229,255,.03)', 'rgba(0,229,255,.06)'] } },
-      axisLine: { lineStyle: { color: 'rgba(127,212,255,.15)' } },
-    },
+    tooltip: { trigger: 'item', formatter: '{b}: {c}%' },
     series: [{
-      type: 'radar',
-      data: [{
-        value: Object.keys(energyState).map((k) => (energyState[k] = walk(energyState[k], 10, 95, 3)) && Math.round(energyState[k])),
-        areaStyle: { opacity: .3 },
-        lineStyle: { width: 2 },
-        symbolSize: 3,
-      }],
+      type: 'pie', radius: ['58%', '78%'], center: ['50%', '52%'],
+      label: { show: false },
+      data: [
+        { value: Math.round(walk(56, 48, 64, 1)), name: '用电' },
+        { value: Math.round(walk(24, 18, 30, 1)), name: '用水' },
+        { value: Math.round(walk(20, 14, 26, 1)), name: '用气' },
+      ],
+      itemStyle: { borderColor: 'rgba(8,14,28,.9)', borderWidth: 2 },
+      color: ['#00e5ff', '#ffc84d', '#4cd98a'],
     }],
-    color: ['#00e5ff'],
-  });
-  // 安防告警（横向柱状）
-  const a = chartsState.charts['ch-alert'];
-  if (a) a.setOption({
-    backgroundColor: 'transparent',
-    grid: { left: 46, right: 12, top: 8, bottom: 20 },
-    legend: { textStyle: { color: '#8fb8d8', fontSize: 10 }, itemWidth: 12, top: 0 },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(127,212,255,.1)' } }, axisLabel: { color: '#5b7a95', fontSize: 9 } },
-    yAxis: { type: 'category', data: ['1号楼', '2号楼', '5号楼', '6号楼', '院区'], axisLabel: { color: '#8fb8d8', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(127,212,255,.2)' } } },
-    series: [
-      { name: '紧急', type: 'bar', stack: 'x', barWidth: 8, data: [3, 1, 2, 0, 1].map((n) => n + (Math.random() < .3 ? 1 : 0)) },
-      { name: '一般', type: 'bar', stack: 'x', barWidth: 8, data: [5, 4, 3, 2, 6].map((n) => Math.max(0, n + Math.floor(rnd(-1, 1)))) },
-    ],
-    color: ['#ff6b6b', '#ffc84d'],
-  });
-  // 资产分类（纵向柱状）
-  const s = chartsState.charts['ch-asset'];
-  if (s) s.setOption({
-    backgroundColor: 'transparent',
-    grid: { left: 34, right: 10, top: 16, bottom: 20 },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'category', data: ['建筑', '设备', '电梯', '机器人', '车辆'], axisLabel: { color: '#8fb8d8', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(127,212,255,.2)' } } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(127,212,255,.1)' } }, axisLabel: { color: '#5b7a95', fontSize: 9 } },
-    series: [{
-      type: 'bar', barWidth: 14,
-      data: [52, 1268, 27, 16, 45].map((n) => Math.round(n + rnd(-n * .02, n * .02))),
-      itemStyle: { borderRadius: [3, 3, 0, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#00e5ff' }, { offset: 1, color: 'rgba(43,127,212,.3)' }]) },
-      label: { show: true, position: 'top', color: '#cfe0f2', fontSize: 9 },
+    graphic: [{
+      type: 'text', left: 'center', top: '38%',
+      style: { text: '2.12 万元', fill: '#fff', fontSize: 13, fontWeight: 700 },
+    }, {
+      type: 'text', left: 'center', top: '52%',
+      style: { text: '今日成本', fill: '#5b7a95', fontSize: 9 },
     }],
   });
+  s.water = walk(s.water, 280, 380, 8);
+  s.gas = walk(s.gas, 1100, 1500, 30);
+  $('ct-pow').textContent = fmtK(Math.round(s.power)) + ' kWh';
+  $('ct-wat').textContent = Math.round(s.water) + ' m³';
+  $('ct-gas').textContent = fmtK(Math.round(s.gas)) + ' m³';
+  // 04 运营详情
+  s.flow = walk(s.flow, 11500, 14500, 260);
+  s.inHosp = walk(s.inHosp, 1050, 1250, 25);
+  $('op-flow').textContent = fmtK(Math.round(s.flow));
+  $('op-trend').textContent = '+' + rnd(8, 20).toFixed(1) + '%';
+  $('op-in').textContent = fmtK(Math.round(s.inHosp)) + ' 人';
+  $('op-mz').textContent = Math.round(s.inHosp * 0.63);
+  $('op-zy').textContent = Math.round(s.inHosp * 0.37);
+  s.pk = walk(s.pk, 1100, 1400, 20);
+  s.guard = walk(s.guard, 270, 300, 3);
+  $('pk-v').textContent = Math.round(s.pk);
+  $('pk-b').style.width = (s.pk / 1500 * 100).toFixed(1) + '%';
+  $('gd-v').textContent = Math.round(s.guard);
+  $('gd-b').style.width = (s.guard / 300 * 100).toFixed(1) + '%';
+  const c4 = chartsState.charts['ch-flow'];
+  if (c4) c4.setOption({
+    backgroundColor: 'transparent',
+    grid: { left: 32, right: 6, top: 8, bottom: 16 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    xAxis: { type: 'category', data: ['08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18'], axisLabel: { color: '#41617e', fontSize: 8 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
+    series: [{
+      type: 'bar', barWidth: '55%',
+      data: [420, 980, 1350, 1620, 1480, 1560, 1420, 1180, 940, 720, 540].map((n) => Math.round(n + rnd(-60, 60))),
+      itemStyle: { borderRadius: [2, 2, 0, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#00e5ff' }, { offset: 1, color: 'rgba(43,127,212,.25)' }]) },
+    }],
+  });
+  // 05 楼宇能耗排行
+  const c5 = chartsState.charts['ch-rank'];
+  if (c5) c5.setOption({
+    backgroundColor: 'transparent',
+    grid: { left: 58, right: 26, top: 4, bottom: 14 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
+    yAxis: { type: 'category', inverse: true, data: ['急诊中心', '科研楼', '医技楼', '门急诊楼', '能源站', '住院楼'], axisLabel: { color: '#8fb8d8', fontSize: 9 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
+    series: [{
+      type: 'bar', barWidth: 8,
+      data: [333, 419, 471, 485, 575, 704].map((n) => Math.round(n + rnd(-12, 12))),
+      label: { show: true, position: 'right', color: '#cfe0f2', fontSize: 9 },
+      itemStyle: { borderRadius: [0, 3, 3, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(0,229,255,.25)' }, { offset: 1, color: '#00e5ff' }]) },
+    }],
+  });
+  $('rk-total').textContent = fmtK(Math.round(s.load)) + ' kW';
 }
 $('charts-btn').onclick = () => {
   const panel = $('charts-panel');
@@ -2078,6 +2152,193 @@ function buildSurrounding() {
 buildSurrounding();
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
 
+// ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
+const demo6State = { active: false, robots: [], group: null };
+const demo6Mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
+async function spawnDemo6Robots(bbox, baseY) {
+  const defs = [
+    { file: '/models/models/detail/medicine.glb', floor: 3 },
+    { file: '/models/models/detail/meal.glb', floor: 4 },
+  ];
+  for (const def of defs) {
+    try {
+      let gltf = gltfCache.get(def.file);
+      if (!gltf) { gltf = await makeGLTFLoader().loadAsync(def.file); gltfCache.set(def.file, gltf); }
+      const model = gltf.scene.clone(true);
+      const mb = new THREE.Box3().setFromObject(model);
+      const ms = mb.getSize(new THREE.Vector3());
+      const s = 1.1 / Math.max(ms.y, 0.01);
+      model.scale.setScalar(s);
+      model.position.set(0, -mb.min.y * s, 0);
+      model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      const g = new THREE.Group();
+      g.add(model);
+      const y = baseY + (def.floor - 1) * 3.8 + 0.8;
+      g.position.set((bbox.min.x + bbox.max.x) / 2, y, (bbox.min.z + bbox.max.z) / 2);
+      demo6State.group.add(g);
+      demo6State.robots.push({
+        obj: g, y,
+        minX: bbox.min.x + 2, maxX: bbox.max.x - 2,
+        minZ: bbox.min.z + 2, maxZ: bbox.max.z - 2,
+        wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
+      });
+      console.log('[6号楼模拟] 机器人已就位', def.file.split('/').pop(), '楼层', def.floor);
+    } catch (e) {
+      console.warn('[6号楼模拟] 机器人模型加载失败', def.file, e);
+    }
+  }
+}
+function cadXfFor(floor) {
+  const name = floor.buildingName;
+  const cfg = LIVE_BUILDING_CFG[name];
+  const b = floor.bounds;
+  if (!cfg || !b) return null;
+  const grp = realBuildings.get(name);
+  if (!grp) return null;
+  const bb = new THREE.Box3().setFromObject(grp);
+  const center = bb.getCenter(new THREE.Vector3());
+  return {
+    cx: center.x, cz: center.z, baseY: bb.min.y, s: cfg.s || 1,
+    cadCX: (b.minX + b.maxX) / 2, cadCY: (b.minY + b.maxY) / 2,
+  };
+}
+const cadResCache = new Map();
+async function loadDemo6Cad(baseY) {
+  // 等待中控楼层目录（含 geometryResource 引用）
+  const t0 = Date.now();
+  while (Date.now() - t0 < 10000) {
+    if (Array.from(liveState.floors.keys()).some((k) => k.startsWith('1/B-'))) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  const floors = Array.from(liveState.floors.entries())
+    .filter(([k]) => k.startsWith('1/B-'))
+    .map(([, f]) => f)
+    .filter((f) => f.geometryResource && f.geometryResource.resourceId);
+  if (!floors.length) { console.warn('[6号楼模拟] 无楼层 CAD 数据（中控目录未就绪）'); return; }
+  let drawn = 0;
+  for (const f of floors) {
+    try {
+      const rid = f.geometryResource.resourceId;
+      let geo = cadResCache.get(rid);
+      if (!geo) {
+        const res = await fetch('/twin-resource?rid=' + encodeURIComponent(rid));
+        if (!res.ok) throw new Error('http ' + res.status);
+        geo = await res.json();
+        cadResCache.set(rid, geo);
+      }
+      const lines = geo.lines || [];
+      const xf = cadXfFor(f);
+      if (!xf || !lines.length) continue;
+      const yBase = baseY + ((f.floorNumber || 1) - 1) * 3.8;
+      // 墙体（CAD lines → 场景坐标）
+      const pts = [];
+      for (const [a, b] of lines) {
+        pts.push(xf.cx + (a[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (a[1] - xf.cadCY) * xf.s);
+        pts.push(xf.cx + (b[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (b[1] - xf.cadCY) * xf.s);
+      }
+      const lg = new THREE.LineSegments(
+        new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)),
+        new THREE.LineBasicMaterial({ color: 0xdfe9f2, transparent: true, opacity: 0.85, depthWrite: false })
+      );
+      demo6State.group.add(lg);
+      // 楼层地面（CAD bounds 覆盖的透明楼板）
+      const b = geo.bounds || f.bounds;
+      if (b) {
+        const w = (b.maxX - b.minX) * xf.s, h = (b.maxY - b.minY) * xf.s;
+        const slab = new THREE.Mesh(
+          new THREE.PlaneGeometry(Math.max(w, 0.1), Math.max(h, 0.1)),
+          new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide })
+        );
+        slab.rotation.x = -Math.PI / 2;
+        slab.position.set(xf.cx, yBase + 0.02, xf.cz);
+        demo6State.group.add(slab);
+      }
+      drawn++;
+    } catch (e) {
+      console.warn('[6号楼模拟] CAD 楼层加载失败', f.floorKey, e.message);
+    }
+  }
+  console.log('[6号楼模拟] CAD 墙体/地面已绘制', drawn, '层');
+}
+function updateDemo6(dt) {
+  if (!demo6State.active) return;
+  for (const r of demo6State.robots) {
+    if (!r.wp) r.wp = { x: r.obj.position.x, z: r.obj.position.z };
+    const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.5) {
+      r.wait -= dt;
+      if (r.wait <= 0) {
+        r.wp = {
+          x: r.minX + Math.random() * Math.max(0.5, r.maxX - r.minX),
+          z: r.minZ + Math.random() * Math.max(0.5, r.maxZ - r.minZ),
+        };
+        r.wait = 2 + Math.random() * 5;
+      }
+      continue;
+    }
+    const step = Math.min(r.speed * dt, dist);
+    r.obj.position.x += (dx / dist) * step;
+    r.obj.position.z += (dz / dist) * step;
+    r.obj.rotation.y = Math.atan2(dx, dz);
+  }
+}
+async function startDemo6() {
+  if (demo6State.active) { stopDemo6(); return; }
+  if (xrayState.on) applyXray(false);
+  if (floorState.active) exitFloorMode();
+  stopCruise();
+  const grp = realBuildings.get('6号楼');
+  if (!grp) { console.warn('[6号楼模拟] 精模中未找到 6号楼'); return; }
+  const btn = $('demo6-btn');
+  btn.classList.add('on');
+  btn.textContent = '退出 6号楼 模拟';
+  demo6State.active = true;
+  // 整体透视白膜（保存原材质，退出时还原）
+  grp.traverse((o) => {
+    if (o.isMesh) {
+      o.userData._d6mat = o.material;
+      o.material = demo6Mat;
+    }
+  });
+  demo6State.group = new THREE.Group();
+  scene.add(demo6State.group);
+  const bbox = new THREE.Box3().setFromObject(grp);
+  await spawnDemo6Robots(bbox, bbox.min.y);
+  await loadDemo6Cad(bbox.min.y);
+  liveGroup.visible = false;
+  // 相机框选 6号楼
+  const ctr = bbox.getCenter(new THREE.Vector3());
+  const rad = Math.max(bbox.getSize(new THREE.Vector3()).length() * 0.6, 30);
+  flyToPos(
+    new THREE.Vector3(ctr.x + rad * 1.1, ctr.y + rad * 0.9, ctr.z + rad * 1.4),
+    ctr
+  );
+  console.log('[6号楼模拟] 透视白膜墙体已应用（整体，不分层）');
+}
+function stopDemo6() {
+  if (!demo6State.active) return;
+  demo6State.active = false;
+  demo6State.robots = [];
+  // 还原 6号楼 材质
+  const grp = realBuildings.get('6号楼');
+  if (grp) {
+    grp.traverse((o) => {
+      if (o.isMesh && o.userData._d6mat) { o.material = o.userData._d6mat; delete o.userData._d6mat; }
+    });
+  }
+  if (demo6State.group) {
+    scene.remove(demo6State.group);
+    demo6State.group = null;
+  }
+  liveGroup.visible = $('tg-live').checked;
+  const btn = $('demo6-btn');
+  btn.classList.remove('on');
+  btn.textContent = '透视 6号楼（双机模拟）';
+  if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
+}
+$('demo6-btn').onclick = () => (demo6State.active ? stopDemo6() : startDemo6());
+
 // ---------- 渲染循环 ----------
 const timer = new THREE.Timer();
 function animate() {
@@ -2109,6 +2370,7 @@ function animate() {
   updateSnow(dt, camera.position, elapsed);
   updateElevators(dt);
   updateRobots(dt);
+  updateDemo6(dt);
   if (floorState.active && floorState.layers.length) {
     const spread = +$('floor-spread').value / 100;
     const step = floorState.bandH * 1.6;

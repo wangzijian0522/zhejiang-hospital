@@ -68,7 +68,7 @@
       <div class="scroll">
         <table>
           <thead><tr>
-            <th>名称</th><th>型号</th><th>在线</th><th>运行</th><th>电量</th><th>投影</th><th>原因</th><th>楼层</th><th>x</th><th>y</th><th>yaw</th><th>观测时间</th>
+            <th>名称</th><th>型号</th><th>在线</th><th>运行</th><th>电量</th><th>投影</th><th>原因</th><th>楼栋</th><th>楼层</th><th>x</th><th>y</th><th>yaw</th><th>观测时间</th>
           </tr></thead>
           <tbody id="robot-tbody"></tbody>
         </table>
@@ -147,6 +147,10 @@ function shortTime(s) { return s ? s.slice(11, 19) : '-'; }
 function readyPose(r) {
   return (r.cadLocations || []).find((l) => l.projectionStatus === 'ready' && l.cadPose) || null;
 }
+const REASON_TXT = {
+  POSE_STALE: '位姿过期', MAP_UNRESOLVED: '地图未解析', REGISTRATION_MISSING: '无配准',
+  POSE_UNAVAILABLE: '位姿不可用', ROBOT_DISABLED: '已停用', ADAPTER_UNSUPPORTED: '适配不支持',
+};
 function renderRobots() {
   const tb = $('robot-tbody');
   const rows = [];
@@ -155,6 +159,8 @@ function renderRobots() {
     const loc = readyPose(r);
     if (loc) ready++;
     const p = loc ? loc.cadPose : null;
+    const floor = loc ? state.floors.get(loc.sceneId + '/' + loc.floorKey) : null;
+    const reason = (r.cadLocations || []).map((l) => l.reasonCode).filter(Boolean)[0];
     const st = r.state || {};
     rows.push('<tr>'
       + '<td>' + esc(r.name || '-') + '</td>'
@@ -164,6 +170,7 @@ function renderRobots() {
       + '<td>' + (st.batteryPercent == null ? '-' : st.batteryPercent + '%') + '</td>'
       + '<td class="' + ((loc ? 'ok' : loc === undefined ? 'dim' : 'warn')) + '">' + esc(loc ? loc.projectionStatus : '-') + '</td>'
       + '<td class="dim">' + esc((r.cadLocations || []).map((l) => l.reasonCode || '').join(', ') || '-') + '</td>'
+      + '<td>' + (floor && floor.buildingName ? esc(floor.buildingName) : (loc && loc.buildingId ? '[' + esc(loc.buildingId) + ']' : '<span class="dim">' + esc(REASON_TXT[reason] || reason || '未就位') + '</span>')) + '</td>'
       + '<td>' + esc(loc && loc.floorKey ? loc.floorKey : '-') + '</td>'
       + '<td>' + (p ? p.x.toFixed(1) : '-') + '</td>'
       + '<td>' + (p ? p.y.toFixed(1) : '-') + '</td>'
