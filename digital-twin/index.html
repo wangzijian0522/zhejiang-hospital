@@ -8,44 +8,53 @@
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
   #app { position: fixed; inset: 0; }
   #hint { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(20,30,40,.72); color: #dfe8f0; font-size: 12px; padding: 5px 14px; border-radius: 14px; pointer-events: none; }
-  #panel { position: fixed; top: 10px; left: 10px; width: 300px; max-height: calc(100% - 20px); overflow-y: auto; background: rgba(255,255,255,.94); border-radius: 10px; box-shadow: 0 2px 14px rgba(0,0,0,.25); font-size: 13px; color: #24303c; }
-  #panel h1 { font-size: 15px; margin: 0; padding: 12px 14px 8px; }
-  #panel .sub { font-size: 11px; color: #6b7785; padding: 0 14px 6px; }
-  .toggles { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; border-bottom: 1px solid #e3e8ee; }
-  .toggles label { font-size: 12px; display: flex; align-items: center; gap: 3px; cursor: pointer; background: #eef2f6; padding: 3px 8px; border-radius: 12px; }
-  .timebox, .weatherbox { padding: 8px 14px 8px; border-bottom: 1px solid #e3e8ee; }
+  #panel { position: fixed; left: 50%; top: 50%; width: 340px; max-height: calc(100vh - 120px); transform: translate(-50%, -50%); overflow-y: auto; display: none; z-index: 60; background: linear-gradient(165deg, rgba(13,22,40,.97), rgba(8,14,28,.97)); border: 1px solid rgba(0,229,255,.3); border-radius: 12px; box-shadow: 0 0 30px rgba(0,188,212,.18), 0 8px 30px rgba(0,0,0,.5); font-size: 13px; color: #cfe0f2; }
+  body.panel-open #panel { display: block; animation: panel-pop .28s ease; }
+  @keyframes panel-pop { from { opacity: 0; transform: translate(-50%, -47%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+  #panel::-webkit-scrollbar { width: 5px; }
+  #panel::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 3px; }
+  #panel h1 { font-size: 15px; margin: 0; padding: 14px 38px 4px 16px; color: #fff; letter-spacing: 1px; }
+  #panel .sub { font-size: 11px; color: #5b7a95; padding: 0 16px 8px; }
+  #panel-close { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border: 1px solid rgba(0,229,255,.35); background: rgba(0,229,255,.08); color: #7fd4ff; border-radius: 8px; font-size: 13px; cursor: pointer; }
+  #panel-close:hover { background: rgba(0,229,255,.25); color: #fff; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 12px; border-bottom: 1px solid rgba(0,229,255,.15); }
+  .toggles label { font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer; background: rgba(0,229,255,.07); border: 1px solid rgba(0,229,255,.18); color: #a9c8e0; padding: 3px 9px; border-radius: 12px; }
+  .toggles label:hover { background: rgba(0,229,255,.16); }
+  .toggles input { accent-color: #00e5ff; }
+  .timebox, .weatherbox { padding: 8px 16px 8px; border-bottom: 1px solid rgba(0,229,255,.15); }
   .timebox .row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }
-  .timebox b, .weatherbox b { font-size: 12px; color: #44505c; }
-  .timebox input[type=range] { width: 100%; accent-color: #2b7fd4; }
-  #time-val { font-weight: bold; min-width: 38px; }
-  .timebox button, .weatherbox button { font-size: 12px; border: 1px solid #c3ccd6; background: #f4f7fa; border-radius: 10px; padding: 2px 9px; cursor: pointer; }
+  .timebox b, .weatherbox b { font-size: 12px; color: #7fd4ff; }
+  .timebox input[type=range] { width: 100%; accent-color: #00e5ff; }
+  #time-val { font-weight: bold; min-width: 38px; color: #fff; }
+  .timebox button, .weatherbox button { font-size: 12px; border: 1px solid rgba(127,212,255,.35); background: rgba(127,212,255,.08); color: #a9c8e0; border-radius: 10px; padding: 2px 9px; cursor: pointer; }
   .weatherbox { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .weatherbox button.on { background: #2b7fd4; color: #fff; border-color: #2b7fd4; }
-  .simbox { padding: 8px 14px 10px; border-bottom: 1px solid #e3e8ee; }
-  .simbox button { width: 100%; font-size: 13px; border: 1px solid #2b7fd4; background: #2b7fd4; color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; }
+  .weatherbox button.on { background: #00bcd4; color: #06283a; border-color: #00bcd4; font-weight: 600; }
+  .simbox { padding: 8px 16px 10px; border-bottom: 1px solid rgba(0,229,255,.15); }
+  .simbox button { width: 100%; font-size: 13px; border: 1px solid #2b7fd4; background: rgba(43,127,212,.85); color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; }
+  .simbox button:hover { background: #3a8fe6; }
   .simbox button.on { background: #b4552f; border-color: #b4552f; }
-  .simbox .sub { font-size: 11px; color: #6b7785; padding-top: 6px; }
-  .simbox .flr-btn { flex: 1; font-size: 12px; border: 1px solid #2b7fd4; background: #fff; color: #2b7fd4; border-radius: 8px; padding: 4px 0; cursor: pointer; }
-  .simbox .flr-btn:hover { background: #eaf3fd; }
-  #bld-list { padding: 6px 0; border-bottom: 1px solid #e3e8ee; }
-  .bld-item { display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer; }
-  .bld-item:hover { background: #f2f6fa; }
-  .bld-item.sel { background: #fff3cd; }
+  .simbox .sub { font-size: 11px; color: #5b7a95; padding-top: 6px; }
+  .simbox .flr-btn { flex: 1; font-size: 12px; border: 1px solid rgba(43,127,212,.6); background: rgba(43,127,212,.12); color: #7fb8f0; border-radius: 8px; padding: 4px 0; cursor: pointer; }
+  .simbox .flr-btn:hover { background: rgba(43,127,212,.3); color: #fff; }
+  #bld-list { padding: 6px 0; border-bottom: 1px solid rgba(0,229,255,.15); }
+  .bld-item { display: flex; align-items: center; gap: 8px; padding: 5px 16px; cursor: pointer; color: #cfe0f2; }
+  .bld-item:hover { background: rgba(0,229,255,.1); }
+  .bld-item.sel { background: rgba(0,229,255,.18); border-left: 3px solid #00e5ff; }
   .bld-item .nm { flex: 1; }
-  .bld-item .meta { font-size: 11px; color: #6b7785; }
-  .badge { font-size: 10px; background: #00bcd4; color: #fff; border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
-  .badge.no { background: #d5dbe2; color: #5b6672; }
-  #detail { padding: 10px 14px; border-bottom: 1px solid #e3e8ee; }
-  #detail h2 { font-size: 14px; margin: 0 0 4px; }
-  #detail .info { font-size: 12px; color: #44505c; margin-bottom: 4px; }
-  #detail .src { font-size: 11px; color: #8a94a0; margin-bottom: 6px; }
+  .bld-item .meta { font-size: 11px; color: #5b7a95; }
+  .badge { font-size: 10px; background: #00bcd4; color: #06283a; border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
+  .badge.no { background: rgba(127,212,255,.15); color: #5b7a95; }
+  #detail { padding: 10px 16px; border-bottom: 1px solid rgba(0,229,255,.15); }
+  #detail h2 { font-size: 14px; margin: 0 0 4px; color: #fff; }
+  #detail .info { font-size: 12px; color: #a9c8e0; margin-bottom: 4px; }
+  #detail .src { font-size: 11px; color: #5b7a95; margin-bottom: 6px; }
   #detail table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  #detail td, #detail th { border: 1px solid #e3e8ee; padding: 2px 5px; text-align: left; }
-  #detail .elev { margin-top: 6px; font-size: 12px; background: #e8f7fa; border-left: 3px solid #00bcd4; padding: 5px 8px; border-radius: 0 6px 6px 0; }
-  #detail .elev b { color: #008396; }
-  #sec { padding: 8px 14px 12px; }
-  #sec h3 { font-size: 12px; color: #44505c; margin: 8px 0 4px; }
-  #sec ul { margin: 0; padding-left: 18px; font-size: 11px; color: #5b6672; line-height: 1.6; }
+  #detail td, #detail th { border: 1px solid rgba(0,229,255,.18); padding: 2px 5px; text-align: left; }
+  #detail .elev { margin-top: 6px; font-size: 12px; background: rgba(0,229,255,.1); border-left: 3px solid #00bcd4; padding: 5px 8px; border-radius: 0 6px 6px 0; }
+  #detail .elev b { color: #7fd4ff; }
+  #sec { padding: 8px 16px 12px; }
+  #sec h3 { font-size: 12px; color: #7fd4ff; margin: 8px 0 4px; }
+  #sec ul { margin: 0; padding-left: 18px; font-size: 11px; color: #8fb8d8; line-height: 1.6; }
 
   /* 顶部标题栏 */
   #topbar { position: fixed; top: 0; left: 0; right: 0; height: 58px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, rgba(8,14,28,.95), rgba(10,18,34,.82)); border-bottom: 1px solid rgba(0,229,255,.22); box-shadow: 0 2px 16px rgba(0,0,0,.4); }
@@ -63,25 +72,21 @@
   #rt-date { font-size: 10px; color: #5b7a95; }
   .tb-live { font-size: 11px; color: #4cd98a; display: flex; align-items: center; gap: 5px; }
   .tb-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #4cd98a; box-shadow: 0 0 6px #4cd98a; }
-  #panel { top: 68px; max-height: calc(100% - 78px); transition: transform .35s ease; }
-  body.panel-hidden #panel { transform: translateX(-326px); }
-  #panel-toggle { position: fixed; left: 316px; top: 72px; z-index: 45; width: 30px; height: 30px; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #cfe0f2; font-size: 13px; cursor: pointer; transition: left .35s ease, background .2s; }
-  #panel-toggle:hover { background: rgba(43,127,212,.9); color: #fff; }
-  body.panel-hidden #panel-toggle { left: 12px; }
+  .tb-btn { border: 1px solid rgba(0,229,255,.4); background: rgba(0,229,255,.08); color: #7fd4ff; font-size: 12px; padding: 5px 14px; border-radius: 8px; cursor: pointer; letter-spacing: 1px; transition: background .2s, color .2s; }
+  .tb-btn:hover { background: rgba(0,229,255,.22); color: #fff; }
+  .tb-btn.on { background: rgba(0,229,255,.3); color: #fff; box-shadow: 0 0 10px rgba(0,229,255,.35); }
 
-  /* ECharts 指标面板（深色大屏风格） */
-  #charts-btn { position: fixed; right: 12px; top: 68px; z-index: 45; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #7fd4ff; font-size: 13px; padding: 6px 14px; cursor: pointer; letter-spacing: 1px; }
-  #charts-btn:hover { background: rgba(10,60,100,.9); }
-  #charts-btn.on { background: rgba(10,60,100,.9); color: #fff; }
-  #charts-panel { position: fixed; top: 68px; right: 12px; width: 306px; max-height: calc(100% - 78px); overflow-y: auto; z-index: 40; transform: translateX(340px); transition: transform .4s cubic-bezier(.22,.9,.3,1); }
-  #charts-panel.show { transform: translateX(0); }
-  #charts-panel::-webkit-scrollbar { width: 4px; }
-  #charts-panel::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 2px; }
-  .chart-card { background: rgba(8,14,28,.9); border: 1px solid rgba(0,229,255,.2); border-radius: 10px; margin-bottom: 10px; padding: 10px 12px 8px; color: #cfe0f2; box-shadow: 0 0 18px rgba(0,188,212,.08); }
-  .chart-card h4 { margin: 0 0 6px; font-size: 13px; color: #7fd4ff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: baseline; gap: 8px; }
-  .chart-card h4 .num { font-size: 12px; color: #00e5ff; font-weight: 700; }
-  .chart-card h4 .en { font-size: 9px; color: #41617e; letter-spacing: 1.2px; }
-  .chart-card h4 .tag { margin-left: auto; font-size: 10px; color: #ffc84d; border: 1px solid rgba(255,200,77,.35); border-radius: 8px; padding: 0 6px; }
+  /* ECharts 指标面板（深色大屏风格，左右两列、不滚动） */
+  .charts-col { position: fixed; top: 68px; width: 306px; height: calc(100vh - 78px); overflow: hidden; z-index: 40; display: flex; flex-direction: column; gap: 12px; transition: transform .4s cubic-bezier(.22,.9,.3,1); }
+  #charts-panel { right: 12px; transform: translateX(340px); }
+  #charts-left { left: 12px; transform: translateX(-340px); }
+  #charts-left.show, #charts-panel.show { transform: translateX(0); }
+  .chart-card { background: rgba(8,14,28,.9); border: 1px solid rgba(0,229,255,.2); border-radius: 10px; padding: 10px 12px 9px; color: #cfe0f2; box-shadow: 0 0 18px rgba(0,188,212,.08); display: flex; flex-direction: column; min-height: 0; }
+  .chart-card:has(.chart-box) { flex: 1 1 auto; }
+  .chart-card h4 { margin: 0 0 6px; font-size: 13px; color: #7fd4ff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+  .chart-card h4 .num { font-size: 12px; color: #00e5ff; font-weight: 700; flex-shrink: 0; }
+  .chart-card h4 .en { font-size: 9px; color: #41617e; letter-spacing: 1.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .chart-card h4 .tag { margin-left: auto; font-size: 10px; color: #ffc84d; border: 1px solid rgba(255,200,77,.35); border-radius: 8px; padding: 0 6px; white-space: nowrap; flex-shrink: 0; }
   .big-num { font-size: 26px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
   .big-num small { font-size: 12px; color: #5b7a95; font-weight: 400; margin-left: 4px; }
   .trend-up { color: #4cd98a; font-size: 12px; }
@@ -89,16 +94,17 @@
   .metric-item { flex: 1; background: rgba(0,229,255,.05); border-radius: 6px; padding: 5px 7px; }
   .metric-item .k { font-size: 10px; color: #5b7a95; }
   .metric-item .v { font-size: 13px; font-weight: 700; color: #cfe0f2; font-variant-numeric: tabular-nums; }
-  .chart-box { height: 132px; }
-  .chart-card:first-child { margin-top: 44px; }
+  .chart-box { flex: 1 1 auto; min-height: 64px; }
   .charts-anim { opacity: 0; transform: translateX(30px); transition: opacity .45s ease, transform .45s ease; }
-  #charts-panel.show .charts-anim { opacity: 1; transform: translateX(0); }
+  .charts-col.show .charts-anim { opacity: 1; transform: translateX(0); }
   .cost-list { margin-top: 4px; }
   .cost-list .row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
   .cost-list .dot { width: 8px; height: 8px; border-radius: 2px; }
   .cost-list .val { margin-left: auto; color: #fff; font-variant-numeric: tabular-nums; }
-  .progress-row { margin: 5px 0; font-size: 11px; }
-  .progress-row .bar { height: 6px; background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden; margin-top: 2px; }
+  .progress-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 11px; }
+  .progress-row > span:first-child { white-space: nowrap; color: #8fb8d8; }
+  .progress-row b { color: #fff; font-weight: 600; }
+  .progress-row .bar { flex: 1; height: 6px; background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden; }
   .progress-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#00e5ff,#2b7fd4); border-radius: 3px; transition: width .8s ease; }
   .alert-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid rgba(127,212,255,.08); font-size: 12px; }
   .alert-item .lv { flex-shrink: 0; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
@@ -130,6 +136,7 @@
 <body>
 <div id="app"></div>
 <div id="panel">
+  <button id="panel-close" title="关闭设置">✕</button>
   <h1>浙江省人民医院数字孪生项目</h1>
   <div class="sub">数据：医院总平1.jpg（1:500，约10.5px/m）+ 建筑DWG标高/层数标注</div>
   <div class="toggles">
@@ -162,6 +169,7 @@
     <button id="xray-btn">🔍 透视 1号楼（内部模拟）</button>
     <button id="cruise-btn" style="margin-top:6px">自动巡航（360°逆时针）</button>
     <button id="demo6-btn" style="margin-top:6px">透视 6号楼（双机模拟）</button>
+    <button id="demo2-btn" style="margin-top:6px">透视 2号楼（双机模拟）</button>
     <div class="sub" id="sim-hint" style="display:none">模拟数据：8台机器人（4种设备外观）在各楼层移动并乘梯 · 2部电梯上下运行/开关门</div>
     <div class="sub" style="display:flex; gap:8px; padding-top:8px">
       <button class="flr-btn" data-flr="2号楼">2号楼 分层</button>
@@ -199,6 +207,8 @@
       <div id="rt-date">----.--.--</div>
     </div>
     <div class="tb-live" id="live-hud">实时机器人：连接中…</div>
+    <button id="settings-btn" class="tb-btn">⚙ 设置</button>
+    <button id="charts-btn" class="tb-btn on">收起指标</button>
   </div>
 </div>
 <style>
@@ -206,9 +216,7 @@
   @keyframes lspin-rev { to { transform: rotate(-360deg); } }
   @keyframes lpulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
 </style>
-<button id="panel-toggle" title="收起/展开操作面板">◀</button>
-<button id="charts-btn">指标面板</button>
-<div id="charts-panel">
+<div id="charts-left" class="charts-col show">
   <div class="chart-card charts-anim" style="transition-delay:.04s">
     <h4><span class="num">01</span>园区运营总览 <span class="en">CAMPUS OVERVIEW</span><span class="tag">实时</span></h4>
     <div>今日用电量</div>
@@ -220,24 +228,6 @@
     </div>
   </div>
   <div class="chart-card charts-anim" style="transition-delay:.1s">
-    <h4><span class="num">02</span>能源实时监测 <span class="en">ENERGY LIVE</span><span class="tag">实时 1s</span></h4>
-    <div class="metric-row">
-      <div class="metric-item"><div class="k">用电负荷</div><div class="v" id="en-pow">2,987 kW</div></div>
-      <div class="metric-item"><div class="k">用水流量</div><div class="v" id="en-wat">16.5 m³/h</div></div>
-      <div class="metric-item"><div class="k">用气流量</div><div class="v" id="en-gas">68.8 m³/h</div></div>
-    </div>
-    <div class="chart-box" id="ch-energy-live"></div>
-  </div>
-  <div class="chart-card charts-anim" style="transition-delay:.16s">
-    <h4><span class="num">03</span>资源成本构成 <span class="en">RESOURCE COST</span><span class="tag">按成本</span></h4>
-    <div class="chart-box" id="ch-cost" style="height:120px"></div>
-    <div class="cost-list">
-      <div class="row"><span class="dot" style="background:#00e5ff"></span>用电 <span class="val" id="ct-pow">19,833 kWh</span></div>
-      <div class="row"><span class="dot" style="background:#ffc84d"></span>用水 <span class="val" id="ct-wat">334 m³</span></div>
-      <div class="row"><span class="dot" style="background:#4cd98a"></span>用气 <span class="val" id="ct-gas">1,314 m³</span></div>
-    </div>
-  </div>
-  <div class="chart-card charts-anim" style="transition-delay:.22s">
     <h4><span class="num">04</span>今日运营详情 <span class="en">DAILY OPERATIONS</span><span class="tag">运行平稳</span></h4>
     <div>今日人流量</div>
     <div class="big-num"><span id="op-flow">13,270</span><small>人次</small> <span class="trend-up" id="op-trend">+15.2%</span></div>
@@ -246,16 +236,51 @@
       <div class="metric-item"><div class="k">门诊</div><div class="v" id="op-mz">740</div></div>
       <div class="metric-item"><div class="k">住院</div><div class="v" id="op-zy">422</div></div>
     </div>
-    <div class="chart-box" id="ch-flow" style="height:96px"></div>
+    <div class="chart-box" id="ch-flow"></div>
     <div class="progress-row"><span>停车占用 <b id="pk-v">1,256</b>/1,500</span><span class="bar"><i id="pk-b" style="width:83%"></i></span></div>
     <div class="progress-row"><span>执勤在岗 <b id="gd-v">290</b> 人</span><span class="bar"><i id="gd-b" style="width:97%"></i></span></div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.28s">
+  <div class="chart-card charts-anim" style="transition-delay:.16s">
+    <h4><span class="num">07</span>机器人实时状态 <span class="en">ROBOT LIVE</span><span class="tag">中控推送</span></h4>
+    <div class="metric-row">
+      <div class="metric-item"><div class="k">接入总数</div><div class="v" id="rb-total">--</div></div>
+      <div class="metric-item"><div class="k">已就位</div><div class="v" id="rb-ready">--</div></div>
+      <div class="metric-item"><div class="k">平均电量</div><div class="v" id="rb-batt">--</div></div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-item"><div class="k">运行中</div><div class="v" id="rb-busy">--</div></div>
+      <div class="metric-item"><div class="k">充电中</div><div class="v" id="rb-chg">--</div></div>
+      <div class="metric-item"><div class="k">离线</div><div class="v" id="rb-off">--</div></div>
+    </div>
+    <div class="chart-box" id="ch-robot-type"></div>
+    <div style="font-size:11px;color:#5b7a95;margin-top:2px">楼栋分布：<span id="rb-floors">--</span></div>
+  </div>
+</div>
+<div id="charts-panel" class="charts-col show">
+  <div class="chart-card charts-anim" style="transition-delay:.04s">
+    <h4><span class="num">02</span>能源实时监测 <span class="en">ENERGY LIVE</span><span class="tag">实时 1s</span></h4>
+    <div class="metric-row">
+      <div class="metric-item"><div class="k">用电负荷</div><div class="v" id="en-pow">2,987 kW</div></div>
+      <div class="metric-item"><div class="k">用水流量</div><div class="v" id="en-wat">16.5 m³/h</div></div>
+      <div class="metric-item"><div class="k">用气流量</div><div class="v" id="en-gas">68.8 m³/h</div></div>
+    </div>
+    <div class="chart-box" id="ch-energy-live"></div>
+  </div>
+  <div class="chart-card charts-anim" style="transition-delay:.1s">
+    <h4><span class="num">03</span>资源成本构成 <span class="en">RESOURCE COST</span><span class="tag">按成本</span></h4>
+    <div class="chart-box" id="ch-cost"></div>
+    <div class="cost-list">
+      <div class="row"><span class="dot" style="background:#00e5ff"></span>用电 <span class="val" id="ct-pow">19,833 kWh</span></div>
+      <div class="row"><span class="dot" style="background:#ffc84d"></span>用水 <span class="val" id="ct-wat">334 m³</span></div>
+      <div class="row"><span class="dot" style="background:#4cd98a"></span>用气 <span class="val" id="ct-gas">1,314 m³</span></div>
+    </div>
+  </div>
+  <div class="chart-card charts-anim" style="transition-delay:.16s">
     <h4><span class="num">05</span>楼宇能耗排行 <span class="en">BUILDING RANK</span><span class="tag">实时 kW</span></h4>
     <div class="chart-box" id="ch-rank"></div>
     <div style="font-size:11px;color:#5b7a95;margin-top:2px">总负荷 <b style="color:#ffc84d" id="rk-total">2,987 kW</b></div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.34s">
+  <div class="chart-card charts-anim" style="transition-delay:.22s">
     <h4><span class="num">06</span>实时告警 <span class="en">ALERT CENTER</span><span class="badge-count" id="al-count">3</span></h4>
     <div id="alert-list">
       <div class="alert-item"><span class="lv mid">中</span><div>住院楼 7F 回风温度偏高<div class="sub">空调机组 AHU-07 · <span class="al-time">11:44</span></div></div></div>
@@ -1724,6 +1749,7 @@ renderer.domElement.addEventListener('pointerdown', () => { if (cruiseState.on) 
 
 $('xray-btn').onclick = () => {
   if (demo6State.active) stopDemo6();
+  if (demo2State.active) stopDemo2();
   if (!xrayState.on) {
     loadRobots();
     applyXray(true);
@@ -1972,15 +1998,14 @@ $('tg-live').onchange = (e) => { liveGroup.visible = e.target.checked; };
 connectLive();
 setInterval(refreshLiveMarkers, 2000); // 兜底刷新位置
 
-// ---------- 左侧面板收起 ----------
-$('panel-toggle').onclick = () => {
-  const hidden = document.body.classList.toggle('panel-hidden');
-  $('panel-toggle').textContent = hidden ? '▶' : '◀';
-  setTimeout(() => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  }, 400);
+// ---------- 设置面板（默认隐藏，顶部按钮弹出） ----------
+$('settings-btn').onclick = () => {
+  const open = document.body.classList.toggle('panel-open');
+  $('settings-btn').classList.toggle('on', open);
+};
+$('panel-close').onclick = () => {
+  document.body.classList.remove('panel-open');
+  $('settings-btn').classList.remove('on');
 };
 
 // ---------- ECharts 指标面板 ----------
@@ -1993,8 +2018,12 @@ function initCharts() {
   mk('ch-cost');
   mk('ch-flow');
   mk('ch-rank');
+  mk('ch-robot-type');
   refreshCharts();
+  refreshRobotMetrics();
   setInterval(refreshCharts, 3000);
+  setInterval(refreshRobotMetrics, 3000);
+  setTimeout(() => Object.values(chartsState.charts).forEach((c) => c.resize()), 1000);
   window.addEventListener('resize', () => { if ($('charts-panel').classList.contains('show')) Object.values(chartsState.charts).forEach((c) => c.resize()); });
 }
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -2101,26 +2130,82 @@ function refreshCharts() {
       itemStyle: { borderRadius: [2, 2, 0, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#00e5ff' }, { offset: 1, color: 'rgba(43,127,212,.25)' }]) },
     }],
   });
-  // 05 楼宇能耗排行
+  // 05 楼宇能耗排行（按场景楼宇，体量决定基准值）
   const c5 = chartsState.charts['ch-rank'];
-  if (c5) c5.setOption({
-    backgroundColor: 'transparent',
-    grid: { left: 58, right: 26, top: 4, bottom: 14 },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
-    yAxis: { type: 'category', inverse: true, data: ['急诊中心', '科研楼', '医技楼', '门急诊楼', '能源站', '住院楼'], axisLabel: { color: '#8fb8d8', fontSize: 9 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
-    series: [{
-      type: 'bar', barWidth: 8,
-      data: [333, 419, 471, 485, 575, 704].map((n) => Math.round(n + rnd(-12, 12))),
-      label: { show: true, position: 'right', color: '#cfe0f2', fontSize: 9 },
-      itemStyle: { borderRadius: [0, 3, 3, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(0,229,255,.25)' }, { offset: 1, color: '#00e5ff' }]) },
-    }],
-  });
+  if (c5) {
+    const rank = BUILDINGS.map((b) => {
+      const flr = Math.max(...b.parts.map((p) => p.floors));
+      const hgt = Math.max(...b.parts.map((p) => p.height));
+      return { name: b.short, value: Math.round(hgt * flr * 0.3) };
+    }).sort((a, b) => b.value - a.value).slice(0, 3);
+    c5.setOption({
+      backgroundColor: 'transparent',
+      grid: { left: 62, right: 30, top: 4, bottom: 14 },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}: {c} kW' },
+      xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
+      yAxis: { type: 'category', inverse: true, data: rank.map((r) => r.name), axisLabel: { color: '#8fb8d8', fontSize: 9 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
+      series: [{
+        type: 'bar', barWidth: 12,
+        data: rank.map((r) => Math.round(r.value + rnd(-6, 6))),
+        label: { show: true, position: 'right', color: '#cfe0f2', fontSize: 9 },
+        itemStyle: { borderRadius: [0, 3, 3, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(0,229,255,.25)' }, { offset: 1, color: '#00e5ff' }]) },
+      }],
+    });
+  }
   $('rk-total').textContent = fmtK(Math.round(s.load)) + ' kW';
 }
+// 机器人指标（中控实时数据）
+const ROBOT_TYPE_NAMES = { medicine: '送药', meal: '送餐', waste: '污物', platform: '平台' };
+function refreshRobotMetrics() {
+  if (!chartsState.inited) return;
+  const blank = () => {
+    for (const id of ['rb-total', 'rb-ready', 'rb-batt', 'rb-busy', 'rb-chg', 'rb-off']) $(id).textContent = '--';
+    $('rb-floors').textContent = '--';
+  };
+  const c = chartsState.charts['ch-robot-type'];
+  const robots = Array.from(liveState.robots.values());
+  if (!robots.length) { blank(); if (c) c.setOption({ series: [{ data: [] }] }); return; }
+  const ready = robots.filter(readyPose).length;
+  const batt = robots.map((r) => r.state && r.state.batteryPercent).filter((v) => v != null);
+  const busy = robots.filter((r) => r.state && r.state.operationStatus === 'busy').length;
+  const chg = robots.filter((r) => r.state && r.state.isCharging).length;
+  const off = robots.filter((r) => r.state && r.state.onlineStatus && r.state.onlineStatus !== 'online').length;
+  $('rb-total').textContent = robots.length;
+  $('rb-ready').textContent = ready;
+  $('rb-batt').textContent = batt.length ? Math.round(batt.reduce((a, b) => a + b, 0) / batt.length) + '%' : '--';
+  $('rb-busy').textContent = busy;
+  $('rb-chg').textContent = chg;
+  $('rb-off').textContent = off;
+  const types = {};
+  robots.forEach((r) => { const t = liveTypeOf(r); types[t] = (types[t] || 0) + 1; });
+  if (c) c.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'item', formatter: '{b}: {c} 台' },
+    legend: { bottom: 0, textStyle: { color: '#8fb8d8', fontSize: 9 }, itemWidth: 10, itemHeight: 6 },
+    series: [{
+      type: 'pie', radius: ['45%', '70%'], center: ['50%', '42%'],
+      label: { show: false },
+      data: Object.entries(types).map(([t, n]) => ({ name: ROBOT_TYPE_NAMES[t] || t, value: n })),
+      itemStyle: { borderColor: 'rgba(8,14,28,.9)', borderWidth: 2 },
+      color: ['#00e5ff', '#ffc84d', '#4cd98a', '#7f8cff'],
+    }],
+  });
+  const floors = {};
+  for (const r of robots) {
+    const loc = readyPose(r);
+    if (!loc) continue;
+    const f = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
+    const nm = f && f.buildingName ? f.buildingName : (loc.buildingId || '未定位');
+    floors[nm] = (floors[nm] || 0) + 1;
+  }
+  $('rb-floors').textContent = Object.entries(floors).map(([k, n]) => `${k}×${n}`).join(' · ') || '--';
+}
 $('charts-btn').onclick = () => {
+  const left = $('charts-left');
   const panel = $('charts-panel');
-  const show = panel.classList.toggle('show');
+  const show = !panel.classList.contains('show');
+  panel.classList.toggle('show', show);
+  left.classList.toggle('show', show);
   $('charts-btn').classList.toggle('on', show);
   $('charts-btn').textContent = show ? '收起指标' : '指标面板';
   if (show) {
@@ -2128,6 +2213,7 @@ $('charts-btn').onclick = () => {
     setTimeout(() => Object.values(chartsState.charts).forEach((c) => c.resize()), 450);
   }
 };
+initCharts();
 
 // ---------- 天地图卫星底图 ----------
 // 坐标基准：浙江省人民医院朝晖院区（上塘路158号，南应加河北岸）
@@ -2620,6 +2706,7 @@ function updateDemo6(dt) {
 }
 async function startDemo6() {
   if (demo6State.active) { stopDemo6(); return; }
+  if (demo2State.active) stopDemo2();
   if (xrayState.on) applyXray(false);
   if (floorState.active) exitFloorMode();
   stopCruise();
@@ -2673,6 +2760,199 @@ function stopDemo6() {
   if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
 }
 $('demo6-btn').onclick = () => (demo6State.active ? stopDemo6() : startDemo6());
+
+// ---------- 2号楼 透视 + 双机模拟（3层/4层，2号楼无整体模型节点，独立加载 GLB，整体不拆分） ----------
+const demo2State = { active: false, robots: [], group: null, bbox: null, hidden: [] };
+async function spawnDemo2Robots(bbox, baseY) {
+  const defs = [
+    { file: '/models/models/detail/medicine.glb', floor: 3 },
+    { file: '/models/models/detail/meal.glb', floor: 4 },
+  ];
+  for (const def of defs) {
+    try {
+      let gltf = gltfCache.get(def.file);
+      if (!gltf) { gltf = await makeGLTFLoader().loadAsync(def.file); gltfCache.set(def.file, gltf); }
+      const model = gltf.scene.clone(true);
+      const mb = new THREE.Box3().setFromObject(model);
+      const ms = mb.getSize(new THREE.Vector3());
+      const s = 1.1 / Math.max(ms.y, 0.01);
+      model.scale.setScalar(s);
+      model.position.set(0, -mb.min.y * s, 0);
+      model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      const g = new THREE.Group();
+      g.add(model);
+      const y = baseY + (def.floor - 1) * 3.8 + 0.8;
+      g.position.set((bbox.min.x + bbox.max.x) / 2, y, (bbox.min.z + bbox.max.z) / 2);
+      demo2State.group.add(g);
+      const margin = Math.min(2, Math.max(0.5, (bbox.max.x - bbox.min.x) / 4));
+      const marginZ = Math.min(2, Math.max(0.5, (bbox.max.z - bbox.min.z) / 4));
+      demo2State.robots.push({
+        obj: g, y,
+        minX: bbox.min.x + margin, maxX: bbox.max.x - margin,
+        minZ: bbox.min.z + marginZ, maxZ: bbox.max.z - marginZ,
+        wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
+      });
+      console.log('[2号楼模拟] 机器人已就位', def.file.split('/').pop(), '楼层', def.floor);
+    } catch (e) {
+      console.warn('[2号楼模拟] 机器人模型加载失败', def.file, e);
+    }
+  }
+}
+function demo2CadXfFor(floor) {
+  const cfg = LIVE_BUILDING_CFG[floor.buildingName];
+  const b = floor.bounds;
+  const bb = demo2State.bbox;
+  if (!cfg || !b || !bb) return null;
+  return {
+    cx: (bb.min.x + bb.max.x) / 2, cz: (bb.min.z + bb.max.z) / 2, baseY: bb.min.y, s: cfg.s || 1,
+    cadCX: (b.minX + b.maxX) / 2, cadCY: (b.minY + b.maxY) / 2,
+  };
+}
+async function loadDemo2Cad(baseY) {
+  // 等待中控楼层目录（按 buildingName 过滤 2号楼）
+  const t0 = Date.now();
+  while (Date.now() - t0 < 10000) {
+    if (Array.from(liveState.floors.values()).some((f) => f.buildingName === '2号楼')) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  const floors = Array.from(liveState.floors.values())
+    .filter((f) => f.buildingName === '2号楼' && f.geometryResource && f.geometryResource.resourceId);
+  if (!floors.length) { console.warn('[2号楼模拟] 无 2号楼 楼层 CAD 数据（中控目录未就绪）'); return; }
+  let drawn = 0;
+  for (const f of floors) {
+    try {
+      const rid = f.geometryResource.resourceId;
+      let geo = cadResCache.get(rid);
+      if (!geo) {
+        const res = await fetch('/twin-resource?rid=' + encodeURIComponent(rid));
+        if (!res.ok) throw new Error('http ' + res.status);
+        geo = await res.json();
+        cadResCache.set(rid, geo);
+      }
+      const lines = geo.lines || [];
+      const xf = demo2CadXfFor(f);
+      if (!xf || !lines.length) continue;
+      const yBase = baseY + ((f.floorNumber || 1) - 1) * 3.8;
+      const pts = [];
+      for (const [a, b] of lines) {
+        pts.push(xf.cx + (a[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (a[1] - xf.cadCY) * xf.s);
+        pts.push(xf.cx + (b[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (b[1] - xf.cadCY) * xf.s);
+      }
+      const lg = new THREE.LineSegments(
+        new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)),
+        new THREE.LineBasicMaterial({ color: 0xdfe9f2, transparent: true, opacity: 0.85, depthWrite: false })
+      );
+      demo2State.group.add(lg);
+      const b = geo.bounds || f.bounds;
+      if (b) {
+        const w = (b.maxX - b.minX) * xf.s, h = (b.maxY - b.minY) * xf.s;
+        const slab = new THREE.Mesh(
+          new THREE.PlaneGeometry(Math.max(w, 0.1), Math.max(h, 0.1)),
+          new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide })
+        );
+        slab.rotation.x = -Math.PI / 2;
+        slab.position.set(xf.cx, yBase + 0.02, xf.cz);
+        demo2State.group.add(slab);
+      }
+      drawn++;
+    } catch (e) {
+      console.warn('[2号楼模拟] CAD 楼层加载失败', f.floorKey, e.message);
+    }
+  }
+  console.log('[2号楼模拟] CAD 墙体/地面已绘制', drawn, '层');
+}
+function updateDemo2(dt) {
+  if (!demo2State.active) return;
+  for (const r of demo2State.robots) {
+    if (!r.wp) r.wp = { x: r.obj.position.x, z: r.obj.position.z };
+    const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.5) {
+      r.wait -= dt;
+      if (r.wait <= 0) {
+        r.wp = {
+          x: r.minX + Math.random() * Math.max(0.5, r.maxX - r.minX),
+          z: r.minZ + Math.random() * Math.max(0.5, r.maxZ - r.minZ),
+        };
+        r.wait = 2 + Math.random() * 5;
+      }
+      continue;
+    }
+    const step = Math.min(r.speed * dt, dist);
+    r.obj.position.x += (dx / dist) * step;
+    r.obj.position.z += (dz / dist) * step;
+    r.obj.rotation.y = Math.atan2(dx, dz);
+  }
+}
+async function startDemo2() {
+  if (demo2State.active) { stopDemo2(); return; }
+  if (demo6State.active) stopDemo6();
+  if (xrayState.on) applyXray(false);
+  if (floorState.active) exitFloorMode();
+  stopCruise();
+  const btn = $('demo2-btn');
+  btn.classList.add('on');
+  btn.textContent = '退出 2号楼 模拟';
+  demo2State.active = true;
+  demo2State.group = new THREE.Group();
+  scene.add(demo2State.group);
+  // 2号楼 无整体模型节点：独立加载精模并整体透视（退出时移除，无需还原材质）
+  let bbox = null;
+  try {
+    let gltf = gltfCache.get('2号楼');
+    if (!gltf) { gltf = await makeGLTFLoader().loadAsync('/models/models/2号楼.glb'); gltfCache.set('2号楼', gltf); }
+    const bld = gltf.scene.clone(true);
+    bld.traverse((o) => { if (o.isMesh) { o.material = demo6Mat; o.castShadow = true; } });
+    demo2State.group.add(bld);
+    bbox = new THREE.Box3().setFromObject(bld);
+  } catch (e) {
+    console.warn('[2号楼模拟] 2号楼模型加载失败', e);
+  }
+  if (!bbox) { console.warn('[2号楼模拟] 无法定位 2号楼，退出'); stopDemo2(); return; }
+  demo2State.bbox = bbox;
+  // 隐藏原本占据 2号楼 位置的模型（整体精模 + 白膜），避免与透视体叠加；薄片（地面/道路）不处理
+  const hideOverlap = (root) => root.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.visible) return;
+    const ob = new THREE.Box3().setFromObject(o);
+    if (ob.max.y - ob.min.y < 3) return;
+    if (ob.min.y > bbox.max.y || ob.max.y < bbox.min.y) return;
+    if (ob.min.x > bbox.max.x + 2 || ob.max.x < bbox.min.x - 2) return;
+    if (ob.min.z > bbox.max.z + 2 || ob.max.z < bbox.min.z - 2) return;
+    o.visible = false;
+    demo2State.hidden.push(o);
+  });
+  hideOverlap(realGroup);
+  hideOverlap(buildingsGroup);
+  console.log('[2号楼模拟] 已隐藏原位置模型', demo2State.hidden.length, '个网格');
+  await spawnDemo2Robots(bbox, bbox.min.y);
+  await loadDemo2Cad(bbox.min.y);
+  liveGroup.visible = false;
+  const ctr = bbox.getCenter(new THREE.Vector3());
+  const rad = Math.max(bbox.getSize(new THREE.Vector3()).length() * 0.6, 30);
+  flyToPos(
+    new THREE.Vector3(ctr.x + rad * 1.1, ctr.y + rad * 0.9, ctr.z + rad * 1.4),
+    ctr
+  );
+  console.log('[2号楼模拟] 透视白膜已应用（独立 GLB，整体不分层）bbox中心', ctr.x.toFixed(1), ctr.z.toFixed(1));
+}
+function stopDemo2() {
+  if (!demo2State.active) return;
+  demo2State.active = false;
+  demo2State.robots = [];
+  demo2State.bbox = null;
+  demo2State.hidden.forEach((o) => { o.visible = true; });
+  demo2State.hidden = [];
+  if (demo2State.group) {
+    scene.remove(demo2State.group);
+    demo2State.group = null;
+  }
+  liveGroup.visible = $('tg-live').checked;
+  const btn = $('demo2-btn');
+  btn.classList.remove('on');
+  btn.textContent = '透视 2号楼（双机模拟）';
+  if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
+}
+$('demo2-btn').onclick = () => (demo2State.active ? stopDemo2() : startDemo2());
 
 // 记住左侧视图开关：刷新后保持上次的选择（白膜/周边白膜/卫星底图等）
 const VIEW_KEYS = ['tg-real', 'tg-white', 'tg-label', 'tg-line', 'tg-tex', 'tg-tree', 'tg-alpha', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map'];
@@ -2731,6 +3011,7 @@ function animate() {
   updateElevators(dt);
   updateRobots(dt);
   updateDemo6(dt);
+  updateDemo2(dt);
   if (floorState.active && floorState.layers.length) {
     const spread = +$('floor-spread').value / 100;
     const step = floorState.bandH * 1.6;
