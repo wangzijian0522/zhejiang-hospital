@@ -56,15 +56,24 @@ function build() {
       if (Math.abs(px - roadX(py)) < 46) continue;
       const east = (px - CX) * MPP;
       const north = (CY - py) * MPP;
-      const h = 12 + Math.round(rnd() * 8) + (rnd() < 0.15 ? 6 : 0);
-      out.push({
-        x: +(east).toFixed(1),
-        z: +(-north).toFixed(1),
-        w: +(LEN * MPP).toFixed(1),
-        d: +(DEP * MPP).toFixed(1),
-        h,
-        rot: +(-TILT).toFixed(1),
-      });
+      const h = 9 + Math.round(rnd() * 6) + (rnd() < 0.12 ? 4 : 0);
+      // 长条拆成独立小屋：沿行列方向切分，单元宽约 11m
+      const wm = LEN * MPP;
+      const k = Math.max(1, Math.round(wm / 11));
+      const uw = wm / k - 0.5;
+      const th = (-TILT * Math.PI) / 180;
+      const dirx = Math.cos(th), dirz = -Math.sin(th);
+      for (let u = 0; u < k; u++) {
+        const off = (u - (k - 1) / 2) * (wm / k);
+        out.push({
+          x: +(east + off * dirx).toFixed(1),
+          z: +(-north + off * dirz).toFixed(1),
+          w: +uw.toFixed(1),
+          d: +(DEP * MPP).toFixed(1),
+          h: Math.max(8, h + Math.round((rnd() - 0.5) * 4)),
+          rot: +(-TILT).toFixed(1),
+        });
+      }
     }
   }
   return out;

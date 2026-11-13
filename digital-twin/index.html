@@ -2551,21 +2551,24 @@ if (CAL_MODE) {
 // 周边建筑体量：坐标由天地图 z18 影像逐排标定（tools/make-surroundings.js），
 // 与卫星底图共用变换，改校准值时一起移动。
 function buildSurrounding() {
+  const BODY_COLORS = [0xe4e7ea, 0xdfe2e5, 0xe8e3da, 0xdde1e6];
+  const ROOF_COLORS = [0x6a6f75, 0x74797f, 0x5f646a];
   const bodyCache = new Map();
-  const roofMat = new THREE.MeshStandardMaterial({
-    color: 0x6f747a, roughness: 0.95, metalness: 0, transparent: true, opacity: 0.85, depthWrite: false,
-  });
+  const roofCache = new Map();
   const topMat = new THREE.MeshStandardMaterial({ color: 0x7b8086, roughness: 0.95 });
-  const unitCone = new THREE.ConeGeometry(1, 1, 4); // 四坡屋顶基元
+  const unitCone = new THREE.ConeGeometry(1, 1, 4);
+  unitCone.rotateY(Math.PI / 4); // 45° 烘进几何体：缩放后再旋转会变成斜楔
   for (const b of SURROUNDINGS) {
     const floors = Math.max(2, Math.round(b.h / 3.2));
-    let bodyMat = bodyCache.get(floors);
+    const ci = Math.abs(Math.round(b.x * 3 + b.z * 5)) % BODY_COLORS.length;
+    const key = floors + '/' + ci;
+    let bodyMat = bodyCache.get(key);
     if (!bodyMat) {
       bodyMat = new THREE.MeshStandardMaterial({
-        color: 0xdfe3e8, roughness: 0.9, metalness: 0,
-        map: floorTex(floors), transparent: true, opacity: 0.72, depthWrite: false,
+        color: BODY_COLORS[ci], roughness: 0.9, metalness: 0,
+        map: floorTex(floors), transparent: true, opacity: 0.88, depthWrite: false,
       });
-      bodyCache.set(floors, bodyMat);
+      bodyCache.set(key, bodyMat);
     }
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(b.w, b.h, b.d),
@@ -2575,9 +2578,19 @@ function buildSurrounding() {
     body.rotation.y = (b.rot * Math.PI) / 180;
     body.renderOrder = 6;
     surroundGroup.add(body);
-    const roofH = 3.0 + Math.min(2.0, b.w * 0.03);
+
+    const ri = Math.abs(Math.round(b.x * 7 + b.z * 11)) % ROOF_COLORS.length;
+    let roofMat = roofCache.get(ri);
+    if (!roofMat) {
+      roofMat = new THREE.MeshStandardMaterial({
+        color: ROOF_COLORS[ri], roughness: 0.95, metalness: 0,
+        transparent: true, opacity: 0.92, depthWrite: false,
+      });
+      roofCache.set(ri, roofMat);
+    }
+    const roofH = 2.6 + Math.min(1.4, b.w * 0.03);
     const roof = new THREE.Mesh(unitCone, roofMat);
-    roof.rotation.y = ((b.rot + 45) * Math.PI) / 180;
+    roof.rotation.y = (b.rot * Math.PI) / 180;
     roof.scale.set(b.w / Math.SQRT2, roofH, b.d / Math.SQRT2);
     roof.position.set(b.x, b.h + roofH / 2, b.z);
     roof.renderOrder = 6;
