@@ -46,6 +46,39 @@
   #sec { padding: 8px 14px 12px; }
   #sec h3 { font-size: 12px; color: #44505c; margin: 8px 0 4px; }
   #sec ul { margin: 0; padding-left: 18px; font-size: 11px; color: #5b6672; line-height: 1.6; }
+
+  /* 左侧面板收起 */
+  #panel { transition: transform .35s ease; }
+  body.panel-hidden #panel { transform: translateX(-326px); }
+  #panel-toggle { position: fixed; left: 316px; top: 14px; z-index: 45; width: 30px; height: 30px; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #cfe0f2; font-size: 13px; cursor: pointer; transition: left .35s ease, background .2s; }
+  #panel-toggle:hover { background: rgba(43,127,212,.9); color: #fff; }
+  body.panel-hidden #panel-toggle { left: 12px; }
+
+  /* ECharts 指标面板（深色大屏风格） */
+  #charts-btn { position: fixed; right: 12px; top: 14px; z-index: 45; border: none; border-radius: 8px; background: rgba(20,30,40,.75); color: #7fd4ff; font-size: 13px; padding: 6px 14px; cursor: pointer; letter-spacing: 1px; }
+  #charts-btn:hover { background: rgba(10,60,100,.9); }
+  #charts-btn.on { background: rgba(10,60,100,.9); color: #fff; }
+  #charts-panel { position: fixed; top: 14px; right: 12px; width: 306px; max-height: calc(100% - 28px); overflow-y: auto; z-index: 40; transform: translateX(340px); transition: transform .4s cubic-bezier(.22,.9,.3,1); }
+  #charts-panel.show { transform: translateX(0); }
+  #charts-panel::-webkit-scrollbar { width: 4px; }
+  #charts-panel::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 2px; }
+  .chart-card { background: rgba(9,15,28,.88); border: 1px solid rgba(0,188,212,.25); border-radius: 10px; margin-bottom: 10px; padding: 10px 12px 8px; color: #cfe0f2; box-shadow: 0 0 18px rgba(0,188,212,.08); }
+  .chart-card h4 { margin: 0 0 6px; font-size: 13px; color: #7fd4ff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: center; gap: 6px; }
+  .chart-card h4::before { content: ''; width: 4px; height: 14px; background: linear-gradient(#00e5ff,#2b7fd4); border-radius: 2px; }
+  .chart-box { height: 148px; }
+  .chart-card:first-child { margin-top: 48px; }
+  .charts-anim { opacity: 0; transform: translateX(30px); transition: opacity .45s ease, transform .45s ease; }
+  #charts-panel.show .charts-anim { opacity: 1; transform: translateX(0); }
+  .env-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .env-table td { padding: 4px 2px; border-bottom: 1px solid rgba(127,212,255,.12); }
+  .env-table .v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .env-ok { color: #4cd98a; } .env-warn { color: #ffc84d; } .env-bad { color: #ff6b6b; }
+  .people-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; }
+  .people-row .nm { width: 52px; color: #8fb8d8; }
+  .people-row .bar { flex: 1; height: 6px; background: rgba(127,212,255,.12); border-radius: 3px; overflow: hidden; }
+  .people-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#00e5ff,#2b7fd4); border-radius: 3px; transition: width .8s ease; }
+  .people-row .val { width: 42px; text-align: right; font-weight: 600; color: #fff; }
+
 </style>
 <script type="importmap">
 {
@@ -70,6 +103,9 @@
     <label><input type="checkbox" id="tg-tree"> 3D树木</label>
     <label><input type="checkbox" id="tg-alpha"> 半透明</label>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
+    <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
+    <label><input type="checkbox" id="tg-surround" checked> 周边白膜</label>
+    <label><input type="checkbox" id="tg-map" title="需配置天地图 token"> 天地图底图</label>
   </div>
   <div class="timebox">
     <div class="row"><b>时间 / 太阳</b><span id="time-val">14:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime" checked> 实时</label></div>
@@ -108,12 +144,49 @@
 <div id="realtime-hud" style="position:fixed; top:12px; right:12px; z-index:20; background:rgba(20,30,40,.78); color:#fff; padding:8px 14px; border-radius:12px; text-align:right; pointer-events:none;">
   <div id="rt-clock" style="font-size:20px; font-weight:700; letter-spacing:1px; font-variant-numeric:tabular-nums; line-height:1.1;">--:--:--</div>
   <div id="rt-weather" style="margin-top:3px; color:#b8c8d8; font-size:12px;">杭州 · 获取天气中…</div>
+  <div id="live-hud" style="margin-top:3px; color:#7fd4a2; font-size:12px;">实时机器人：连接中…</div>
 </div>
 <style>
   @keyframes lspin { to { transform: rotate(360deg); } }
   @keyframes lspin-rev { to { transform: rotate(-360deg); } }
   @keyframes lpulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
 </style>
+<button id="panel-toggle" title="收起/展开操作面板">◀</button>
+<button id="charts-btn">指标面板</button>
+<div id="charts-panel">
+  <div class="chart-card charts-anim" style="transition-delay:.05s">
+    <h4>人员 / 车辆</h4>
+    <div class="people-row"><span class="nm">医护人员</span><span class="bar"><i id="pp-staff" style="width:0"></i></span><span class="val" id="pv-staff">0</span></div>
+    <div class="people-row"><span class="nm">访客</span><span class="bar"><i id="pp-visit" style="width:0"></i></span><span class="val" id="pv-visit">0</span></div>
+    <div class="people-row"><span class="nm">安保</span><span class="bar"><i id="pp-guard" style="width:0"></i></span><span class="val" id="pv-guard">0</span></div>
+    <div class="people-row"><span class="nm">车辆</span><span class="bar"><i id="pp-car" style="width:0"></i></span><span class="val" id="pv-car">0</span></div>
+  </div>
+  <div class="chart-card charts-anim" style="transition-delay:.12s">
+    <h4>今日工单（处理 / 待办）</h4>
+    <div class="chart-box" id="ch-orders"></div>
+  </div>
+  <div class="chart-card charts-anim" style="transition-delay:.19s">
+    <h4>环境监测</h4>
+    <table class="env-table">
+      <tr><td>温度</td><td class="v" id="ev-temp">--</td></tr>
+      <tr><td>湿度</td><td class="v" id="ev-hum">--</td></tr>
+      <tr><td>CO2</td><td class="v" id="ev-co2">--</td></tr>
+      <tr><td>PM2.5</td><td class="v" id="ev-pm">--</td></tr>
+    </table>
+  </div>
+  <div class="chart-card charts-anim" style="transition-delay:.26s">
+    <h4>能耗（今日）</h4>
+    <div class="chart-box" id="ch-energy"></div>
+  </div>
+  <div class="chart-card charts-anim" style="transition-delay:.33s">
+    <h4>安防告警（紧急 / 一般）</h4>
+    <div class="chart-box" id="ch-alert"></div>
+  </div>
+  <div class="chart-card charts-anim" style="transition-delay:.4s">
+    <h4>资产分类</h4>
+    <div class="chart-box" id="ch-asset"></div>
+  </div>
+</div>
 <div id="loader" style="position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(160deg,#0e1626 0%,#1a2b45 55%,#0e1c30 100%); opacity:0; transition:opacity .8s ease;">
   <div style="position:relative; width:96px; height:96px;">
     <div style="position:absolute; inset:0; border-radius:50%; border:4px solid rgba(255,255,255,.1); border-top-color:#4da3ff; animation:lspin 1s linear infinite;"></div>
@@ -130,6 +203,7 @@
   <button id="floor-back" style="background:#2b7fd4;color:#fff;border:none;border-radius:8px;padding:4px 12px;cursor:pointer">返回整体</button>
 </div>
 
+<script src="./vendor/echarts.min.js"></script>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -169,7 +243,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 20, 0);
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.minDistance = 30;
-controls.maxDistance = 1500;
+controls.maxDistance = 1000; // 视角最多拉到 1km 以内
 controls.enableDamping = true;
 controls.mouseButtons = {
   LEFT: THREE.MOUSE.PAN,
@@ -738,6 +812,28 @@ const realBuildings = new Map(); // 楼名 -> mesh（2号楼/6号楼 可点击�
 let realLoaded = false;
 let realLoading = false;
 let overviewCam = null;
+let campusFocus = null; // 医院主体中心（楼群面积加权）
+let campusRadius = 120;
+
+function computeCampusFocus() {
+  const bb = new THREE.Box3();
+  let areaSum = 0;
+  const acc = new THREE.Vector3();
+  realBuildings.forEach((g) => {
+    const b = new THREE.Box3().setFromObject(g);
+    const sz = b.getSize(new THREE.Vector3());
+    const area = sz.x * sz.z;
+    const c = b.getCenter(new THREE.Vector3());
+    acc.x += c.x * area; acc.z += c.z * area;
+    areaSum += area;
+    bb.expandByObject(g);
+  });
+  if (areaSum <= 0) return null;
+  campusFocus = new THREE.Vector3(acc.x / areaSum, 0, acc.z / areaSum);
+  const sz = bb.getSize(new THREE.Vector3());
+  campusRadius = Math.max(Math.hypot(sz.x, sz.z) * 0.5, 100);
+  return campusFocus;
+}
 
 function loadRealModel() {
   if (realLoaded || realLoading) return;
@@ -757,7 +853,8 @@ function loadRealModel() {
         o.castShadow = true;
         o.receiveShadow = true;
       }
-      if ((o.name === '2号楼' || o.name === '6号楼') && o.isGroup) {
+      // 注册所有楼栋节点（含 5号楼01 等拆分塔楼），供实时机器人落位
+      if (o.name && /号楼\d*$/.test(o.name) && (o.isMesh || o.children.length > 0)) {
         o.userData.buildingName = o.name;
         o.traverse((c) => { if (c.isMesh) c.userData.buildingName = o.name; });
         realBuildings.set(o.name, o);
@@ -768,9 +865,19 @@ function loadRealModel() {
     realLoading = false;
     realGroup.visible = document.getElementById('tg-real').checked;
     const r = Math.max(size.x, size.y, size.z) * s;
-    flyToPos(new THREE.Vector3(r * 1.1, r * 0.85, r * 1.7), new THREE.Vector3(0, r * 0.35, 0));
-    controls.maxDistance = Math.max(controls.maxDistance, r * 12);
-    overviewCam = { pos: new THREE.Vector3(r * 1.1, r * 0.85, r * 1.7), look: new THREE.Vector3(0, r * 0.35, 0) };
+    // 初始视角：医院主体居中，东南方位、30° 俯角鸟瞰
+    const focus = computeCampusFocus() || new THREE.Vector3(0, 0, 0);
+    const rad = campusRadius;
+    const az = 33 * Math.PI / 180, elev = 30 * Math.PI / 180, dist = rad * 2.0;
+    const iv = new THREE.Vector3(
+      focus.x + dist * Math.cos(elev) * Math.sin(az),
+      dist * Math.sin(elev),
+      focus.z + dist * Math.cos(elev) * Math.cos(az)
+    );
+    const it = new THREE.Vector3(focus.x, focus.y + rad * 0.15, focus.z);
+    flyToPos(iv, it);
+    controls.maxDistance = 1000; // 视角最多拉到 1km
+    overviewCam = { pos: iv, look: it };
     hideLoader();
   }, (ev) => {
     if (ev.total) setLoaderPct((ev.loaded / ev.total) * 100);
@@ -881,6 +988,7 @@ async function enterFloorMode(name) {
   realGroup.visible = false;
   buildingsGroup.visible = false;
   labelsGroup.visible = false;
+  liveGroup.visible = false;
   $('floor-title').textContent = name + ' 分层展示';
   $('floor-ui').style.display = 'flex';
   devStatus.style.display = 'block';
@@ -937,6 +1045,7 @@ function exitFloorMode() {
   realGroup.visible = $('tg-real').checked && realLoaded;
   buildingsGroup.visible = $('tg-white').checked;
   labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
+  liveGroup.visible = $('tg-live').checked;
   $('floor-ui').style.display = 'none';
   if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
 }
@@ -1413,18 +1522,23 @@ timePlay.onclick = () => {
 document.querySelectorAll('.weatherbox button').forEach((b) => {
   b.onclick = () => setWeather(b.dataset.w);
 });
-// ---------- 自动巡航（360° 逆时针环绕） ----------
-const cruiseState = { on: false, angle: 0, r: 400, h: 200 };
+// ---------- 自动巡航（360° 逆时针环绕医院主体） ----------
+const cruiseState = { on: false, angle: 0, r: 400, h: 200, center: new THREE.Vector3(), startPos: new THREE.Vector3(), ease: 1 };
+const cruiseTV = new THREE.Vector3();
 const CRUISE_SPEED = 0.12; // 弧度/秒，约 52 秒一圈
 function startCruise() {
   if (cruiseState.on) return;
   if (floorState.active) exitFloorMode();
   flyTarget = null;
-  const t = controls.target;
-  const dx = camera.position.x - t.x, dz = camera.position.z - t.z;
-  cruiseState.r = Math.max(60, Math.hypot(dx, dz));
-  cruiseState.h = Math.max(40, camera.position.y - t.y);
+  const c = campusFocus || controls.target;
+  cruiseState.center.copy(c);
+  const rad = Math.max(campusRadius * 1.02, 60);
+  cruiseState.r = rad;
+  cruiseState.h = rad * 0.55;
+  const dx = camera.position.x - c.x, dz = camera.position.z - c.z;
   cruiseState.angle = Math.atan2(-dz, dx);
+  cruiseState.startPos.copy(camera.position);
+  cruiseState.ease = 0;
   cruiseState.on = true;
   controls.enabled = false;
   const btn = $('cruise-btn');
@@ -1435,6 +1549,7 @@ function stopCruise() {
   if (!cruiseState.on) return;
   cruiseState.on = false;
   controls.enabled = true;
+  controls.target.copy(cruiseState.center);
   const btn = $('cruise-btn');
   btn.classList.remove('on');
   btn.textContent = '自动巡航（360°逆时针）';
@@ -1446,9 +1561,11 @@ $('xray-btn').onclick = () => {
   if (!xrayState.on) {
     loadRobots();
     applyXray(true);
+    liveGroup.visible = false;
     flyToPos(new THREE.Vector3(TCX + 85, 62, TCZ + 95), new THREE.Vector3(TCX, 45, TCZ));
   } else {
     applyXray(false);
+    liveGroup.visible = $('tg-live').checked;
   }
 };
 $('floor-back').onclick = () => exitFloorMode();
@@ -1511,6 +1628,456 @@ async function fetchRealWeather() {
 fetchRealWeather();
 setInterval(fetchRealWeather, 10 * 60 * 1000);
 
+// ---------- 真实机器人（中控 openTwin 数据，经本服务 /twin 中继） ----------
+const liveGroup = new THREE.Group();
+scene.add(liveGroup);
+const liveHud = $('live-hud');
+const liveState = { ws: null, connected: false, seq: -1, floors: new Map(), robots: new Map(), reconnectDelay: 1000 };
+const liveMarkers = new Map(); // robotId -> { obj, modelType }
+const liveBuildingXf = new Map(); // buildingName -> {cx, cz, baseY, s} 或 null
+const LIVE_TYPE_FILES = {
+  medicine: '/models/models/detail/medicine.glb',
+  meal: '/models/models/detail/meal.glb',
+  waste: '/models/models/detail/waste.glb',
+  platform: '/models/models/detail/platform.glb',
+};
+function liveTypeOf(r) {
+  const m = (r.model || '') + (r.name || '');
+  if (/drug|medicine|med|送药/i.test(m)) return 'medicine';
+  if (/meal|food|送餐|餐/i.test(m)) return 'meal';
+  if (/waste|trash|污|垃圾/i.test(m)) return 'waste';
+  return 'platform';
+}
+function readyPose(r) {
+  return (r.cadLocations || []).find((l) => l.projectionStatus === 'ready' && l.cadPose) || null;
+}
+// 中控 buildingName → 场景坐标映射配置（依据 CAD bounds 与 GLB 楼栋 bbox 标定）
+const LIVE_BUILDING_CFG = {
+  '1号楼': { glb: ['1号楼'], s: 1 },
+  '5号楼': { glb: ['5号楼', '5号楼01'], s: 1 },
+  '6号楼': { glb: ['6号楼'], s: 0.91 },
+  '7号楼': { glb: ['7号楼'], s: 1 },
+  '2号楼': { glb: null, s: 1, approx: { cx: -6.3, cz: 39.0 } }, // GLB 中无独立节点，白膜推算近似位置（待目视校准）
+};
+function buildingTransformFor(floor) {
+  const name = floor.buildingName;
+  if (!name) return null;
+  if (liveBuildingXf.has(name)) return liveBuildingXf.get(name);
+  let xf = null;
+  const cfg = LIVE_BUILDING_CFG[name];
+  const b = floor.bounds;
+  if (cfg && b) {
+    const cadCX = (b.minX + b.maxX) / 2, cadCY = (b.minY + b.maxY) / 2;
+    if (cfg.glb) {
+      const names = cfg.glb.filter((n) => realBuildings.has(n));
+      if (names.length) {
+        const bb = new THREE.Box3();
+        names.forEach((n) => bb.expandByObject(realBuildings.get(n)));
+        const center = bb.getCenter(new THREE.Vector3());
+        xf = { cx: center.x, cz: center.z, baseY: bb.min.y, s: cfg.s || 1, cadCX, cadCY };
+      }
+    }
+    if (!xf && cfg.approx) {
+      xf = { cx: cfg.approx.cx, cz: cfg.approx.cz, baseY: 0, s: cfg.s || 1, cadCX, cadCY, approx: true };
+    }
+  }
+  if (!xf) return null; // 整体模型未加载时先不缓存，稍后重试
+  liveBuildingXf.set(name, xf);
+  console.log('[twin] 楼栋映射:', name, 'center', xf.cx.toFixed(1), xf.cz.toFixed(1), 'scale', xf.s.toFixed(3), xf.approx ? '(近似)' : '');
+  return xf;
+}
+function updateLiveHud() {
+  const readyCount = Array.from(liveState.robots.values()).filter(readyPose).length;
+  const stale = liveState.robots.size - readyCount;
+  if (!liveState.connected) liveHud.textContent = '实时机器人：连接中…';
+  else liveHud.textContent = `实时机器人：${readyCount} 台就位${stale ? '（' + stale + ' 台未配准/离线）' : ''}`;
+}
+async function createLiveMarker(r) {
+  const type = liveTypeOf(r);
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.7), new THREE.MeshLambertMaterial({ color: 0x2b7fd4 }));
+  g.add(box);
+  liveGroup.add(g);
+  const mk = { obj: g, modelType: type };
+  liveMarkers.set(r.robotId, mk);
+  const file = LIVE_TYPE_FILES[type];
+  try {
+    let gltf = gltfCache.get(file);
+    if (!gltf) { gltf = await makeGLTFLoader().loadAsync(file); gltfCache.set(file, gltf); }
+    if (liveMarkers.get(r.robotId) !== mk) { liveGroup.remove(g); return; }
+    const model = gltf.scene.clone(true);
+    const mb = new THREE.Box3().setFromObject(model);
+    const ms = mb.getSize(new THREE.Vector3());
+    const s = 1.1 / Math.max(ms.y, 0.01);
+    model.scale.setScalar(s);
+    model.position.set(0, -mb.min.y * s, 0);
+    model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    g.add(model);
+    g.remove(box);
+  } catch (e) {
+    console.warn('[twin] 机器人模型加载失败', file, e);
+  }
+  refreshLiveMarkers();
+}
+function removeLiveMarker(rid) {
+  const mk = liveMarkers.get(rid);
+  if (!mk) return;
+  liveGroup.remove(mk.obj);
+  liveMarkers.delete(rid);
+}
+function refreshLiveMarkers() {
+  if (!$('tg-live')) return;
+  for (const [rid, mk] of liveMarkers) {
+    const r = liveState.robots.get(rid);
+    const loc = r && readyPose(r);
+    if (!loc) { removeLiveMarker(rid); continue; }
+    const floor = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
+    const xf = floor && buildingTransformFor(floor);
+    if (!xf) { mk.obj.visible = false; continue; }
+    mk.obj.visible = true;
+    const p = loc.cadPose;
+    mk.obj.position.set(
+      xf.cx + (p.x - xf.cadCX) * xf.s,
+      xf.baseY + (floor.floorNumber || 0) * 3.8 + 0.8,
+      xf.cz - (p.y - xf.cadCY) * xf.s
+    );
+    mk.obj.rotation.y = Math.PI / 2 + (p.yawRad || 0);
+  }
+  for (const [rid, r] of liveState.robots) {
+    if (liveMarkers.has(rid)) continue;
+    const loc = readyPose(r);
+    if (!loc) continue;
+    const floor = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
+    if (!floor) continue;
+    if (!buildingTransformFor(floor)) continue;
+    createLiveMarker(r);
+  }
+  updateLiveHud();
+}
+function handleLiveMessage(msg) {
+  const t = msg.type;
+  if (t === 'heartbeat' && msg.data && msg.data.pingId) {
+    if (liveState.ws && liveState.ws.readyState === 1) liveState.ws.send(JSON.stringify({ type: 'pong', pingId: msg.data.pingId }));
+    return;
+  }
+  if (t === 'server.ready') { liveState.connected = true; liveState.reconnectDelay = 1000; }
+  if (t === 'snapshot.part' && msg.data && msg.data.entities) {
+    const e = msg.data.entities;
+    liveState.floors.clear();
+    liveState.robots.clear();
+    (e.floors || []).forEach((f) => liveState.floors.set(f.sceneId + '/' + f.floorKey, f));
+    (e.robots || []).forEach((r) => liveState.robots.set(r.robotId, r));
+  }
+  if (t === 'snapshot.end') refreshLiveMarkers();
+  if (t === 'state.delta' && msg.data) {
+    const up = msg.data.upserts || {}, rm = msg.data.removes || {};
+    (up.floors || []).forEach((f) => liveState.floors.set(f.sceneId + '/' + f.floorKey, f));
+    (up.robots || []).forEach((r) => liveState.robots.set(r.robotId, r));
+    (rm.robots || []).forEach((id) => liveState.robots.delete(id));
+    refreshLiveMarkers();
+  }
+  if (t === 'error' || t === 'auth.error') {
+    console.warn('[twin] 数据流错误:', JSON.stringify(msg).slice(0, 300));
+    if (liveState.ws) liveState.ws.close();
+  }
+}
+function connectLive() {
+  try {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.host}/twin`);
+    liveState.ws = ws;
+    ws.onopen = () => console.log('[twin] 已连接本服务中继');
+    ws.onmessage = (ev) => { try { handleLiveMessage(JSON.parse(ev.data)); } catch (e) { console.warn('[twin] 消息解析失败', e); } };
+    ws.onclose = () => {
+      liveState.connected = false;
+      liveHud.textContent = '实时机器人：重连中…';
+      setTimeout(connectLive, Math.min(liveState.reconnectDelay, 30000));
+      liveState.reconnectDelay *= 2;
+    };
+    ws.onerror = () => {};
+  } catch (e) {
+    liveHud.textContent = '实时机器人：不可用';
+    console.warn('[twin] 中继连接失败', e);
+  }
+}
+$('tg-live').onchange = (e) => { liveGroup.visible = e.target.checked; };
+connectLive();
+setInterval(refreshLiveMarkers, 2000); // 兜底刷新位置
+
+// ---------- 左侧面板收起 ----------
+$('panel-toggle').onclick = () => {
+  const hidden = document.body.classList.toggle('panel-hidden');
+  $('panel-toggle').textContent = hidden ? '▶' : '◀';
+  setTimeout(() => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }, 400);
+};
+
+// ---------- ECharts 指标面板 ----------
+const chartsState = { inited: false, charts: {} };
+function initCharts() {
+  if (chartsState.inited || !window.echarts) return;
+  chartsState.inited = true;
+  const mk = (id) => { const el = $(id); if (!el) return null; const c = window.echarts.init(el, null, { renderer: 'canvas' }); chartsState.charts[id] = c; return c; };
+  mk('ch-orders');
+  mk('ch-energy');
+  mk('ch-alert');
+  mk('ch-asset');
+  refreshCharts();
+  setInterval(refreshCharts, 3000);
+  window.addEventListener('resize', () => { if ($('charts-panel').classList.contains('show')) Object.values(chartsState.charts).forEach((c) => c.resize()); });
+}
+const envState = { t: 23.4, h: 55, co2: 482, pm: 28 };
+const energyState = { 电: 78, 水: 56, 燃气: 42, 蒸汽: 35, 光伏: 18 };
+const ordersState = { done: 34, todo: 12 };
+const rnd = (a, b) => a + Math.random() * (b - a);
+const walk = (v, lo, hi, step) => Math.min(hi, Math.max(lo, v + rnd(-step, step)));
+function refreshCharts() {
+  if (!chartsState.inited) return;
+  // 人员/车辆
+  const people = [
+    ['pv-staff', 'pp-staff', 271 + Math.floor(Math.random() * 25), 320],
+    ['pv-visit', 'pp-visit', 96 + Math.floor(Math.random() * 30), 320],
+    ['pv-guard', 'pp-guard', 15, 40],
+    ['pv-car', 'pp-car', 78 + Math.floor(Math.random() * 12), 200],
+  ];
+  people.forEach(([vid, pid, val, max]) => {
+    $(vid).textContent = val;
+    $(pid).style.width = (val / max * 100).toFixed(1) + '%';
+  });
+  // 环境
+  envState.t = walk(envState.t, 20, 27, 0.3);
+  envState.h = walk(envState.h, 40, 70, 1.5);
+  envState.co2 = walk(envState.co2, 380, 900, 30);
+  envState.pm = walk(envState.pm, 12, 80, 5);
+  const setEnv = (id, text, cls) => { const el = $(id); el.textContent = text; el.className = 'v ' + cls; };
+  setEnv('ev-temp', envState.t.toFixed(1) + '°C', envState.t > 26 ? 'env-bad' : 'env-ok');
+  setEnv('ev-hum', Math.round(envState.h) + '%', envState.h > 65 || envState.h < 30 ? 'env-warn' : 'env-ok');
+  setEnv('ev-co2', Math.round(envState.co2) + 'ppm', envState.co2 > 800 ? 'env-bad' : envState.co2 > 600 ? 'env-warn' : 'env-ok');
+  setEnv('ev-pm', Math.round(envState.pm) + 'μg/m³', envState.pm > 55 ? 'env-bad' : envState.pm > 35 ? 'env-warn' : 'env-ok');
+  // 工单折线
+  ordersState.done = walk(ordersState.done, 20, 60, 4);
+  ordersState.todo = walk(ordersState.todo, 5, 25, 3);
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00');
+  const o = chartsState.charts['ch-orders'];
+  if (o) o.setOption({
+    backgroundColor: 'transparent',
+    grid: { left: 34, right: 10, top: 14, bottom: 20 },
+    legend: { textStyle: { color: '#8fb8d8', fontSize: 10 }, itemWidth: 12, top: 0 },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: hours, axisLabel: { color: '#5b7a95', fontSize: 9, interval: 3 }, axisLine: { lineStyle: { color: 'rgba(127,212,255,.2)' } } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(127,212,255,.1)' } }, axisLabel: { color: '#5b7a95', fontSize: 9 } },
+    series: [
+      { name: '已处理', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, areaStyle: { opacity: .18 },
+        data: hours.map(() => Math.round(ordersState.done + rnd(-8, 8))) },
+      { name: '待办', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, areaStyle: { opacity: .12 },
+        data: hours.map(() => Math.round(ordersState.todo + rnd(-4, 4))) },
+    ],
+    color: ['#00e5ff', '#ffc84d'],
+  });
+  // 能耗雷达
+  const e = chartsState.charts['ch-energy'];
+  if (e) e.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {},
+    radar: {
+      indicator: Object.keys(energyState).map((k) => ({ name: k, max: 100 })),
+      radius: '62%', center: ['50%', '54%'],
+      axisName: { color: '#8fb8d8', fontSize: 10 },
+      splitLine: { lineStyle: { color: 'rgba(127,212,255,.15)' } },
+      splitArea: { areaStyle: { color: ['rgba(0,229,255,.03)', 'rgba(0,229,255,.06)'] } },
+      axisLine: { lineStyle: { color: 'rgba(127,212,255,.15)' } },
+    },
+    series: [{
+      type: 'radar',
+      data: [{
+        value: Object.keys(energyState).map((k) => (energyState[k] = walk(energyState[k], 10, 95, 3)) && Math.round(energyState[k])),
+        areaStyle: { opacity: .3 },
+        lineStyle: { width: 2 },
+        symbolSize: 3,
+      }],
+    }],
+    color: ['#00e5ff'],
+  });
+  // 安防告警（横向柱状）
+  const a = chartsState.charts['ch-alert'];
+  if (a) a.setOption({
+    backgroundColor: 'transparent',
+    grid: { left: 46, right: 12, top: 8, bottom: 20 },
+    legend: { textStyle: { color: '#8fb8d8', fontSize: 10 }, itemWidth: 12, top: 0 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(127,212,255,.1)' } }, axisLabel: { color: '#5b7a95', fontSize: 9 } },
+    yAxis: { type: 'category', data: ['1号楼', '2号楼', '5号楼', '6号楼', '院区'], axisLabel: { color: '#8fb8d8', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(127,212,255,.2)' } } },
+    series: [
+      { name: '紧急', type: 'bar', stack: 'x', barWidth: 8, data: [3, 1, 2, 0, 1].map((n) => n + (Math.random() < .3 ? 1 : 0)) },
+      { name: '一般', type: 'bar', stack: 'x', barWidth: 8, data: [5, 4, 3, 2, 6].map((n) => Math.max(0, n + Math.floor(rnd(-1, 1)))) },
+    ],
+    color: ['#ff6b6b', '#ffc84d'],
+  });
+  // 资产分类（纵向柱状）
+  const s = chartsState.charts['ch-asset'];
+  if (s) s.setOption({
+    backgroundColor: 'transparent',
+    grid: { left: 34, right: 10, top: 16, bottom: 20 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    xAxis: { type: 'category', data: ['建筑', '设备', '电梯', '机器人', '车辆'], axisLabel: { color: '#8fb8d8', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(127,212,255,.2)' } } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(127,212,255,.1)' } }, axisLabel: { color: '#5b7a95', fontSize: 9 } },
+    series: [{
+      type: 'bar', barWidth: 14,
+      data: [52, 1268, 27, 16, 45].map((n) => Math.round(n + rnd(-n * .02, n * .02))),
+      itemStyle: { borderRadius: [3, 3, 0, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#00e5ff' }, { offset: 1, color: 'rgba(43,127,212,.3)' }]) },
+      label: { show: true, position: 'top', color: '#cfe0f2', fontSize: 9 },
+    }],
+  });
+}
+$('charts-btn').onclick = () => {
+  const panel = $('charts-panel');
+  const show = panel.classList.toggle('show');
+  $('charts-btn').classList.toggle('on', show);
+  $('charts-btn').textContent = show ? '收起指标' : '指标面板';
+  if (show) {
+    initCharts();
+    setTimeout(() => Object.values(chartsState.charts).forEach((c) => c.resize()), 450);
+  }
+};
+
+// ---------- 天地图底图 + 周边建筑白膜 ----------
+const TIANDITU = {
+  token: '', // 天地图浏览器端密钥（console.tianditu.gov.cn 申请后填入）
+  center: { lon: 120.086444, lat: 30.328250 }, // 浙江医院三墩院区（高德公交站坐标，可校准）
+  rotationDeg: 0, // 模型 +Z 与正北的夹角（正北=模型+Z 时为 0，需目视校准）
+};
+const mapGroup = new THREE.Group();
+mapGroup.visible = false;
+scene.add(mapGroup);
+let mapReady = false;
+async function loadTiandituGround() {
+  if (mapReady) return;
+  if (!TIANDITU.token) {
+    console.warn('[天地图] 未配置 token，请在 index.html 的 TIANDITU 配置中填入浏览器端密钥');
+    $('tg-map').checked = false;
+    $('tg-map').title = '未配置天地图 token（在 index.html TIANDITU 配置中填入）';
+    return;
+  }
+  const z = 18, TILE = 256, CANVAS = 2048; // 约 1223m 覆盖，支持 1km 视野
+  const R = 6378137;
+  const lonToX = (lon) => ((lon + 180) / 360) * 2 * Math.PI * R;
+  const latToY = (lat) => (1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) / 2 * 2 * Math.PI * R;
+  const cx = lonToX(TIANDITU.center.lon), cy = latToY(TIANDITU.center.lat);
+  const mPerPx = (2 * Math.PI * R) / (TILE * Math.pow(2, z));
+  const spanM = CANVAS * mPerPx; // 约 916m
+  const n = CANVAS / TILE; // 每边瓦片数
+  const t0x = Math.floor((cx - spanM / 2) / (TILE * mPerPx));
+  const t0y = Math.floor((cy - spanM / 2) / (TILE * mPerPx));
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = CANVAS;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#c8d0d8';
+  ctx.fillRect(0, 0, CANVAS, CANVAS);
+  const jobs = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      jobs.push((async () => {
+        const tx = t0x + i, ty = t0y + j;
+        try {
+          const res = await fetch(`/tdt/img_w/${z}/${tx}/${ty}?tk=${encodeURIComponent(TIANDITU.token)}`);
+          if (!res.ok) throw new Error('http ' + res.status);
+          const blob = await res.blob();
+          const bmp = await createImageBitmap(blob);
+          ctx.drawImage(bmp, i * TILE, j * TILE, TILE, TILE);
+          bmp.close();
+        } catch (e) {
+          console.warn('[天地图] 瓦片加载失败', tx, ty, e.message);
+        }
+      })());
+    }
+  }
+  await Promise.all(jobs);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mapGeo = new THREE.PlaneGeometry(spanM, spanM);
+  const mapMat = new THREE.MeshLambertMaterial({ map: tex, color: 0xffffff });
+  const plane = new THREE.Mesh(mapGeo, mapMat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.y = -0.06;
+  plane.receiveShadow = true;
+  mapGroup.add(plane);
+  // 旋转对齐正北（rotationDeg=0 时地图北=模型+Z）
+  mapGroup.rotation.y = (TIANDITU.rotationDeg * Math.PI) / 180;
+  mapReady = true;
+  mapGroup.visible = $('tg-map').checked;
+  if (mapGroup.visible) groundGroup.visible = false;
+  console.log('[天地图] 底图加载完成', spanM.toFixed(0) + 'm 范围');
+}
+$('tg-map').onchange = (e) => {
+  if (e.target.checked) {
+    if (!mapReady) loadTiandituGround();
+    else { mapGroup.visible = true; groundGroup.visible = false; }
+  } else {
+    mapGroup.visible = false;
+    groundGroup.visible = true;
+  }
+};
+if (TIANDITU.token) {
+  $('tg-map').checked = true;
+  loadTiandituGround();
+}
+
+// 周边 300m 建筑白膜（模拟数据，环带 170~320m）
+const surroundGroup = new THREE.Group();
+scene.add(surroundGroup);
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function buildSurrounding() {
+  const rnd = mulberry32(20261113);
+  const placed = [];
+  const total = 85;
+  let placedCount = 0;
+  for (let tries = 0; tries < 600 && placedCount < total; tries++) {
+    const ang = rnd() * Math.PI * 2;
+    const dist = 170 + rnd() * 150; // 环带 170~320m（避开院区主体）
+    const cx = Math.cos(ang) * dist, cz = Math.sin(ang) * dist;
+    const w = 16 + rnd() * 32, d = 12 + rnd() * 24;
+    let ok = true;
+    for (const p of placed) {
+      if (Math.abs(p.x - cx) < (p.w + w) / 2 + 6 && Math.abs(p.z - cz) < (p.d + d) / 2 + 6) { ok = false; break; }
+    }
+    if (!ok) continue;
+    placed.push({ x: cx, z: cz, w, d });
+    placedCount++;
+    const high = rnd() < 0.3;
+    const h = high ? 24 + rnd() * 42 : 9 + rnd() * 18;
+    const floors = Math.max(2, Math.round(h / 3.8));
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, map: floorTex(floors) });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(cx, h / 2, cz);
+    mesh.rotation.y = (rnd() - 0.5) * 0.35;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    surroundGroup.add(mesh);
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x8b96a2, transparent: true, opacity: 0.4 })
+    );
+    edges.position.copy(mesh.position);
+    edges.rotation.copy(mesh.rotation);
+    surroundGroup.add(edges);
+  }
+  console.log('[周边白膜] 生成模拟建筑', placedCount, '栋');
+}
+buildSurrounding();
+$('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
+
 // ---------- 渲染循环 ----------
 const timer = new THREE.Timer();
 function animate() {
@@ -1556,16 +2123,24 @@ function animate() {
     if (camera.position.distanceTo(flyTarget.pos) < 2) flyTarget = null;
   }
   if (cruiseState.on) {
+    cruiseState.ease = Math.min(1, cruiseState.ease + dt / 1.6);
+    const k = cruiseState.ease < 1 ? cruiseState.ease * cruiseState.ease * (3 - 2 * cruiseState.ease) : 1;
     cruiseState.angle += CRUISE_SPEED * dt;
-    const t = controls.target;
-    camera.position.set(
-      t.x + cruiseState.r * Math.cos(cruiseState.angle),
-      t.y + cruiseState.h,
-      t.z - cruiseState.r * Math.sin(cruiseState.angle)
+    const c = cruiseState.center;
+    cruiseTV.set(
+      c.x + cruiseState.r * Math.cos(cruiseState.angle),
+      cruiseState.h,
+      c.z - cruiseState.r * Math.sin(cruiseState.angle)
     );
-    camera.lookAt(t);
+    if (k < 1) camera.position.lerpVectors(cruiseState.startPos, cruiseTV, k);
+    else camera.position.copy(cruiseTV);
+    camera.lookAt(c.x, c.y + cruiseState.h * 0.22, c.z);
   }
   controls.update();
+  // 视角平面不得低于水平面
+  const MIN_VIEW_Y = 0.6;
+  if (controls.target.y < MIN_VIEW_Y) controls.target.y = MIN_VIEW_Y;
+  if (camera.position.y < MIN_VIEW_Y) camera.position.y = MIN_VIEW_Y;
   renderer.render(scene, camera);
 }
 animate();

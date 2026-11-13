@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>机器人 WS 实时监控</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0b1220; color: #cfe0f2; font-family: "Consolas", "Microsoft YaHei", monospace; font-size: 13px; }
+  #wrap { display: flex; flex-direction: column; height: 100%; }
+  header { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: rgba(9,15,28,.9); border-bottom: 1px solid rgba(0,188,212,.25); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; color: #7fd4ff; letter-spacing: 1px; }
+  .st { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .st .pill { background: rgba(0,188,212,.1); border: 1px solid rgba(0,188,212,.3); border-radius: 10px; padding: 2px 10px; font-size: 12px; }
+  .st .pill b { color: #00e5ff; }
+  #conn-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff6b6b; display: inline-block; margin-right: 5px; }
+  #conn-dot.ok { background: #4cd98a; box-shadow: 0 0 8px #4cd98a; }
+  #main { display: flex; flex: 1; overflow: hidden; }
+  #left { width: 58%; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid rgba(0,188,212,.2); }
+  #right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .sec-h { padding: 6px 12px; font-size: 13px; color: #7fd4ff; border-bottom: 1px solid rgba(0,188,212,.2); background: rgba(9,15,28,.6); display: flex; align-items: center; gap: 8px; }
+  .sec-h .tag { font-size: 11px; color: #5b7a95; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { position: sticky; top: 0; background: #0e1828; color: #8fb8d8; font-weight: 600; text-align: left; padding: 5px 8px; border-bottom: 1px solid rgba(0,188,212,.3); z-index: 2; }
+  tbody td { padding: 4px 8px; border-bottom: 1px solid rgba(127,212,255,.08); white-space: nowrap; }
+  tbody tr:hover { background: rgba(0,188,212,.06); }
+  .scroll { overflow-y: auto; flex: 1; }
+  .ok { color: #4cd98a; } .warn { color: #ffc84d; } .bad { color: #ff6b6b; } .dim { color: #5b7a95; }
+  #log { flex: 1; overflow-y: auto; padding: 6px 10px; font-size: 12px; line-height: 1.7; }
+  #log .ln { border-bottom: 1px dotted rgba(127,212,255,.06); padding: 1px 0; word-break: break-all; }
+  #log .t { color: #5b7a95; margin-right: 8px; }
+  #log .type { display: inline-block; min-width: 92px; }
+  #log .type.delta { color: #00e5ff; }
+  #log .type.snap { color: #7fd4ff; }
+  #log .type.ready { color: #4cd98a; }
+  #log .type.hb { color: #8fb8d8; }
+  #log .type.err { color: #ff6b6b; }
+  #log .raw { color: #7a8fa5; font-size: 11px; display: none; margin: 2px 0 4px 12px; white-space: pre-wrap; }
+  #log .ln.open .raw { display: block; }
+  .toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: rgba(9,15,28,.7); border-top: 1px solid rgba(0,188,212,.2); flex-wrap: wrap; font-size: 12px; }
+  .toolbar button { background: rgba(0,188,212,.12); border: 1px solid rgba(0,188,212,.35); color: #7fd4ff; border-radius: 8px; padding: 3px 12px; cursor: pointer; font-size: 12px; }
+  .toolbar button.on { background: rgba(0,188,212,.3); }
+  .toolbar label { display: flex; align-items: center; gap: 4px; color: #8fb8d8; cursor: pointer; }
+  details.task-box { padding: 0 10px; }
+  details.task-box summary { cursor: pointer; color: #7fd4ff; padding: 6px 0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <h1>机器人 WS 实时监控</h1>
+    <div class="st">
+      <span class="pill"><span id="conn-dot"></span><span id="conn-text">连接中…</span></span>
+      <span class="pill">seq <b id="st-seq">-</b></span>
+      <span class="pill">ready <b id="st-ready">0</b></span>
+      <span class="pill">快照 <b id="st-snap">0</b></span>
+      <span class="pill">delta <b id="st-delta">0</b></span>
+      <span class="pill">心跳 <b id="st-hb">0</b></span>
+      <span class="pill">错误 <b id="st-err">0</b></span>
+      <span class="pill">机器人 <b id="st-robots">0</b></span>
+      <span class="pill">就位 <b id="st-ready2">0</b></span>
+      <span class="pill">任务 <b id="st-tasks">0</b></span>
+      <span class="pill">路径 <b id="st-paths">0</b></span>
+      <span class="pill">楼层 <b id="st-floors">0</b></span>
+    </div>
+  </header>
+  <div id="main">
+    <div id="left">
+      <div class="sec-h">机器人实时状态 <span class="tag" id="tbl-note"></span></div>
+      <div class="scroll">
+        <table>
+          <thead><tr>
+            <th>名称</th><th>型号</th><th>在线</th><th>运行</th><th>电量</th><th>投影</th><th>原因</th><th>楼层</th><th>x</th><th>y</th><th>yaw</th><th>观测时间</th>
+          </tr></thead>
+          <tbody id="robot-tbody"></tbody>
+        </table>
+      </div>
+      <details class="task-box">
+        <summary>业务任务（运行中）</summary>
+        <div class="scroll" style="max-height:180px">
+          <table>
+            <thead><tr><th>intakeId</th><th>描述</th><th>状态</th><th>机器人</th><th>阶段</th><th>到访点</th></tr></thead>
+            <tbody id="task-tbody"></tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+    <div id="right">
+      <div class="sec-h">推送消息日志 <span class="tag">点击行展开原始 JSON</span></div>
+      <div id="log"></div>
+      <div class="toolbar">
+        <button id="btn-pause">暂停</button>
+        <button id="btn-clear">清空</button>
+        <label><input type="checkbox" id="ck-scroll" checked> 自动滚动</label>
+        <label><input type="checkbox" class="ck-type" data-t="delta" checked> delta</label>
+        <label><input type="checkbox" class="ck-type" data-t="snap" checked> 快照</label>
+        <label><input type="checkbox" class="ck-type" data-t="ready" checked> ready</label>
+        <label><input type="checkbox" class="ck-type" data-t="hb" checked> 心跳</label>
+        <label><input type="checkbox" class="ck-type" data-t="err" checked> 错误</label>
+        <span class="dim" id="log-count">0 条</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const state = {
+  ws: null, connected: false, seq: -1,
+  robots: new Map(), floors: new Map(), tasks: new Map(), paths: new Map(),
+  counts: { ready: 0, snap: 0, delta: 0, hb: 0, err: 0 },
+  paused: false, logCount: 0,
+};
+const MAX_LOG = 600;
+
+function fmtTime() {
+  const d = new Date();
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')
+    + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+function setConn(ok, text) {
+  state.connected = ok;
+  $('conn-dot').className = ok ? 'ok' : '';
+  $('conn-text').textContent = text;
+}
+function addLog(type, cls, summary, raw) {
+  state.logCount++;
+  $('log-count').textContent = state.logCount + ' 条';
+  const el = document.createElement('div');
+  el.className = 'ln' + (cls ? ' ' + cls : '');
+  el.innerHTML = '<span class="t">' + fmtTime() + '</span><span class="type ' + cls + '">' + type + '</span>' + summary + (raw !== undefined ? '<div class="raw"></div>' : '');
+  if (raw !== undefined) el.querySelector('.raw').textContent = raw;
+  el.onclick = () => el.classList.toggle('open');
+  const log = $('log');
+  log.appendChild(el);
+  while (log.children.length > MAX_LOG) log.removeChild(log.firstChild);
+  if ($('ck-scroll').checked) log.scrollTop = log.scrollHeight;
+}
+function filterEnabled(cls) {
+  const ck = document.querySelector('.ck-type[data-t="' + cls + '"]');
+  return ck && ck.checked;
+}
+function logMsg(type, cls, summary, raw) {
+  if (state.paused || !filterEnabled(cls)) return;
+  addLog(type, cls, summary, raw);
+}
+function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function shortTime(s) { return s ? s.slice(11, 19) : '-'; }
+
+function readyPose(r) {
+  return (r.cadLocations || []).find((l) => l.projectionStatus === 'ready' && l.cadPose) || null;
+}
+function renderRobots() {
+  const tb = $('robot-tbody');
+  const rows = [];
+  let ready = 0;
+  for (const r of state.robots.values()) {
+    const loc = readyPose(r);
+    if (loc) ready++;
+    const p = loc ? loc.cadPose : null;
+    const st = r.state || {};
+    rows.push('<tr>'
+      + '<td>' + esc(r.name || '-') + '</td>'
+      + '<td>' + esc(r.model || '-') + '</td>'
+      + '<td class="' + (st.onlineStatus === 'online' ? 'ok' : st.onlineStatus === 'offline' ? 'bad' : 'dim') + '">' + esc(st.onlineStatus || '?') + '</td>'
+      + '<td>' + esc(st.operationStatus || '-') + '</td>'
+      + '<td>' + (st.batteryPercent == null ? '-' : st.batteryPercent + '%') + '</td>'
+      + '<td class="' + ((loc ? 'ok' : loc === undefined ? 'dim' : 'warn')) + '">' + esc(loc ? loc.projectionStatus : '-') + '</td>'
+      + '<td class="dim">' + esc((r.cadLocations || []).map((l) => l.reasonCode || '').join(', ') || '-') + '</td>'
+      + '<td>' + esc(loc && loc.floorKey ? loc.floorKey : '-') + '</td>'
+      + '<td>' + (p ? p.x.toFixed(1) : '-') + '</td>'
+      + '<td>' + (p ? p.y.toFixed(1) : '-') + '</td>'
+      + '<td>' + (p ? p.yawRad.toFixed(2) : '-') + '</td>'
+      + '<td class="dim">' + shortTime(st.observedAt) + '</td>'
+      + '</tr>');
+  }
+  tb.innerHTML = rows.join('');
+  $('st-robots').textContent = state.robots.size;
+  $('st-ready2').textContent = ready;
+  $('tbl-note').textContent = state.robots.size + ' 台 / 就位 ' + ready;
+}
+function renderTasks() {
+  const tb = $('task-tbody');
+  const running = Array.from(state.tasks.values()).filter((t) => t.status === 'running');
+  tb.innerHTML = running.slice(0, 12).map((t) => {
+    const ex = t.execution || {};
+    return '<tr>'
+      + '<td>' + esc(t.intakeId) + '</td>'
+      + '<td>' + esc(t.description || '-') + '</td>'
+      + '<td class="ok">' + esc(t.status) + '</td>'
+      + '<td>' + esc(t.robotSn || t.robotId || '-') + '</td>'
+      + '<td>' + esc(ex.phase || '-') + '</td>'
+      + '<td>' + esc(ex.currentStepName || '-') + '</td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="6" class="dim">无运行中任务</td></tr>';
+}
+
+function handleMsg(msg) {
+  const t = msg.type;
+  state.seq = msg.seq != null ? msg.seq : state.seq;
+  $('st-seq').textContent = msg.seq != null ? msg.seq : '-';
+  if (t === 'heartbeat' && msg.data && msg.data.pingId) {
+    state.counts.hb++; $('st-hb').textContent = state.counts.hb;
+    if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type: 'pong', pingId: msg.data.pingId }));
+    logMsg('heartbeat', 'hb', 'seq=' + msg.seq + ' pingId=' + msg.data.pingId + '（已回 pong）');
+    return;
+  }
+  if (t === 'server.ready') {
+    state.counts.ready++; $('st-ready').textContent = state.counts.ready;
+    setConn(true, '已连接 · 快照就绪');
+    logMsg('server.ready', 'ready', '心跳 ' + (msg.data.heartbeatIntervalSeconds || '?') + 's · 机器人推送间隔 ' + (msg.data.recommendedRobotIntervalMs || '?') + 'ms', JSON.stringify(msg, null, 1));
+    return;
+  }
+  if (t === 'snapshot.part' && msg.data && msg.data.entities) {
+    state.counts.snap++; $('st-snap').textContent = state.counts.snap;
+    const e = msg.data.entities;
+    state.robots.clear(); state.floors.clear(); state.tasks.clear(); state.paths.clear();
+    (e.robots || []).forEach((r) => state.robots.set(r.robotId, r));
+    (e.floors || []).forEach((f) => state.floors.set(f.sceneId + '/' + f.floorKey, f));
+    (e.tasks || []).forEach((x) => state.tasks.set(x.intakeId, x));
+    (e.paths || []).forEach((x) => state.paths.set(x.pathId, x));
+    $('st-floors').textContent = state.floors.size;
+    $('st-tasks').textContent = state.tasks.size;
+    $('st-paths').textContent = state.paths.size;
+    renderRobots(); renderTasks();
+    const c = msg.data && msg.data.counts || {};
+    logMsg('snapshot.part', 'snap', 'part ' + msg.data.partIndex + ' · robots=' + (e.robots || []).length + ' floors=' + (e.floors || []).length + ' tasks=' + (e.tasks || []).length + ' paths=' + (e.paths || []).length + ' elevators=' + (e.elevators || []).length);
+    return;
+  }
+  if (t === 'snapshot.begin' || t === 'snapshot.end') {
+    logMsg(t, 'snap', (t === 'snapshot.begin' ? '快照开始' : '快照结束') + ' · snapshotId=' + (msg.data.snapshotId || '?'));
+    return;
+  }
+  if (t === 'state.delta' && msg.data) {
+    state.counts.delta++; $('st-delta').textContent = state.counts.delta;
+    const up = msg.data.upserts || {}, rm = msg.data.removes || {};
+    const ru = up.robots || [], rrm = rm.robots || [];
+    const fu = up.floors || [], tu = up.tasks || [], pu = up.paths || [];
+    ru.forEach((r) => state.robots.set(r.robotId, r));
+    rrm.forEach((id) => state.robots.delete(id));
+    fu.forEach((f) => state.floors.set(f.sceneId + '/' + f.floorKey, f));
+    tu.forEach((x) => state.tasks.set(x.intakeId, x));
+    pu.forEach((x) => state.paths.set(x.pathId, x));
+    renderRobots(); renderTasks();
+    let sum = '';
+    if (ru.length) sum += ' 机器人更新: ' + ru.map((r) => {
+      const loc = readyPose(r);
+      const p = loc ? loc.cadPose : null;
+      return r.name + (p ? ' → ' + (loc.floorKey || '?') + ' x=' + p.x.toFixed(1) + ' y=' + p.y.toFixed(1) + ' yaw=' + p.yawRad.toFixed(2) : ' → ' + ((r.cadLocations || []).map((l) => l.projectionStatus).join(',') || '无位姿'));
+    }).join('; ') + ';';
+    if (rrm.length) sum += ' 移除: ' + rrm.join(',') + ';';
+    if (tu.length) sum += ' 任务更新: ' + tu.map((x) => x.intakeId + '/' + x.status).join(',') + ';';
+    if (pu.length) sum += ' 路径更新: ' + pu.map((x) => x.pathId + '/' + x.status).join(',') + ';';
+    logMsg('state.delta', 'delta', 'seq=' + msg.seq + sum, ru.length + tu.length + pu.length ? JSON.stringify(msg) : undefined);
+    return;
+  }
+  if (t === 'error' || t === 'auth.error') {
+    state.counts.err++; $('st-err').textContent = state.counts.err;
+    setConn(false, '错误/已断开');
+    logMsg(t, 'err', JSON.stringify(msg.data || msg).slice(0, 300));
+    return;
+  }
+  logMsg(t || 'unknown', 'hb', JSON.stringify(msg).slice(0, 200));
+}
+
+function connect() {
+  try {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(proto + '//' + location.host + '/twin');
+    state.ws = ws;
+    ws.onopen = () => setConn(true, '已连接中继，等待快照…');
+    ws.onmessage = (ev) => { try { handleMsg(JSON.parse(ev.data)); } catch (e) { logMsg('parse', 'err', '解析失败: ' + e.message); } };
+    ws.onclose = () => { setConn(false, '已断开，2 秒后重连…'); setTimeout(connect, 2000); };
+    ws.onerror = () => {};
+  } catch (e) {
+    setConn(false, '连接失败: ' + e.message);
+    setTimeout(connect, 3000);
+  }
+}
+
+$('btn-pause').onclick = () => {
+  state.paused = !state.paused;
+  $('btn-pause').textContent = state.paused ? '继续' : '暂停';
+  $('btn-pause').classList.toggle('on', state.paused);
+};
+$('btn-clear').onclick = () => { $('log').innerHTML = ''; };
+document.querySelectorAll('.ck-type').forEach((ck) => { ck.onchange = () => {}; });
+connect();
+</script>
+</body>
+</html>

@@ -11,3 +11,4 @@ _*.zip
 digital-twin/assets/trees-debug.png
 __MACOSX/
 .DS_Store
+digital-twin/twin-relay.js
