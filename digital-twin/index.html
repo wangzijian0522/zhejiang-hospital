@@ -143,7 +143,7 @@
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
     <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
     <label><input type="checkbox" id="tg-surround" checked> 周边白膜</label>
-    <label><input type="checkbox" id="tg-map" title="需配置天地图 token"> 天地图底图</label>
+    <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
   </div>
   <div class="timebox">
     <div class="row"><b>时间 / 太阳</b><span id="time-val">12:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime"> 实时</label></div>
@@ -287,6 +287,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { BUILDINGS, IMG, UNLOCATED, NOTES } from './data/buildings.js';
+import { SURROUNDINGS } from './data/surroundings.js';
 
 // GLB 模型使用 Draco 压缩，统一注入解码器
 const dracoLoader = new DRACOLoader();
@@ -330,10 +331,12 @@ controls.mouseButtons = {
 
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 
-const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c6d4, 0.95);
+const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c6d4, 1.15);
 scene.add(hemi);
-const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+const sunLight = new THREE.DirectionalLight(0xfff6e8, 2.4);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(4096, 4096);
 sunLight.shadow.camera.near = 120;
@@ -563,6 +566,11 @@ const WEATHER = {
   snow:   { dim: 0.6, blend: 0.6, sky: 0xb9c4cf, fogNear: 380, fogFar: 1400, tint: 0xe3e9ee },
   fog:    { dim: 0.55, blend: 0.92, sky: 0xaeb6bd, fogNear: 50, fogFar: 520, tint: 0xb8bec4 },
 };
+// 预生成颜色对象，避免逐帧 new THREE.Color
+for (const w of Object.values(WEATHER)) {
+  w.skyColor = new THREE.Color(w.sky);
+  w.tintColor = new THREE.Color(w.tint);
+}
 const weatherState = { mode: 'sunny', flash: 0, flashTimer: 0 };
 scene.fog = new THREE.Fog(0xffffff, 900, 2600);
 
@@ -578,13 +586,13 @@ function setWeather(mode) {
 }
 function updateSkyFog() {
   const w = WEATHER[weatherState.mode];
-  fogCol.copy(skyCol).lerp(new THREE.Color(w.sky), weatherBlend);
+  fogCol.copy(skyCol).lerp(w.skyColor, weatherBlend);
   scene.background.copy(fogCol);
   scene.fog.color.copy(fogCol);
   scene.fog.near = w.fogNear;
   scene.fog.far = w.fogFar;
-  groundMapMat.color.setHex(w.tint);
-  groundPlainMat.color.setHex(w.tint);
+  groundMapMat.color.copy(w.tintColor);
+  groundPlainMat.color.copy(w.tintColor);
   // 天空穹顶与天气融合；白云在晴天/多云显示
   skyDomeMat.uniforms.weatherCol.value.set(w.sky);
   skyDomeMat.uniforms.weatherBlend.value = weatherBlend;
@@ -710,30 +718,33 @@ function updateSnow(dt, cam, t) {
 
 // ---------- 3D 树木 ----------
 const treesGroup = new THREE.Group();
-treesGroup.visible = false; // 写实模型为主视图，树木默认隐藏（可开启）
+treesGroup.visible = document.getElementById('tg-tree').checked;
 scene.add(treesGroup);
 fetch('./data/trees.json').then((r) => r.json()).then(buildTrees).catch((e) => console.warn('树木数据加载失败', e));
 
 function buildTrees(td) {
-  const N = td.length;
-  const trunkGeo = new THREE.CylinderGeometry(0.24, 0.38, 3.6, 6);
-  const canGeo = new THREE.ConeGeometry(2.9, 8, 7);
-  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x7c5c40 }), N);
+  // 总平图上的绿点很密，直接用会变成“森林墙”：抽稀 + 压低树高
+  const step = td.length > 1200 ? 4 : td.length > 600 ? 3 : 2;
+  const list = td.filter((_, i) => i % step === 0);
+  const N = list.length;
+  const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 2.6, 6);
+  const canGeo = new THREE.ConeGeometry(1.9, 5.4, 7);
+  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x7a5a3e }), N);
   const cans = new THREE.InstancedMesh(canGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), N);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
   const col = new THREE.Color();
   const rnd = (a, b) => a + Math.random() * (b - a);
   for (let i = 0; i < N; i++) {
-    const t = td[i], s = t.s;
-    v.set(t.x, 1.8 * s, t.z);
+    const t = list[i], s = Math.min(t.s, 1.35);
+    v.set(t.x, 1.3 * s, t.z);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2);
     sc.setScalar(s);
     m4.compose(v, q, sc);
     trunks.setMatrixAt(i, m4);
-    v.set(t.x, 7 * s, t.z);
+    v.set(t.x, 4.7 * s, t.z);
     m4.compose(v, q, sc);
     cans.setMatrixAt(i, m4);
-    col.setHSL(0.31 + rnd(-0.03, 0.04), 0.45 + rnd(-0.06, 0.06), rnd(0.28, 0.4));
+    col.setHSL(0.30 + rnd(-0.02, 0.03), 0.38 + rnd(-0.05, 0.05), rnd(0.30, 0.40));
     cans.setColorAt(i, col);
   }
   trunks.castShadow = true;
@@ -759,10 +770,10 @@ function floorTex(floors) {
   return t;
 }
 function makeMats(part) {
-  const sided = new THREE.MeshLambertMaterial({ color: 0xffffff, map: floorTex(part.floors) });
-  const top = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const sided = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.92, metalness: 0, map: floorTex(part.floors) });
+  const top = new THREE.MeshStandardMaterial({ color: 0xf6f8fa, roughness: 0.86, metalness: 0 });
   const lined = [sided, sided, top, top, sided, sided];
-  const plainS = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const plainS = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.92, metalness: 0 });
   const plain = [plainS, plainS, top, top, plainS, plainS];
   return { lined, plain, all: [sided, top, plainS] };
 }
@@ -778,21 +789,34 @@ const pickables = [];
 const partMeshes = new Map(); // building -> parts[]
 const allMats = [];
 
-function makeLabel(text, bg = 'rgba(255,255,255,0.9)', fg = '#33404d', scale = 1) {
-  const c = document.createElement('canvas');
+function makeLabel(text, bg = 'rgba(255,255,255,0.94)', fg = '#2b3a4a', scale = 1) {
   const fs = Math.round(42 * scale);
-  const pad = Math.round(26 * scale);
-  const ch = Math.round(60 * scale);
-  const g = c.getContext('2d');
-  g.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
-  const w = Math.ceil(g.measureText(text).width) + pad;
+  const padX = Math.round(28 * scale);
+  const ch = Math.round(62 * scale);
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
+  const w = Math.ceil(probe.measureText(text).width) + padX;
+  const c = document.createElement('canvas');
   c.width = w; c.height = ch;
-  const g2 = c.getContext('2d');
-  g2.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
-  g2.fillStyle = bg; g2.fillRect(0, 0, w, ch);
-  g2.strokeStyle = 'rgba(60,75,90,0.55)'; g2.lineWidth = 2; g2.strokeRect(1, 1, w - 2, ch - 2);
-  g2.fillStyle = fg; g2.textAlign = 'center'; g2.textBaseline = 'middle';
-  g2.fillText(text, w / 2, ch / 2);
+  const g = c.getContext('2d');
+  const r = Math.min(Math.round(11 * scale), ch / 2);
+  g.beginPath();
+  g.moveTo(r, 1);
+  g.arcTo(w - 1, 1, w - 1, ch - 1, r);
+  g.arcTo(w - 1, ch - 1, 1, ch - 1, r);
+  g.arcTo(1, ch - 1, 1, 1, r);
+  g.arcTo(1, 1, w - 1, 1, r);
+  g.closePath();
+  g.fillStyle = bg;
+  g.fill();
+  g.strokeStyle = 'rgba(90,110,130,0.45)';
+  g.lineWidth = 1.5;
+  g.stroke();
+  g.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
+  g.fillStyle = fg;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, w / 2, ch / 2 + scale);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
@@ -851,9 +875,9 @@ for (const b of BUILDINGS) {
   }
 }
 
-// 默认加载精模，白膜隐藏（勾选"白膜"可打开）
-buildingsGroup.visible = false;
-labelsGroup.visible = false;
+// 默认以白膜为主视图（可在左侧切回整体模型）
+buildingsGroup.visible = document.getElementById('tg-white').checked;
+labelsGroup.visible = document.getElementById('tg-white').checked && document.getElementById('tg-label').checked;
 
 // ---------- 加载过渡 ----------
 // 注意：此处位于 $ 助手定义之前，直接用 document.getElementById
@@ -889,6 +913,32 @@ const realBuildings = new Map(); // 楼名 -> mesh（2号楼/6号楼 可点击�
 let realLoaded = false;
 let realLoading = false;
 let overviewCam = null;
+// 整体.glb 中这栋楼的导出节点名是 "001"（与 /models/models/2号楼.glb 同一栋）
+const REAL_BUILDING_ALIASES = { '001': '2号楼' };
+// 只有 2号楼/6号楼 有可分层的独立 GLB；不能复用 realBuildings（那里还注册了其它楼栋给实时机器人用）
+const splitBuildings = new Map();
+
+// 白膜视图 = 精模/实时机器人隐藏。选中建筑/透视是临时模式，退出时恢复之前的开关状态
+let viewSnapshot = null;
+function showWhiteModel() {
+  if (!viewSnapshot) viewSnapshot = { real: $('tg-real').checked, white: $('tg-white').checked };
+  realGroup.visible = false;
+  liveGroup.visible = false;
+  buildingsGroup.visible = true;
+  labelsGroup.visible = $('tg-label').checked;
+}
+// 从白膜/透视模式回到「按左侧开关显示」
+function restoreView() {
+  if (viewSnapshot) {
+    $('tg-real').checked = viewSnapshot.real;
+    $('tg-white').checked = viewSnapshot.white;
+    viewSnapshot = null;
+  }
+  realGroup.visible = $('tg-real').checked && realLoaded;
+  liveGroup.visible = $('tg-live').checked;
+  buildingsGroup.visible = $('tg-white').checked;
+  labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
+}
 let campusFocus = null; // 医院主体中心（楼群面积加权）
 let campusRadius = 120;
 
@@ -936,6 +986,13 @@ function loadRealModel() {
         o.traverse((c) => { if (c.isMesh) c.userData.buildingName = o.name; });
         realBuildings.set(o.name, o);
       }
+      // 分层视图只认 2号楼/6号楼（GLTFLoader 对只有子节点的节点给的是 Object3D，不能用 isGroup 判断）
+      const splitName = REAL_BUILDING_ALIASES[o.name] || o.name;
+      if (splitName === '2号楼' || splitName === '6号楼') {
+        o.userData.buildingName = splitName;
+        o.traverse((c) => { if (c.isMesh) c.userData.buildingName = splitName; });
+        splitBuildings.set(splitName, o);
+      }
     });
     realGroup.add(obj);
     realLoaded = true;
@@ -961,9 +1018,10 @@ function loadRealModel() {
   }, (e) => {
     console.warn('整体模型加载失败，回退显示白膜', e);
     realLoading = false;
-    document.getElementById('tg-real').checked = false;
+    $('tg-real').checked = false;
+    $('tg-white').checked = true;
     buildingsGroup.visible = true;
-    labelsGroup.visible = true;
+    labelsGroup.visible = $('tg-label').checked;
     hideLoader();
   });
 }
@@ -1082,23 +1140,31 @@ async function enterFloorMode(name) {
     const { layers, bandH } = await splitBuilding(gltf.scene, n);
     floorState.layers = layers;
     floorState.bandH = bandH;
-    // 居中放置
+    // 先归零再取局部包围盒：层几何顶点自带模型世界坐标，标签必须按局部坐标挂到层上
+    floorGroup.position.set(0, 0, 0);
+    floorGroup.updateMatrixWorld(true);
+    const layerBoxes = layers.map((l) => new THREE.Box3().setFromObject(l));
     const b = new THREE.Box3();
-    layers.forEach((l) => b.expandByObject(l));
+    layerBoxes.forEach((bb) => b.union(bb));
     floorGroup.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
-    // 楼层标签
+    floorGroup.updateMatrixWorld(true);
+    // 相机框选：用居中后的世界包围盒，模型导出原点不一定在建筑中心；
+    // 展开后总高度 = 原高 + 层间展开量，否则高层建筑会被裁切
+    const fbox = b.clone().translate(floorGroup.position);
+    const fs = fbox.getSize(new THREE.Vector3());
+    const explodedH = fs.y + (layers.length - 1) * bandH * 1.6 * 0.6;
+    const ctr = fbox.getCenter(new THREE.Vector3());
+    ctr.y = fbox.min.y + explodedH / 2;
+    const rad = Math.max(Math.max(fs.x, fs.z), explodedH) * 0.8;
+    // 楼层标签（位置用居中前的局部包围盒，避免被 floorGroup 偏移叠加两次）
     for (let i = 0; i < layers.length; i++) {
-      const lb = makeLabel((i + 1) + 'F');
-      const lbB = new THREE.Box3().setFromObject(layers[i]);
+      const lbB = layerBoxes[i];
+      if (lbB.isEmpty()) continue;
+      const lb = makeLabel((i + 1) + 'F', undefined, undefined, 0.5);
       lb.position.set(lbB.max.x + 2.5, (lbB.min.y + lbB.max.y) / 2, (lbB.min.z + lbB.max.z) / 2);
       layers[i].add(lb);
     }
     floorGroup.visible = true;
-    // 相机框选
-    const fbox = new THREE.Box3();
-    layers.forEach((l) => fbox.expandByObject(l));
-    const ctr = fbox.getCenter(new THREE.Vector3());
-    const rad = Math.max(fbox.getSize(new THREE.Vector3()).length() * 0.55, 15);
     flyToPos(
       new THREE.Vector3(ctr.x + rad * 1.1, ctr.y + rad * 0.9, ctr.z + rad * 1.4),
       ctr
@@ -1117,6 +1183,11 @@ function exitFloorMode() {
   if (!floorState.active) return;
   floorState.active = false;
   floorGroup.visible = false;
+  // 分层几何体每次进入都会重建，退出时必须释放，否则反复进入会持续占用显存
+  floorGroup.traverse((o) => {
+    if (o.isMesh) o.geometry.dispose();
+    if (o.isSprite) { o.material.map?.dispose(); o.material.dispose(); }
+  });
   while (floorGroup.children.length) floorGroup.remove(floorGroup.children[0]);
   floorState.layers = [];
   realGroup.visible = $('tg-real').checked && realLoaded;
@@ -1372,11 +1443,9 @@ function applyXray(on) {
   if (on) {
     setHighlight(null);
     syncList();
-    buildingsGroup.visible = true; // 透视需要白膜楼体
-    labelsGroup.visible = true;
+    showWhiteModel(); // 透视需要白膜楼体，且必须隐藏精模，否则精模墙体挡住内部
   } else {
-    buildingsGroup.visible = $('tg-white').checked;
-    labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
+    restoreView();
   }
   for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
   const btn = $('xray-btn');
@@ -1447,16 +1516,29 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let downPos = null, selected = null;
 
+// 只在当前可见的那套模型上做拾取：隐藏的白膜/精模仍在场景里，
+// 不判断可见性会让隐藏模型挡住对可见模型的点击。
+function pickSplitBuilding() {
+  if (!realLoaded || !realGroup.visible) return null;
+  return raycaster.intersectObjects([...splitBuildings.values()], true)[0] || null;
+}
+function pickWhiteBuilding() {
+  if (!buildingsGroup.visible) return null;
+  return raycaster.intersectObjects(pickables, false)[0] || null;
+}
+
 const hlMat = new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffc107, emissiveIntensity: 0.35 });
 const hlPlain = [hlMat, hlMat, hlMat, hlMat, hlMat, hlMat];
 
 function setHighlight(building) {
-  if (selected) for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
-  selected = building;
+  const prev = selected;
+  selected = building; // 先切换，refreshMeshMaterial 才能正确判断高亮归属
+  if (prev) for (const m of partMeshes.get(prev.id) || []) refreshMeshMaterial(m);
   if (selected) {
-    buildingsGroup.visible = true; // 选中建筑时显示白膜
-    labelsGroup.visible = true;
+    showWhiteModel(); // 选中建筑时显示白膜并隐藏精模，避免两套模型重叠
     for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
+  } else if (!xrayState.on) {
+    restoreView();
   }
 }
 
@@ -1471,7 +1553,28 @@ function flyTo(building) {
 let flyTarget = null;
 
 renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
-// 楼宇不响应点击事件（仅侧栏列表可查看详情）
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (floorState.active) return;
+  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  renderer.domElement.style.cursor = (pickSplitBuilding() || pickWhiteBuilding()) ? 'pointer' : '';
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
+  if (floorState.active) return; // 分层模式下不响应场景点击
+  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  const bHit = pickSplitBuilding();
+  if (bHit) {
+    const nm = bHit.object.userData.buildingName;
+    if (nm) { enterFloorMode(nm); return; }
+  }
+  const hit = pickWhiteBuilding();
+  if (hit) {
+    const b = hit.object.userData.building;
+    if (b) { setHighlight(b); flyTo(b); showDetail(b); syncList(); }
+  } else { setHighlight(null); showDetail(null); syncList(); }
+});
 
 // ---------- 面板 ----------
 const $ = (id) => document.getElementById(id);
@@ -1525,6 +1628,7 @@ $('tg-line').onchange = (e) => {
 };
 $('tg-label').onchange = (e) => { labelsGroup.visible = e.target.checked && $('tg-white').checked; };
 $('tg-white').onchange = (e) => {
+  viewSnapshot = null; // 用户手动切换后不再恢复临时视图
   if (e.target.checked) {
     $('tg-real').checked = false;
     realGroup.visible = false;
@@ -1533,6 +1637,7 @@ $('tg-white').onchange = (e) => {
   labelsGroup.visible = e.target.checked && $('tg-label').checked;
 };
 $('tg-real').onchange = (e) => {
+  viewSnapshot = null; // 用户手动切换后不再恢复临时视图
   if (e.target.checked) {
     $('tg-white').checked = false;
     buildingsGroup.visible = false;
@@ -1567,8 +1672,15 @@ function syncTimeUI() {
   timeSlider.value = timeState.hour;
   timeVal.textContent = fmtTime(timeState.hour);
 }
-timeSlider.oninput = () => { timeState.hour = +timeSlider.value; syncTimeUI(); };
+// 手动接管时间时必须解除「实时」锁定，否则每秒都被真实时间覆盖
+function takeOverTime() {
+  if (!timeRealtime.checked) return;
+  timeRealtime.checked = false;
+  timeSlider.disabled = timePlay.disabled = false;
+}
+timeSlider.oninput = () => { takeOverTime(); timeState.hour = +timeSlider.value; syncTimeUI(); };
 timePlay.onclick = () => {
+  takeOverTime();
   timeState.playing = !timeState.playing;
   timePlay.textContent = timeState.playing ? '⏸ 暂停' : '▶ 播放';
 };
@@ -2017,139 +2129,362 @@ $('charts-btn').onclick = () => {
   }
 };
 
-// ---------- 天地图底图 + 周边建筑白膜 ----------
-const TIANDITU = {
-  token: '', // 天地图浏览器端密钥（console.tianditu.gov.cn 申请后填入）
-  center: { lon: 120.086444, lat: 30.328250 }, // 浙江医院三墩院区（高德公交站坐标，可校准）
-  rotationDeg: 0, // 模型 +Z 与正北的夹角（正北=模型+Z 时为 0，需目视校准）
+// ---------- 天地图卫星底图 ----------
+// 坐标基准：浙江省人民医院朝晖院区（上塘路158号，南应加河北岸）
+// 模型平面 = 总平图坐标系，正北 = 模型 -Z；底图按 Web Mercator 拼贴，南北向按 1/cos(φ) 还原成真实米。
+const BASEMAP = {
+  center: { lon: 120.16375, lat: 30.28745 },
+  rotationDeg: -10,        // 总平图建筑坐标系相对正北的旋转（实测约 10°）
+  offset: { x: 35, z: 10 },// 平移校准（米）：+X 向东、+Z 向南
+  context: { z: 16, canvas: 2048, y: -0.35 },   // ~4.2km 背景，常驻不闪
+  lod: {
+    canvas: 2048, y: -0.15,                     // ~1.05km(z18) / ~2.1km(z17)
+    levels: [{ maxDist: 550, z: 18 }, { maxDist: 1200, z: 17 }],
+  },
+  detail: { canvasW: 4096, y: -0.03, maxOpacity: 0.95, near: 260, far: 520 }, // 总平图贴花
 };
+try {
+  const saved = JSON.parse(localStorage.getItem('dt.basemap') || 'null');
+  if (saved) {
+    if (saved.center) BASEMAP.center = saved.center;
+    if (typeof saved.rotationDeg === 'number') BASEMAP.rotationDeg = saved.rotationDeg;
+    if (saved.offset) BASEMAP.offset = saved.offset;
+  }
+} catch { /* 忽略损坏的本地校准值 */ }
+
 const mapGroup = new THREE.Group();
 mapGroup.visible = false;
 scene.add(mapGroup);
+// 周边建筑体量（按卫星影像标定）与底图共用同一套变换，校准时一起移动
+const surroundGroup = new THREE.Group();
+scene.add(surroundGroup);
 let mapReady = false;
-async function loadTiandituGround() {
-  if (mapReady) return;
-  if (!TIANDITU.token) {
-    console.warn('[天地图] 未配置 token，请在 index.html 的 TIANDITU 配置中填入浏览器端密钥');
-    $('tg-map').checked = false;
-    $('tg-map').title = '未配置天地图 token（在 index.html TIANDITU 配置中填入）';
-    return;
+let detailPlane = null;
+const MAP_TILE = 256, MAP_R = 6378137;
+const MAP_COS = Math.cos((BASEMAP.center.lat * Math.PI) / 180);
+const lonToMerc = (lon) => ((lon + 180) / 360) * 2 * Math.PI * MAP_R;
+const latToMerc = (lat) => (1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) / 2 * 2 * Math.PI * MAP_R;
+
+function applyMapTransform() {
+  mapGroup.position.set(BASEMAP.offset.x, 0, BASEMAP.offset.z);
+  mapGroup.rotation.y = (BASEMAP.rotationDeg * Math.PI) / 180;
+  surroundGroup.position.copy(mapGroup.position);
+  surroundGroup.rotation.y = mapGroup.rotation.y;
+}
+
+// 世界坐标 → 底图局部坐标（东/北，米）
+function worldToGeoLocal(v) {
+  const th = (BASEMAP.rotationDeg * Math.PI) / 180;
+  const dx = v.x - BASEMAP.offset.x, dz = v.z - BASEMAP.offset.z;
+  const lx = dx * Math.cos(th) - dz * Math.sin(th);
+  const lz = dx * Math.sin(th) + dz * Math.cos(th);
+  return { east: lx, north: -lz };
+}
+
+// 瓦片缓存：同一张瓦片在平移/换级时只请求一次
+const tileCache = new Map();
+function fetchTile(z, x, y) {
+  const key = `${z}/${x}/${y}`;
+  if (!tileCache.has(key)) {
+    tileCache.set(key, fetch(`/tdt/img_w/${z}/${x}/${y}`)
+      .then((r) => { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); })
+      .then((blob) => createImageBitmap(blob))
+      .catch((e) => { tileCache.delete(key); throw e; }));
   }
-  const z = 18, TILE = 256, CANVAS = 2048; // 约 1223m 覆盖，支持 1km 视野
-  const R = 6378137;
-  const lonToX = (lon) => ((lon + 180) / 360) * 2 * Math.PI * R;
-  const latToY = (lat) => (1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) / 2 * 2 * Math.PI * R;
-  const cx = lonToX(TIANDITU.center.lon), cy = latToY(TIANDITU.center.lat);
-  const mPerPx = (2 * Math.PI * R) / (TILE * Math.pow(2, z));
-  const spanM = CANVAS * mPerPx; // 约 916m
-  const n = CANVAS / TILE; // 每边瓦片数
-  const t0x = Math.floor((cx - spanM / 2) / (TILE * mPerPx));
-  const t0y = Math.floor((cy - spanM / 2) / (TILE * mPerPx));
+  return tileCache.get(key);
+}
+function trimTileCache() {
+  if (tileCache.size <= 900) return;
+  let drop = 200;
+  for (const key of tileCache.keys()) {
+    if (drop-- <= 0) break;
+    tileCache.delete(key);
+  }
+}
+
+// 把画布四周做成渐变透明，用于与下一级底图无缝叠合
+function featherAlpha(ctx, w, h, px) {
+  if (px <= 0) return;
+  const mask = document.createElement('canvas');
+  mask.width = w; mask.height = h;
+  const m = mask.getContext('2d');
+  m.fillStyle = '#fff';
+  m.fillRect(0, 0, w, h);
+  m.globalCompositeOperation = 'destination-out';
+  const edge = (x0, y0, x1, y1, rx, ry, rw, rh) => {
+    const g = m.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    m.fillStyle = g;
+    m.fillRect(rx, ry, rw, rh);
+  };
+  edge(0, 0, px, 0, 0, 0, px, h);
+  edge(w, 0, w - px, 0, w - px, 0, px, h);
+  edge(0, 0, 0, px, 0, 0, w, px);
+  edge(0, h, 0, h - px, 0, h - px, w, px);
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(mask, 0, 0);
+  ctx.restore();
+}
+
+// 拼一个正方形 Mercator 画布，中心落在 geo（相对 BASEMAP.center 的东/北米）
+async function stitchPlane(z, planeY, canvasPx, geo, featherPx = 0) {
+  const mercPerPx = (2 * Math.PI * MAP_R) / (Math.pow(2, z) * MAP_TILE);
+  const cxM = lonToMerc(BASEMAP.center.lon) + geo.east;
+  const cyM = latToMerc(BASEMAP.center.lat) + geo.north / MAP_COS;
+  const n = canvasPx / MAP_TILE;
+  const px0 = cxM / mercPerPx - canvasPx / 2;
+  const py0 = cyM / mercPerPx - canvasPx / 2;
+  const t0x = Math.floor(px0 / MAP_TILE), t0y = Math.floor(py0 / MAP_TILE);
+  const offX = px0 - t0x * MAP_TILE, offY = py0 - t0y * MAP_TILE;
+
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = CANVAS;
+  canvas.width = canvas.height = canvasPx;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#c8d0d8';
-  ctx.fillRect(0, 0, CANVAS, CANVAS);
+  ctx.fillStyle = '#aab4bd';
+  ctx.fillRect(0, 0, canvasPx, canvasPx);
+  let failed = 0;
   const jobs = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
-      jobs.push((async () => {
-        const tx = t0x + i, ty = t0y + j;
-        try {
-          const res = await fetch(`/tdt/img_w/${z}/${tx}/${ty}?tk=${encodeURIComponent(TIANDITU.token)}`);
-          if (!res.ok) throw new Error('http ' + res.status);
-          const blob = await res.blob();
-          const bmp = await createImageBitmap(blob);
-          ctx.drawImage(bmp, i * TILE, j * TILE, TILE, TILE);
-          bmp.close();
-        } catch (e) {
-          console.warn('[天地图] 瓦片加载失败', tx, ty, e.message);
-        }
-      })());
+      jobs.push(fetchTile(z, t0x + i, t0y + j)
+        .then((bmp) => ctx.drawImage(bmp, i * MAP_TILE - offX, j * MAP_TILE - offY))
+        .catch(() => { failed++; }));
     }
   }
   await Promise.all(jobs);
+  if (failed) console.warn(`[天地图] z${z} 有 ${failed} 块瓦片失败（底色填充）`);
+  trimTileCache();
+  featherAlpha(ctx, canvasPx, canvasPx, featherPx);
+
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mapGeo = new THREE.PlaneGeometry(spanM, spanM);
-  const mapMat = new THREE.MeshLambertMaterial({ map: tex, color: 0xffffff });
-  const plane = new THREE.Mesh(mapGeo, mapMat);
-  plane.rotation.x = -Math.PI / 2;
-  plane.position.y = -0.06;
+  const spanX = canvasPx * mercPerPx;   // 东西向真实米
+  const spanZ = spanX * MAP_COS;        // 南北向真实米（Mercator → 真实）
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(spanX, spanZ),
+    new THREE.MeshLambertMaterial({ map: tex, color: 0xffffff, toneMapped: false })
+  );
+  plane.rotation.x = -Math.PI / 2;      // 纹理上边 = 北 = -Z
+  plane.position.set(geo.east, planeY, -geo.north);
   plane.receiveShadow = true;
-  mapGroup.add(plane);
-  // 旋转对齐正北（rotationDeg=0 时地图北=模型+Z）
-  mapGroup.rotation.y = (TIANDITU.rotationDeg * Math.PI) / 180;
-  mapReady = true;
-  mapGroup.visible = $('tg-map').checked;
-  if (mapGroup.visible) groundGroup.visible = false;
-  console.log('[天地图] 底图加载完成', spanM.toFixed(0) + 'm 范围');
+  return plane;
 }
+
+// 总平图高精贴花：0.137m/px（约为 z18 卫星的 3.8 倍），边缘 25m 羽化，靠近时淡入
+async function loadDetailGround() {
+  const img = await new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error('site-plan 加载失败'));
+    im.src = '/digital-twin/assets/site-plan.jpg';
+  });
+  const cw = BASEMAP.detail.canvasW;
+  const ch = Math.round((cw * img.height) / img.width);
+  const canvas = document.createElement('canvas');
+  canvas.width = cw; canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, cw, ch);
+  // 45m 羽化，和卫星底图自然过渡
+  featherAlpha(ctx, cw, ch, Math.max(8, Math.round(45 * (cw / W))));
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  detailPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(W, H),
+    // 正片叠底：白纸底色不改变卫星影像，只把道路/红线/铺装压暗，避免出现“白纸补丁”
+    new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.MultiplyBlending, premultipliedAlpha: true, toneMapped: false,
+    })
+  );
+  detailPlane.rotation.x = -Math.PI / 2;
+  detailPlane.position.y = BASEMAP.detail.y;
+  detailPlane.renderOrder = 4;
+  detailPlane.receiveShadow = true;
+  detailPlane.visible = false;
+  scene.add(detailPlane);
+}
+
+// LOD 平面：按相机距离切换 z17/z18，目标点移出覆盖范围时重拼
+const lodState = { plane: null, z: 0, east: 0, north: 0, span: 0, busy: false, nextCheck: 0 };
+const CAL_MODE = new URLSearchParams(location.search).has('calib');
+const mapFades = [];
+function fadeTo(mat, to, dur, done) {
+  for (let i = mapFades.length - 1; i >= 0; i--) if (mapFades[i].mat === mat) mapFades.splice(i, 1);
+  mapFades.push({ mat, from: mat.opacity, to, t0: performance.now(), dur, done });
+}
+function updateFades(now) {
+  for (let i = mapFades.length - 1; i >= 0; i--) {
+    const f = mapFades[i];
+    const k = Math.min(1, (now - f.t0) / f.dur);
+    f.mat.opacity = f.from + (f.to - f.from) * k;
+    if (k >= 1) { mapFades.splice(i, 1); if (f.done) f.done(); }
+  }
+}
+
+async function rebuildLod(z, geo, span) {
+  if (lodState.busy) return;
+  lodState.busy = true;
+  try {
+    const plane = await stitchPlane(z, BASEMAP.lod.y, BASEMAP.lod.canvas, geo, Math.round(BASEMAP.lod.canvas * 0.035));
+    plane.material.transparent = true;
+    plane.material.depthWrite = false;
+    plane.material.opacity = 0;
+    plane.renderOrder = 3;
+    const old = lodState.plane;
+    if (old) old.renderOrder = 2;
+    lodState.plane = plane;
+    lodState.z = z;
+    lodState.east = geo.east;
+    lodState.north = geo.north;
+    lodState.span = span;
+    mapGroup.add(plane);
+    fadeTo(plane.material, 1, 450);
+    if (old) {
+      fadeTo(old.material, 0, 450, () => {
+        mapGroup.remove(old);
+        old.geometry.dispose();
+        old.material.map.dispose();
+        old.material.dispose();
+      });
+    }
+  } catch (e) {
+    console.warn('[天地图] LOD 加载失败', e);
+  } finally {
+    lodState.busy = false;
+  }
+}
+
+function updateBasemap(now) {
+  if (!mapReady) return;
+  updateFades(now);
+  const on = mapGroup.visible;
+  const dist = camera.position.distanceTo(controls.target);
+  // 总平图贴花：越近越实，520m 外完全交给卫星；校准时关闭，避免挡住卫星对位
+  if (detailPlane) {
+    const k = (on && !CAL_MODE) ? 1 - THREE.MathUtils.smoothstep(dist, BASEMAP.detail.near, BASEMAP.detail.far) : 0;
+    detailPlane.material.opacity = k * BASEMAP.detail.maxOpacity;
+    detailPlane.visible = k > 0.01;
+  }
+  if (!on || now < lodState.nextCheck) return;
+  lodState.nextCheck = now + 250;
+  const lv = BASEMAP.lod.levels.find((l) => dist < l.maxDist);
+  if (!lv) {
+    if (lodState.plane) lodState.plane.visible = false;
+    return;
+  }
+  if (lodState.plane) lodState.plane.visible = true;
+  const geo = worldToGeoLocal(controls.target);
+  const span = BASEMAP.lod.canvas * ((2 * Math.PI * MAP_R) / Math.pow(2, lv.z) / MAP_TILE) * MAP_COS;
+  const moved = lodState.plane
+    ? Math.max(Math.abs(geo.east - lodState.east), Math.abs(geo.north - lodState.north))
+    : Infinity;
+  if (lodState.plane && lodState.z === lv.z && moved < span * 0.3) return;
+  rebuildLod(lv.z, geo, span);
+}
+
+async function loadBasemap() {
+  if (mapReady) return;
+  mapReady = true;
+  applyMapTransform();
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:35;background:rgba(20,30,40,.82);color:#dfe8f0;font-size:12px;padding:6px 16px;border-radius:14px;pointer-events:none';
+  toast.textContent = '卫星底图加载中…';
+  document.body.appendChild(toast);
+  try {
+    const contextPlane = await stitchPlane(BASEMAP.context.z, BASEMAP.context.y, BASEMAP.context.canvas, { east: 0, north: 0 }, 0);
+    mapGroup.add(contextPlane);
+    mapGroup.visible = $('tg-map').checked;
+    if (mapGroup.visible) groundGroup.visible = false;
+    loadDetailGround().catch((e) => console.warn('[天地图] 总平图贴花失败', e));
+    lodState.nextCheck = 0; // 下一帧按当前相机拉取 LOD
+    console.log('[天地图] 卫星底图就绪', BASEMAP.center.lon + ',' + BASEMAP.center.lat);
+  } catch (e) {
+    console.warn('[天地图] 底图加载失败', e);
+  }
+  toast.remove();
+}
+
 $('tg-map').onchange = (e) => {
   if (e.target.checked) {
-    if (!mapReady) loadTiandituGround();
-    else { mapGroup.visible = true; groundGroup.visible = false; }
+    mapGroup.visible = true;
+    groundGroup.visible = false;
+    loadBasemap();
   } else {
     mapGroup.visible = false;
     groundGroup.visible = true;
   }
 };
-if (TIANDITU.token) {
-  $('tg-map').checked = true;
-  loadTiandituGround();
+if ($('tg-map').checked) loadBasemap();
+
+// 底图校准：?calib=1；方向键平移（Shift ×10）、Q/E 旋转、P 打印配置，自动存 localStorage
+if (CAL_MODE) {
+  const hud = document.createElement('div');
+  hud.style.cssText = 'position:fixed;bottom:56px;right:12px;z-index:60;background:rgba(20,30,40,.86);color:#dfe8f0;font:12px/1.6 Menlo,monospace;padding:10px 12px;border-radius:10px;white-space:pre;pointer-events:none';
+  document.body.appendChild(hud);
+  // 校准辅助：总平图用“正片叠底”叠在卫星底图上——白色底完全透明，只留下道路/河道/红线
+  const planTex = new THREE.TextureLoader().load('/digital-twin/assets/site-plan.jpg', (t) => { t.colorSpace = THREE.SRGBColorSpace; });
+  const planPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(W, H),
+    new THREE.MeshBasicMaterial({ map: planTex, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.MultiplyBlending, premultipliedAlpha: true })
+  );
+  planPlane.rotation.x = -Math.PI / 2;
+  planPlane.position.y = 0.05;
+  planPlane.renderOrder = 5;
+  scene.add(planPlane);
+  const sync = () => {
+    hud.textContent = `底图校准（O 键开关总平图叠加）\n中心 ${BASEMAP.center.lon.toFixed(6)}, ${BASEMAP.center.lat.toFixed(6)}\n偏移 ${BASEMAP.offset.x.toFixed(1)}, ${BASEMAP.offset.z.toFixed(1)} m\n旋转 ${BASEMAP.rotationDeg.toFixed(2)}°\n方向键平移 · Q/E 旋转 · Shift ×10 · P 导出${planPlane.visible ? '' : '\n（总平图叠加已隐藏）'}`;
+  };
+  sync();
+  window.addEventListener('keydown', (e) => {
+    const k = e.shiftKey ? 10 : 1;
+    let hit = true;
+    if (e.key === 'ArrowLeft') BASEMAP.offset.x -= k;
+    else if (e.key === 'ArrowRight') BASEMAP.offset.x += k;
+    else if (e.key === 'ArrowUp') BASEMAP.offset.z -= k;
+    else if (e.key === 'ArrowDown') BASEMAP.offset.z += k;
+    else if (e.key === 'q' || e.key === 'Q') BASEMAP.rotationDeg -= e.shiftKey ? 1 : 0.1;
+    else if (e.key === 'e' || e.key === 'E') BASEMAP.rotationDeg += e.shiftKey ? 1 : 0.1;
+    else if (e.key === 'o' || e.key === 'O') { planPlane.visible = !planPlane.visible; sync(); return; }
+    else if (e.key === 'p' || e.key === 'P') {
+      console.log(JSON.stringify({ center: BASEMAP.center, rotationDeg: +BASEMAP.rotationDeg.toFixed(2), offset: { x: +BASEMAP.offset.x.toFixed(1), z: +BASEMAP.offset.z.toFixed(1) } }));
+      return;
+    } else hit = false;
+    if (!hit) return;
+    e.preventDefault();
+    applyMapTransform();
+    sync();
+    localStorage.setItem('dt.basemap', JSON.stringify({ center: BASEMAP.center, rotationDeg: BASEMAP.rotationDeg, offset: BASEMAP.offset }));
+  });
 }
 
-// 周边 300m 建筑白膜（模拟数据，环带 170~320m）
-const surroundGroup = new THREE.Group();
-scene.add(surroundGroup);
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// 周边建筑体量：坐标由天地图 z18 影像逐排标定（tools/make-surroundings.js），
+// 与卫星底图共用变换，改校准值时一起移动。
 function buildSurrounding() {
-  const rnd = mulberry32(20261113);
-  const placed = [];
-  const total = 85;
-  let placedCount = 0;
-  for (let tries = 0; tries < 600 && placedCount < total; tries++) {
-    const ang = rnd() * Math.PI * 2;
-    const dist = 170 + rnd() * 150; // 环带 170~320m（避开院区主体）
-    const cx = Math.cos(ang) * dist, cz = Math.sin(ang) * dist;
-    const w = 16 + rnd() * 32, d = 12 + rnd() * 24;
-    let ok = true;
-    for (const p of placed) {
-      if (Math.abs(p.x - cx) < (p.w + w) / 2 + 6 && Math.abs(p.z - cz) < (p.d + d) / 2 + 6) { ok = false; break; }
-    }
-    if (!ok) continue;
-    placed.push({ x: cx, z: cz, w, d });
-    placedCount++;
-    const high = rnd() < 0.3;
-    const h = high ? 24 + rnd() * 42 : 9 + rnd() * 18;
-    const floors = Math.max(2, Math.round(h / 3.8));
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, map: floorTex(floors) });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(cx, h / 2, cz);
-    mesh.rotation.y = (rnd() - 0.5) * 0.35;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+  const shared = new THREE.MeshStandardMaterial({
+    color: 0xdde3e9,
+    roughness: 1,
+    metalness: 0,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+  });
+  for (const b of SURROUNDINGS) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), shared);
+    mesh.position.set(b.x, b.h / 2, b.z);
+    mesh.rotation.y = (b.rot * Math.PI) / 180;
+    // 半透明且不写深度：必须排在卫星/总平地面（renderOrder 3/4）之后，否则会被地面盖住
+    mesh.renderOrder = 6;
     surroundGroup.add(mesh);
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(geo),
-      new THREE.LineBasicMaterial({ color: 0x8b96a2, transparent: true, opacity: 0.4 })
-    );
-    edges.position.copy(mesh.position);
-    edges.rotation.copy(mesh.rotation);
-    surroundGroup.add(edges);
   }
-  console.log('[周边白膜] 生成模拟建筑', placedCount, '栋');
+  console.log('[周边体量] 已按影像标定', SURROUNDINGS.length, '栋');
 }
 buildSurrounding();
+surroundGroup.visible = $('tg-surround').checked;
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
 
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
@@ -2339,6 +2674,30 @@ function stopDemo6() {
 }
 $('demo6-btn').onclick = () => (demo6State.active ? stopDemo6() : startDemo6());
 
+// 记住左侧视图开关：刷新后保持上次的选择（白膜/周边白膜/卫星底图等）
+const VIEW_KEYS = ['tg-real', 'tg-white', 'tg-label', 'tg-line', 'tg-tex', 'tg-tree', 'tg-alpha', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map'];
+const VIEW_ORDER = ['tg-label', 'tg-line', 'tg-tex', 'tg-tree', 'tg-alpha', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map', 'tg-white', 'tg-real'];
+document.querySelector('.toggles')?.addEventListener('change', (e) => {
+  if (!e.target.id || !VIEW_KEYS.includes(e.target.id)) return;
+  const state = {};
+  for (const id of VIEW_KEYS) state[id] = $(id).checked;
+  try { localStorage.setItem('dt.view.v2', JSON.stringify(state)); } catch { /* 隐私模式忽略 */ }
+});
+try {
+  const savedView = JSON.parse(localStorage.getItem('dt.view.v2') || 'null');
+  if (savedView) {
+    setTimeout(() => {
+      for (const id of VIEW_ORDER) {
+        if (!(id in savedView)) continue;
+        const el = $(id);
+        if (!el || el.checked === savedView[id]) continue;
+        el.checked = savedView[id];
+        el.dispatchEvent(new Event('change'));
+      }
+    }, 0);
+  }
+} catch { /* 忽略损坏的本地状态 */ }
+
 // ---------- 渲染循环 ----------
 const timer = new THREE.Timer();
 function animate() {
@@ -2365,6 +2724,7 @@ function animate() {
     hemi.intensity += weatherState.flash * 0.6;
   }
   updateSkyFog();
+  updateBasemap(performance.now());
   updateClouds(dt, elapsed);
   updateRain(dt, camera.position);
   updateSnow(dt, camera.position, elapsed);

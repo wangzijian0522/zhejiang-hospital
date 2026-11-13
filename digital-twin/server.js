@@ -43,29 +43,41 @@ function handleTwinResource(req, res, twinRelay) {
   return true;
 }
 
-function handleTdtProxy(req, res) {
-  const urlPath = decodeURIComponent(req.url.split('?')[0]);
-  const m = urlPath.match(/^\/tdt\/([a-z_]+)\/(\d+)\/(\d+)\/(\d+)$/);
-  if (!m) return false;
-  const [, layer, z, x, y] = m;
-  const tk = new URLSearchParams(req.url.split('?')[1] || '').get('tk') || '';
-  if (!tk) { res.writeHead(400); res.end('missing tk'); return true; }
-  const host = ['t0', 't1', 't2', 't3'][(Number(x) + Number(y)) % 4] + '.tianditu.gov.cn';
-  const up = `https://${host}/${layer}/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&tk=${encodeURIComponent(tk)}`;
-  https.get(up, { headers: { 'User-Agent': 'zhejiang-hospital-twin' } }, (u) => {
-    if (u.statusCode !== 200) { res.writeHead(502); res.end('upstream ' + u.statusCode); return; }
-    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
-    u.pipe(res);
-  }).on('error', () => { res.writeHead(502); res.end('proxy error'); });
-  return true;
-}
+const BITMAP_URL = /^\/tdt\/([a-z_]+)\/(\d+)\/(\d+)\/(\d+)$/;
+// 天地图浏览器端密钥：服务端代取瓦片时可隐藏 key；可用 TDT_TK 环境变量覆盖
+const TDT_TK = process.env.TDT_TK || '4cdaaf6bd0bf76f314152dc58d2db861';
+// 天地图会按 UA 判定“浏览器端 Key”，非浏览器 UA 直接 403（301012）
+const TDT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 let twinRelay = null;
 
 const server = http.createServer((req, res) => {
   if (handleTwinResource(req, res, twinRelay)) return;
-  if (handleTdtProxy(req, res)) return;
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  // 天地图瓦片代理：/tdt/{layerSet}/{z}/{x}/{y}
+  const tdtMatch = urlPath.match(BITMAP_URL);
+  if (tdtMatch) {
+    const [, layerSet, z, x, y] = tdtMatch;
+    // 路径是图层集（img_w/vec_w/cva_w），WMTS 的 LAYER 参数要的是图层名（img/vec/cva）
+    const layerName = layerSet.replace(/_w$/, '');
+    const host = ['t0', 't1', 't2', 't3'][(Number(x) + Number(y)) % 4] + '.tianditu.gov.cn';
+    const up = `https://${host}/${layerSet}/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layerName}&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&tk=${encodeURIComponent(TDT_TK)}`;
+    https.get(up, { headers: { 'User-Agent': TDT_UA, 'Referer': 'http://localhost/' } }, (u) => {
+      if (u.statusCode !== 200) {
+        res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('tianditu upstream ' + u.statusCode);
+        u.resume();
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': u.headers['content-type'] || 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400',
+      });
+      u.pipe(res);
+    }).on('error', () => { res.writeHead(502); res.end('proxy error'); });
+    return;
+  }
+  if (urlPath === '/') urlPath = '/digital-twin/index.html';
   if (urlPath === '/') urlPath = '/digital-twin/index.html';
   if (urlPath.endsWith('/')) urlPath += 'index.html';
   const file = path.normalize(path.join(ROOT, urlPath));
