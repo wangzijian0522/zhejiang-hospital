@@ -809,7 +809,7 @@ scene.add(buildingsGroup);
 const labelsGroup = new THREE.Group();
 scene.add(labelsGroup);
 const elevGroup = new THREE.Group();
-scene.add(elevGroup);
+buildingsGroup.add(elevGroup); // 电梯标记属于白模标注，跟随白模显隐
 const pickables = [];
 const partMeshes = new Map(); // building -> parts[]
 const allMats = [];
@@ -2551,21 +2551,37 @@ if (CAL_MODE) {
 // 周边建筑体量：坐标由天地图 z18 影像逐排标定（tools/make-surroundings.js），
 // 与卫星底图共用变换，改校准值时一起移动。
 function buildSurrounding() {
-  const shared = new THREE.MeshStandardMaterial({
-    color: 0xdde3e9,
-    roughness: 1,
-    metalness: 0,
-    transparent: true,
-    opacity: 0.4,
-    depthWrite: false,
+  const bodyCache = new Map();
+  const roofMat = new THREE.MeshStandardMaterial({
+    color: 0x6f747a, roughness: 0.95, metalness: 0, transparent: true, opacity: 0.85, depthWrite: false,
   });
+  const topMat = new THREE.MeshStandardMaterial({ color: 0x7b8086, roughness: 0.95 });
+  const unitCone = new THREE.ConeGeometry(1, 1, 4); // 四坡屋顶基元
   for (const b of SURROUNDINGS) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), shared);
-    mesh.position.set(b.x, b.h / 2, b.z);
-    mesh.rotation.y = (b.rot * Math.PI) / 180;
-    // 半透明且不写深度：必须排在卫星/总平地面（renderOrder 3/4）之后，否则会被地面盖住
-    mesh.renderOrder = 6;
-    surroundGroup.add(mesh);
+    const floors = Math.max(2, Math.round(b.h / 3.2));
+    let bodyMat = bodyCache.get(floors);
+    if (!bodyMat) {
+      bodyMat = new THREE.MeshStandardMaterial({
+        color: 0xdfe3e8, roughness: 0.9, metalness: 0,
+        map: floorTex(floors), transparent: true, opacity: 0.72, depthWrite: false,
+      });
+      bodyCache.set(floors, bodyMat);
+    }
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(b.w, b.h, b.d),
+      [bodyMat, bodyMat, topMat, topMat, bodyMat, bodyMat]
+    );
+    body.position.set(b.x, b.h / 2, b.z);
+    body.rotation.y = (b.rot * Math.PI) / 180;
+    body.renderOrder = 6;
+    surroundGroup.add(body);
+    const roofH = 3.0 + Math.min(2.0, b.w * 0.03);
+    const roof = new THREE.Mesh(unitCone, roofMat);
+    roof.rotation.y = ((b.rot + 45) * Math.PI) / 180;
+    roof.scale.set(b.w / Math.SQRT2, roofH, b.d / Math.SQRT2);
+    roof.position.set(b.x, b.h + roofH / 2, b.z);
+    roof.renderOrder = 6;
+    surroundGroup.add(roof);
   }
   console.log('[周边体量] 已按影像标定', SURROUNDINGS.length, '栋');
 }
