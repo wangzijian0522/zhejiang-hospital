@@ -85,6 +85,15 @@ const server = http.createServer((req, res) => {
   }
   if (urlPath === '/') urlPath = '/digital-twin/index.html';
   if (urlPath.endsWith('/')) urlPath += 'index.html';
+  // 凭证与 dotfiles 永远不走静态资源，避免本地密钥被浏览器直接下载
+  const lowerPath = urlPath.toLowerCase();
+  if (lowerPath === '/digital-twin/twin-relay.credentials.json'
+    || lowerPath === '/digital-twin/twin-relay.js'
+    || lowerPath.split('/').some((seg) => seg.startsWith('.'))) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('404 Not Found: ' + urlPath);
+    return;
+  }
   const file = path.normalize(path.join(ROOT, urlPath));
   if (!file.startsWith(ROOT)) {
     res.writeHead(403); res.end('Forbidden'); return;
