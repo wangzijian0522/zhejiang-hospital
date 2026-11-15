@@ -3450,7 +3450,36 @@ function buildContext() {
 buildContext();
 
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
-const demo6State = { active: false, robots: [], group: null, bbox: null, plates: new Map(), selectedFloor: 3 };
+const demo6State = { active: false, robots: [], group: null, bbox: null, shell: null, plates: new Map(), selectedFloor: 3 };
+
+function demo6FloorBox(floorY) {
+  const shell = demo6State.shell;
+  if (!shell) return null;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, count = 0;
+  const v = new THREE.Vector3();
+  shell.updateWorldMatrix(true, true);
+  shell.traverse((mesh) => {
+    if (!mesh.isMesh || !mesh.geometry) return;
+    const pos = mesh.geometry.attributes.position;
+    if (!pos) return;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      if (v.y < floorY + 0.2 || v.y > floorY + 3.2) continue;
+      minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
+      minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
+      count++;
+    }
+  });
+  return count ? { minX, maxX, minZ, maxZ } : null;
+}
+
+function demo6BuildFloorPlates(baseY, bbox) {
+  for (let n = 1; n <= 6; n++) {
+    const y = baseY + (n - 1) * 3.8;
+    demo2AddFloorPlate(n, baseY, null, demo6FloorBox(y) || bbox, false, demo6State);
+  }
+  demo2SelectFloor(3, demo6State);
+}
 async function spawnDemo6Robots(bbox, baseY) {
   const defs = [
     { file: '/models/models/detail/medicine.glb', floor: 3 },
@@ -3567,10 +3596,8 @@ async function loadDemo6Cad(baseY) {
         minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
         maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
       } : demo6State.bbox;
-      const loop = demo2CadLoop(segs, yBase);
-      const bboxArea = Math.max(1, (fb.maxX - fb.minX) * (fb.maxZ - fb.minZ));
-      const useLoop = loop && demo2LoopArea(loop) >= bboxArea * 0.12;
-      if (n >= 1) demo2AddFloorPlate(n, baseY, useLoop ? loop : null, fb, true, demo6State);
+      const actual = demo6FloorBox(yBase);
+      if (n >= 1) demo2AddFloorPlate(n, baseY, null, actual || fb, true, demo6State);
       fpAddCadFloor('6号楼', n, segs,
         b ? {
           minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
@@ -3611,7 +3638,7 @@ function updateDemo6(dt) {
   const sel = demo6State.plates.get(demo6State.selectedFloor);
   if (sel) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.18 + pulse * 0.045;
+    sel.mesh.material.opacity = 0.14 + pulse * 0.035;
     sel.edge.material.opacity = 0.82 + pulse * 0.16;
   }
 }
@@ -3653,6 +3680,7 @@ async function startDemo6() {
       }
     });
     demo6State.group.add(bld);
+    demo6State.shell = bld;
     bbox = new THREE.Box3().setFromObject(bld);
   } catch (e) {
     console.warn('[6号楼模拟] 6号楼壳体构建失败', e);
@@ -3661,7 +3689,7 @@ async function startDemo6() {
   demo6State.bbox = bbox;
   demo6State.plates.clear();
   demo6State.selectedFloor = 3;
-  demo2BuildFloorPlates(bbox.min.y, bbox, demo6State);
+  demo6BuildFloorPlates(bbox.min.y, bbox);
   enterDemo2Focus(bbox, demo6State);
   pendingDemoLoads++;
   syncCruiseButtons();
@@ -3697,6 +3725,7 @@ function stopDemo6() {
   }
   demo6State.plates.clear();
   demo6State.bbox = null;
+  demo6State.shell = null;
   demo6State.selectedFloor = 3;
   liveGroup.visible = $('tg-live').checked;
   closeFloorPlan();
@@ -3899,15 +3928,22 @@ function demo2AddFloorPlate(n, baseY, loop, bbox, replace = false, state = demo2
   const boxMaxX = bbox.max?.x ?? bbox.maxX;
   const boxMinZ = bbox.min?.z ?? bbox.minZ;
   const boxMaxZ = bbox.max?.z ?? bbox.maxZ;
+  // CAD 轮廓往往包含外挑/场地范围；楼板内缩，避免高亮层穿出塔楼
+  const inset = state === demo6State ? 0.75 : 0.94;
+  const cx0 = (boxMinX + boxMaxX) / 2;
+  const cz0 = (boxMinZ + boxMaxZ) / 2;
   let shape;
   if (loop && loop.length >= 4) {
-    shape = new THREE.Shape(loop.map((p) => new THREE.Vector2(p.x, -p.z)));
+    shape = new THREE.Shape(loop.map((p) => new THREE.Vector2(
+      cx0 + (p.x - cx0) * inset,
+      -(cz0 + (p.z - cz0) * inset),
+    )));
   } else {
     shape = new THREE.Shape([
-      new THREE.Vector2(boxMinX, -boxMinZ),
-      new THREE.Vector2(boxMaxX, -boxMinZ),
-      new THREE.Vector2(boxMaxX, -boxMaxZ),
-      new THREE.Vector2(boxMinX, -boxMaxZ),
+      new THREE.Vector2(cx0 + (boxMinX - cx0) * inset, -(cz0 + (boxMinZ - cz0) * inset)),
+      new THREE.Vector2(cx0 + (boxMaxX - cx0) * inset, -(cz0 + (boxMinZ - cz0) * inset)),
+      new THREE.Vector2(cx0 + (boxMaxX - cx0) * inset, -(cz0 + (boxMaxZ - cz0) * inset)),
+      new THREE.Vector2(cx0 + (boxMinX - cx0) * inset, -(cz0 + (boxMaxZ - cz0) * inset)),
     ]);
   }
   const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.28, bevelEnabled: false, steps: 1 });
@@ -3964,7 +4000,7 @@ function demo2SelectFloor(n, state = demo2State) {
   state.selectedFloor = n;
   for (const [num, p] of state.plates) {
     const on = num === n;
-    p.mesh.material.opacity = on ? 0.18 : 0.04;
+    p.mesh.material.opacity = on ? 0.14 : 0.035;
     p.mesh.material.emissiveIntensity = on ? 0.95 : 0.25;
     p.edge.material.opacity = on ? 0.92 : 0.16;
     p.edge.visible = on;
@@ -4191,7 +4227,7 @@ function updateDemo2(dt) {
   const sel = demo2State.plates.get(demo2State.selectedFloor);
   if (sel) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.18 + pulse * 0.045;
+    sel.mesh.material.opacity = 0.14 + pulse * 0.035;
     sel.edge.material.opacity = 0.82 + pulse * 0.16;
   }
 }
