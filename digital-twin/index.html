@@ -34,8 +34,6 @@
   .simbox button:hover { background: #3a8fe6; }
   .simbox button.on { background: #b4552f; border-color: #b4552f; }
   .simbox .sub { font-size: 11px; color: #5b7a95; padding-top: 6px; }
-  .simbox .flr-btn { flex: 1; font-size: 12px; border: 1px solid rgba(43,127,212,.6); background: rgba(43,127,212,.12); color: #7fb8f0; border-radius: 8px; padding: 4px 0; cursor: pointer; }
-  .simbox .flr-btn:hover { background: rgba(43,127,212,.3); color: #fff; }
   #bld-list { padding: 6px 0; border-bottom: 1px solid rgba(0,229,255,.15); }
   .bld-item { display: flex; align-items: center; gap: 8px; padding: 5px 16px; cursor: pointer; color: #cfe0f2; }
   .bld-item:hover { background: rgba(0,229,255,.1); }
@@ -75,44 +73,92 @@
   .tb-btn { border: 1px solid rgba(0,229,255,.4); background: rgba(0,229,255,.08); color: #7fd4ff; font-size: 12px; padding: 5px 14px; border-radius: 8px; cursor: pointer; letter-spacing: 1px; transition: background .2s, color .2s; }
   .tb-btn:hover { background: rgba(0,229,255,.22); color: #fff; }
   .tb-btn.on { background: rgba(0,229,255,.3); color: #fff; box-shadow: 0 0 10px rgba(0,229,255,.35); }
+  #cruise-top-btn { min-width: 92px; flex-shrink: 0; white-space: nowrap; }
+  #cruise-top-btn:disabled { opacity: .5; cursor: wait; }
+  @media (max-width: 1500px) {
+    .tb-right { gap: 8px; }
+    .tb-weather, .tb-center { display: none; }
+  }
+  @media (max-width: 1100px) {
+    .tb-live, .tb-title .en { display: none; }
+    .tb-title .cn { font-size: 14px; letter-spacing: 0; }
+  }
 
   /* ECharts 指标面板（深色大屏风格，左右两列、不滚动） */
-  .charts-col { position: fixed; top: 68px; width: 306px; height: calc(100vh - 78px); overflow: hidden; z-index: 40; display: flex; flex-direction: column; gap: 12px; transition: transform .4s cubic-bezier(.22,.9,.3,1); }
-  #charts-panel { right: 12px; transform: translateX(340px); }
-  #charts-left { left: 12px; transform: translateX(-340px); }
+  .charts-col { position: fixed; top: 68px; width: 348px; height: calc(100vh - 78px); overflow: hidden; z-index: 40; display: flex; flex-direction: column; gap: 12px; transition: transform .4s cubic-bezier(.22,.9,.3,1); }
+  #charts-panel { right: 12px; transform: translateX(380px); }
+  #charts-left { left: 12px; transform: translateX(-380px); }
   #charts-left.show, #charts-panel.show { transform: translateX(0); }
-  .chart-card { background: rgba(8,14,28,.9); border: 1px solid rgba(0,229,255,.2); border-radius: 10px; padding: 10px 12px 9px; color: #cfe0f2; box-shadow: 0 0 18px rgba(0,188,212,.08); display: flex; flex-direction: column; min-height: 0; }
+  .chart-card { position: relative; background: linear-gradient(160deg, rgba(11,19,34,.94), rgba(5,10,20,.96)); border: 1px solid rgba(0,229,255,.22); border-radius: 12px; padding: 12px 12px 10px; color: #e8f4ff; box-shadow: 0 4px 22px rgba(0,0,0,.4), inset 0 1px 0 rgba(127,212,255,.1); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .chart-card::before { content: ''; position: absolute; top: 0; left: 0; width: 30px; height: 2px; background: linear-gradient(90deg, #00e5ff, transparent); }
+  .chart-card::after { content: ''; position: absolute; top: 0; left: 0; width: 2px; height: 30px; background: linear-gradient(180deg, #00e5ff, transparent); }
   .chart-card:has(.chart-box) { flex: 1 1 auto; }
-  .chart-card h4 { margin: 0 0 6px; font-size: 13px; color: #7fd4ff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-  .chart-card h4 .num { font-size: 12px; color: #00e5ff; font-weight: 700; flex-shrink: 0; }
-  .chart-card h4 .en { font-size: 9px; color: #41617e; letter-spacing: 1.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .chart-card h4 .tag { margin-left: auto; font-size: 10px; color: #ffc84d; border: 1px solid rgba(255,200,77,.35); border-radius: 8px; padding: 0 6px; white-space: nowrap; flex-shrink: 0; }
-  .big-num { font-size: 26px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
-  .big-num small { font-size: 12px; color: #5b7a95; font-weight: 400; margin-left: 4px; }
-  .trend-up { color: #4cd98a; font-size: 12px; }
-  .metric-row { display: flex; gap: 8px; margin-top: 6px; }
-  .metric-item { flex: 1; background: rgba(0,229,255,.05); border-radius: 6px; padding: 5px 7px; }
-  .metric-item .k { font-size: 10px; color: #5b7a95; }
-  .metric-item .v { font-size: 13px; font-weight: 700; color: #cfe0f2; font-variant-numeric: tabular-nums; }
-  .chart-box { flex: 1 1 auto; min-height: 64px; }
+  .chart-card h4 { margin: 0 0 8px; font-size: 12px; color: #ffffff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; padding-bottom: 6px; border-bottom: 1px solid rgba(0,229,255,.15); }
+  .chart-card h4 .num { font-size: 11px; color: #00e5ff; font-weight: 700; flex-shrink: 0; font-family: "Consolas", monospace; text-shadow: 0 0 8px rgba(0,229,255,.5); }
+  .chart-card h4 .en { font-size: 8.5px; color: #5f7f9e; letter-spacing: 1.6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .chart-card h4 .tag { margin-left: auto; font-size: 9.5px; color: #ffc84d; border: 1px solid rgba(255,200,77,.4); background: rgba(255,200,77,.08); border-radius: 8px; padding: 1px 6px; white-space: nowrap; flex-shrink: 0; }
+  .big-num { font-size: 24px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: 1px; text-shadow: 0 0 18px rgba(0,229,255,.3); }
+  .big-num small { font-size: 11px; color: #7a95b0; font-weight: 400; margin-left: 4px; text-shadow: none; }
+  .trend-up { color: #4cd98a; font-size: 11px; }
+  .metric-row { display: flex; gap: 8px; margin-top: 8px; }
+  .metric-item { flex: 1; background: linear-gradient(160deg, rgba(0,229,255,.1), rgba(43,127,212,.05)); border: 1px solid rgba(0,229,255,.18); border-radius: 8px; padding: 7px 9px; }
+  .metric-item .k { font-size: 10px; color: #7a95b0; margin-bottom: 2px; }
+  .metric-item .v { font-size: 12.5px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums; }
+  .chart-box { flex: 1 1 auto; min-height: 90px; }
   .charts-anim { opacity: 0; transform: translateX(30px); transition: opacity .45s ease, transform .45s ease; }
+
+  /* 楼层平面图侧栏 */
+  #floor-plan { position: fixed; right: 12px; bottom: 12px; width: 463px; z-index: 46; display: none; background: linear-gradient(160deg, rgba(11,19,34,.95), rgba(5,10,20,.97)); border: 1px solid rgba(0,229,255,.28); border-radius: 12px; box-shadow: 0 4px 22px rgba(0,0,0,.45), inset 0 1px 0 rgba(127,212,255,.1); color: #e8f4ff; }
+  #floor-plan.show { display: block; animation: fp-in .3s ease; }
+  @keyframes fp-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  .fp-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px 7px; border-bottom: 1px solid rgba(0,229,255,.15); }
+  .fp-head b { font-size: 13px; color: #fff; letter-spacing: 1px; }
+  .fp-head span { font-size: 10px; color: #5b7a95; }
+  #fp-close { margin-left: auto; width: 22px; height: 22px; border: 1px solid rgba(0,229,255,.35); background: rgba(0,229,255,.08); color: #7fd4ff; border-radius: 6px; cursor: pointer; font-size: 12px; line-height: 1; }
+  #fp-close:hover { background: rgba(0,229,255,.25); color: #fff; }
+  #fp-floors { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px 12px; max-height: 68px; overflow-y: auto; }
+  #fp-floors::-webkit-scrollbar { width: 4px; }
+  #fp-floors::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 2px; }
+  .fp-flr { position: relative; font-size: 10.5px; padding: 2px 9px; border-radius: 9px; border: 1px solid rgba(127,212,255,.25); background: rgba(127,212,255,.06); color: #a9c8e0; cursor: pointer; font-family: inherit; }
+  .fp-flr.on { background: rgba(0,229,255,.22); color: #fff; border-color: #00e5ff; }
+  .fp-flr .rd { position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; border-radius: 50%; background: #4dc3ff; box-shadow: 0 0 5px #4dc3ff; display: none; }
+  .fp-flr.has .rd { display: block; }
+  .fp-body { display: flex; gap: 10px; padding: 8px 12px 12px; }
+  #fp-canvas { border: 1px solid rgba(0,229,255,.2); border-radius: 8px; background: rgba(8,16,30,.85); }
+  .fp-side { flex: 1; min-width: 0; }
+  .fp-legend { font-size: 10px; color: #7a95b0; display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+  .fp-legend .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .fp-legend .dot.sim { background: #4dc3ff; box-shadow: 0 0 6px #4dc3ff; }
+  .fp-legend .dot.live { background: #4cd98a; box-shadow: 0 0 6px #4cd98a; }
+  #fp-robots { font-size: 10.5px; max-height: 168px; overflow-y: auto; }
+  #fp-robots::-webkit-scrollbar { width: 4px; }
+  #fp-robots::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 2px; }
+  #fp-robots .fr { padding: 3px 6px; border-radius: 6px; cursor: pointer; color: #a9c8e0; display: flex; gap: 6px; align-items: center; border-bottom: 1px dashed rgba(127,212,255,.08); }
+  #fp-robots .fr:hover { background: rgba(0,229,255,.12); color: #fff; }
+  #fp-robots .fr .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #fp-robots .fr .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  #fp-robots .fr .dot.sim { background: #4dc3ff; box-shadow: 0 0 5px #4dc3ff; }
+  #fp-robots .fr .dot.live { background: #4cd98a; box-shadow: 0 0 5px #4cd98a; }
+  #fp-robots .empty { font-size: 10px; color: #5b7a95; padding: 4px 6px; }
   .charts-col.show .charts-anim { opacity: 1; transform: translateX(0); }
-  .cost-list { margin-top: 4px; }
-  .cost-list .row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
-  .cost-list .dot { width: 8px; height: 8px; border-radius: 2px; }
-  .cost-list .val { margin-left: auto; color: #fff; font-variant-numeric: tabular-nums; }
-  .progress-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 11px; }
-  .progress-row > span:first-child { white-space: nowrap; color: #8fb8d8; }
+  .cost-list { margin-top: 6px; }
+  .cost-list .row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 2px; border-bottom: 1px dashed rgba(127,212,255,.1); }
+  .cost-list .row:last-child { border-bottom: none; }
+  .cost-list .dot { width: 8px; height: 8px; border-radius: 2px; box-shadow: 0 0 6px currentColor; }
+  .cost-list .val { margin-left: auto; color: #fff; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .progress-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 11.5px; }
+  .progress-row > span:first-child { white-space: nowrap; color: #9fb8d0; }
   .progress-row b { color: #fff; font-weight: 600; }
-  .progress-row .bar { flex: 1; height: 6px; background: rgba(0,229,255,.1); border-radius: 3px; overflow: hidden; }
-  .progress-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#00e5ff,#2b7fd4); border-radius: 3px; transition: width .8s ease; }
-  .alert-item { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid rgba(127,212,255,.08); font-size: 12px; }
-  .alert-item .lv { flex-shrink: 0; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
-  .lv.mid { background: rgba(255,200,77,.18); color: #ffc84d; border: 1px solid rgba(255,200,77,.4); }
-  .lv.low { background: rgba(0,229,255,.12); color: #00e5ff; border: 1px solid rgba(0,229,255,.35); }
-  .lv.res { background: rgba(76,217,138,.12); color: #4cd98a; border: 1px solid rgba(76,217,138,.35); }
-  .alert-item .sub { font-size: 10px; color: #5b7a95; margin-top: 2px; }
-  .badge-count { background: #ff6b6b; color: #fff; border-radius: 8px; font-size: 10px; padding: 0 6px; }
+  .progress-row .bar { flex: 1; height: 7px; background: rgba(0,229,255,.12); border-radius: 4px; overflow: hidden; }
+  .progress-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#00e5ff,#2b7fd4); border-radius: 4px; box-shadow: 0 0 8px rgba(0,229,255,.45); transition: width .8s ease; }
+  .alert-item { display: flex; gap: 8px; align-items: flex-start; padding: 7px 2px; border-bottom: 1px solid rgba(127,212,255,.1); font-size: 12.5px; }
+  .alert-item:last-child { border-bottom: none; }
+  .alert-item .lv { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; }
+  .lv.mid { background: rgba(255,200,77,.15); color: #ffc84d; border: 1px solid rgba(255,200,77,.4); }
+  .lv.low { background: rgba(0,229,255,.1); color: #00e5ff; border: 1px solid rgba(0,229,255,.35); }
+  .lv.res { background: rgba(76,217,138,.1); color: #4cd98a; border: 1px solid rgba(76,217,138,.35); }
+  .alert-item .sub { font-size: 10.5px; color: #7a95b0; margin-top: 2px; }
+  .badge-count { background: #ff6b6b; color: #fff; border-radius: 8px; font-size: 10.5px; padding: 0 7px; }
   .env-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .env-table td { padding: 4px 2px; border-bottom: 1px solid rgba(127,212,255,.12); }
   .env-table .v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -142,14 +188,15 @@
   <div class="toggles">
     <label><input type="checkbox" id="tg-real" checked> 整体模型</label>
     <label><input type="checkbox" id="tg-white"> 白膜</label>
+    <label><input type="checkbox" id="tg-holo" checked> 全息白膜</label>
     <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
     <label><input type="checkbox" id="tg-line" checked> 楼层线</label>
     <label><input type="checkbox" id="tg-label" checked> 名称标注</label>
-    <label><input type="checkbox" id="tg-tree"> 3D树木</label>
+    <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
     <label><input type="checkbox" id="tg-alpha"> 半透明</label>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
     <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
-    <label><input type="checkbox" id="tg-surround" checked> 周边白膜</label>
+    <label><input type="checkbox" id="tg-surround"> 周边白膜</label>
     <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
   </div>
   <div class="timebox">
@@ -171,10 +218,6 @@
     <button id="demo6-btn" style="margin-top:6px">透视 6号楼（双机模拟）</button>
     <button id="demo2-btn" style="margin-top:6px">透视 2号楼（双机模拟）</button>
     <div class="sub" id="sim-hint" style="display:none">模拟数据：8台机器人（4种设备外观）在各楼层移动并乘梯 · 2部电梯上下运行/开关门</div>
-    <div class="sub" style="display:flex; gap:8px; padding-top:8px">
-      <button class="flr-btn" data-flr="2号楼">2号楼 分层</button>
-      <button class="flr-btn" data-flr="6号楼">6号楼 分层</button>
-    </div>
   </div>
   <div id="bld-list"></div>
   <div id="detail"><div class="info" style="color:#8a94a0">点击左侧列表或场景中的建筑查看详情</div></div>
@@ -188,6 +231,7 @@
   </div>
 </div>
 <div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转</div>
+<button id="demo-back" style="display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:56; background:rgba(20,30,40,.85); color:#cfe0f2; border:1px solid rgba(0,229,255,.4); border-radius:18px; padding:7px 24px; font-size:13px; letter-spacing:2px; cursor:pointer;">← 返回总览</button>
 <div id="topbar">
   <div class="tb-left">
     <div class="tb-logo">＋</div>
@@ -207,6 +251,7 @@
       <div id="rt-date">----.--.--</div>
     </div>
     <div class="tb-live" id="live-hud">实时机器人：连接中…</div>
+    <button id="cruise-top-btn" class="tb-btn" aria-pressed="false" title="围绕医院巡航；空闲 1 分钟自动开始，移动鼠标返回总览" disabled>开始巡航</button>
     <button id="settings-btn" class="tb-btn">⚙ 设置</button>
     <button id="charts-btn" class="tb-btn on">收起指标</button>
   </div>
@@ -289,6 +334,22 @@
     </div>
   </div>
 </div>
+<div id="floor-plan">
+  <div class="fp-head">
+    <b id="fp-title">--</b>
+    <span>楼层平面 · 点击机器人可定位</span>
+    <button id="fp-close" title="收起">✕</button>
+  </div>
+  <div id="fp-floors"></div>
+  <div class="fp-body">
+    <canvas id="fp-canvas" width="494" height="494" style="width:247px;height:247px"></canvas>
+    <div class="fp-side">
+      <div class="fp-legend"><i class="dot sim"></i>模拟机器人</div>
+      <div class="fp-legend"><i class="dot live"></i>真实机器人</div>
+      <div id="fp-robots"><div class="empty">当前楼层暂无机器人</div></div>
+    </div>
+  </div>
+</div>
 <div id="loader" style="position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(160deg,#0e1626 0%,#1a2b45 55%,#0e1c30 100%); opacity:0; transition:opacity .8s ease;">
   <div style="position:relative; width:96px; height:96px;">
     <div style="position:absolute; inset:0; border-radius:50%; border:4px solid rgba(255,255,255,.1); border-top-color:#4da3ff; animation:lspin 1s linear infinite;"></div>
@@ -297,12 +358,6 @@
   </div>
   <div id="loader-text" style="margin-top:20px; color:#cfe0f2; font-size:14px; letter-spacing:1px;">正在加载整体模型…</div>
   <div id="loader-pct" style="margin-top:8px; color:#7f9cc0; font-size:12px; font-variant-numeric:tabular-nums; min-height:16px;"></div>
-</div>
-<div id="floor-ui" style="display:none; position:fixed; bottom:56px; left:50%; transform:translateX(-50%); background:rgba(20,30,40,.85); color:#fff; padding:8px 16px; border-radius:12px; align-items:center; gap:12px; z-index:10; font-size:13px;">
-  <b id="floor-title">分层展示</b>
-  <span style="font-size:12px;opacity:.8">展开</span>
-  <input type="range" id="floor-spread" min="0" max="100" value="60" style="width:150px; accent-color:#2b7fd4">
-  <button id="floor-back" style="background:#2b7fd4;color:#fff;border:none;border-radius:8px;padding:4px 12px;cursor:pointer">返回整体</button>
 </div>
 
 <script src="./vendor/echarts.min.js"></script>
@@ -741,43 +796,6 @@ function updateSnow(dt, cam, t) {
   snowGeo.attributes.position.needsUpdate = true;
 }
 
-// ---------- 3D 树木 ----------
-const treesGroup = new THREE.Group();
-treesGroup.visible = document.getElementById('tg-tree').checked;
-scene.add(treesGroup);
-fetch('./data/trees.json').then((r) => r.json()).then(buildTrees).catch((e) => console.warn('树木数据加载失败', e));
-
-function buildTrees(td) {
-  // 总平图上的绿点很密，直接用会变成“森林墙”：抽稀 + 压低树高
-  const step = td.length > 1200 ? 4 : td.length > 600 ? 3 : 2;
-  const list = td.filter((_, i) => i % step === 0);
-  const N = list.length;
-  const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 2.6, 6);
-  const canGeo = new THREE.ConeGeometry(1.9, 5.4, 7);
-  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x7a5a3e }), N);
-  const cans = new THREE.InstancedMesh(canGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), N);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-  const col = new THREE.Color();
-  const rnd = (a, b) => a + Math.random() * (b - a);
-  for (let i = 0; i < N; i++) {
-    const t = list[i], s = Math.min(t.s, 1.35);
-    v.set(t.x, 1.3 * s, t.z);
-    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2);
-    sc.setScalar(s);
-    m4.compose(v, q, sc);
-    trunks.setMatrixAt(i, m4);
-    v.set(t.x, 4.7 * s, t.z);
-    m4.compose(v, q, sc);
-    cans.setMatrixAt(i, m4);
-    col.setHSL(0.30 + rnd(-0.02, 0.03), 0.38 + rnd(-0.05, 0.05), rnd(0.30, 0.40));
-    cans.setColorAt(i, col);
-  }
-  trunks.castShadow = true;
-  cans.castShadow = true;
-  cans.instanceColor.needsUpdate = true;
-  treesGroup.add(trunks, cans);
-}
-
 // ---------- 材质工具 ----------
 const texCache = new Map();
 function floorTex(floors) {
@@ -812,6 +830,7 @@ const elevGroup = new THREE.Group();
 buildingsGroup.add(elevGroup); // 电梯标记属于白模标注，跟随白模显隐
 const pickables = [];
 const partMeshes = new Map(); // building -> parts[]
+const bldEdges = new Map(); // building id -> 描边线（全息模式下加亮）
 const allMats = [];
 
 function makeLabel(text, bg = 'rgba(255,255,255,0.94)', fg = '#2b3a4a', scale = 1) {
@@ -852,6 +871,90 @@ function makeLabel(text, bg = 'rgba(255,255,255,0.94)', fg = '#2b3a4a', scale = 
   return sp;
 }
 
+// ---------- 机器人信标（光柱 + 地面光环 + 楼层标签，隔墙可见） ----------
+const BEACONS = [];
+const beaconGlowTex = (function () {
+  const c = document.createElement('canvas');
+  c.width = c.height = 96;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(48, 48, 0, 48, 48, 48);
+  gr.addColorStop(0, 'rgba(190,240,255,0.95)');
+  gr.addColorStop(0.25, 'rgba(120,215,255,0.45)');
+  gr.addColorStop(1, 'rgba(80,180,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 96, 96);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+function makeTagSprite(text) {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 44;
+  const g = c.getContext('2d');
+  const r = 10;
+  g.beginPath();
+  g.moveTo(r, 1);
+  g.arcTo(127, 1, 127, 43, r);
+  g.arcTo(127, 43, 1, 43, r);
+  g.arcTo(1, 43, 1, 1, r);
+  g.arcTo(1, 1, 127, 1, r);
+  g.closePath();
+  g.fillStyle = 'rgba(10,22,38,0.82)';
+  g.fill();
+  g.strokeStyle = 'rgba(89,200,255,0.85)';
+  g.lineWidth = 2;
+  g.stroke();
+  g.font = 'bold 22px "Microsoft YaHei", sans-serif';
+  g.fillStyle = '#9fe8ff';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 64, 23);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, fog: false }));
+  sp.renderOrder = 62;
+  sp.scale.set(3.4, 1.17, 1);
+  return sp;
+}
+function addBeacon(g, floorTag) {
+  const mkMat = (opacity) => new THREE.MeshBasicMaterial({
+    color: 0x4dc3ff, transparent: true, opacity, depthTest: false, depthWrite: false,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false,
+  });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.78, 1, 12, 1, true), mkMat(0.3));
+  beam.position.y = 3.1;
+  beam.scale.set(1, 4.4, 1);
+  beam.renderOrder = 60;
+  g.add(beam);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.3, 30), mkMat(0.8));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.07;
+  ring.renderOrder = 61;
+  g.add(ring);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: beaconGlowTex, color: 0x4dc3ff, transparent: true, opacity: 0.7,
+    depthTest: false, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
+  }));
+  glow.scale.set(3.6, 3.6, 1);
+  glow.renderOrder = 61;
+  g.add(glow);
+  const tag = makeTagSprite(floorTag);
+  tag.position.y = 5.6;
+  g.add(tag);
+  const b = { beam, ring, glow, tag, phase: Math.random() * Math.PI * 2 };
+  BEACONS.push(b);
+  return b;
+}
+function setBeaconTag(b, text) {
+  if (!b) return;
+  b.tag.material.map.dispose();
+  const ns = makeTagSprite(text);
+  ns.position.copy(b.tag.position);
+  b.tag.parent.add(ns);
+  b.tag.parent.remove(b.tag);
+  b.tag = ns;
+}
+
 for (const b of BUILDINGS) {
   const parts = [];
   let maxH = 0, minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
@@ -873,8 +976,11 @@ for (const b of BUILDINGS) {
       new THREE.LineBasicMaterial({ color: 0x8b96a2, transparent: true, opacity: 0.55 })
     );
     edges.position.copy(mesh.position);
+    edges.renderOrder = 5;
     edges.userData = { building: b };
     buildingsGroup.add(edges);
+    if (!bldEdges.has(b.id)) bldEdges.set(b.id, []);
+    bldEdges.get(b.id).push(edges);
     pickables.push(mesh, edges);
     parts.push(mesh);
     maxH = Math.max(maxH, part.height);
@@ -924,24 +1030,45 @@ function hideLoader() {
   setTimeout(() => { if (loaderBusy === 0) loaderEl.style.display = 'none'; }, 900);
 }
 function setLoaderPct(p) { loaderPct.textContent = Math.round(p) + '%'; }
-// 让出主线程（MessageChannel 不受隐藏标签页定时器限流影响）
-const yieldToMain = () => new Promise((r) => {
-  const mc = new MessageChannel();
-  mc.port1.onmessage = () => r();
-  mc.port2.postMessage(0);
-});
 
 // ---------- 整体模型（按需加载） ----------
 const realGroup = new THREE.Group();
+let realModelRef = null; // { obj, cx, cy, cz }：模型中心基准，供实时配准
+// 三处影像控制点拟合，非测绘坐标；旧投影下的本地校准值不再复用。
+const REAL_CAL = { x: 86.7, z: -8.5, rotDeg: -14.12 };
+try {
+  const savedCal = JSON.parse(localStorage.getItem('dt.realmodel.v2') || 'null');
+  if (savedCal) {
+    if (typeof savedCal.x === 'number') REAL_CAL.x = savedCal.x;
+    if (typeof savedCal.z === 'number') REAL_CAL.z = savedCal.z;
+    if (typeof savedCal.rotDeg === 'number') REAL_CAL.rotDeg = savedCal.rotDeg;
+  }
+} catch { /* 忽略损坏的校准值 */ }
+// 把真实模型按配准参数放到场景（模型中心归零 + 旋转 + 平移）
+function applyRealCal() {
+  if (!realModelRef) return;
+  const { obj, cx, cy, cz } = realModelRef;
+  const theta = (REAL_CAL.rotDeg * Math.PI) / 180;
+  const cos = Math.cos(theta), sin = Math.sin(theta);
+  obj.rotation.y = theta;
+  obj.position.set(REAL_CAL.x - cx * cos - cz * sin, -cy, REAL_CAL.z + cx * sin - cz * cos);
+  obj.updateMatrixWorld(true);
+  if (realLoaded) {
+    const previous = campusFocus?.clone();
+    const focus = computeCampusFocus();
+    if (previous && focus && overviewCam) {
+      const delta = focus.clone().sub(previous);
+      overviewCam.pos.add(delta);
+      overviewCam.look.add(delta);
+    }
+    liveBuildingXf.clear();
+  }
+}
 scene.add(realGroup);
 const realBuildings = new Map(); // 楼名 -> mesh（2号楼/6号楼 可点击分层）
 let realLoaded = false;
 let realLoading = false;
 let overviewCam = null;
-// 整体.glb 中这栋楼的导出节点名是 "001"（与 /models/models/2号楼.glb 同一栋）
-const REAL_BUILDING_ALIASES = { '001': '2号楼' };
-// 只有 2号楼/6号楼 有可分层的独立 GLB；不能复用 realBuildings（那里还注册了其它楼栋给实时机器人用）
-const splitBuildings = new Map();
 
 // 白膜视图 = 精模/实时机器人隐藏。选中建筑/透视是临时模式，退出时恢复之前的开关状态
 let viewSnapshot = null;
@@ -999,24 +1126,22 @@ function loadRealModel() {
     if (Math.max(size.x, size.y, size.z) > 1000) s = 0.001; // 单位 mm → m（院区级模型为米制，不缩放）
     const c = box.getCenter(new THREE.Vector3());
     obj.scale.setScalar(s);
-    obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
+    // 记录模型中心基准，配准参数可实时调整（?calib 校准模式）
+    realModelRef = { obj, cx: c.x * s, cy: box.min.y * s, cz: c.z * s };
+    applyRealCal();
+    console.log('[模型] 配准 旋转', REAL_CAL.rotDeg, '° 平移', REAL_CAL.x + 'm,' + REAL_CAL.z + 'm');
     obj.traverse((o) => {
       if (o.isMesh) {
         o.castShadow = true;
         o.receiveShadow = true;
+        // 模型里的贴片树（shu* 节点）按要求隐藏
+        if (/^shu\d+$/i.test(o.name)) o.visible = false;
       }
       // 注册所有楼栋节点（含 5号楼01 等拆分塔楼），供实时机器人落位
       if (o.name && /号楼\d*$/.test(o.name) && (o.isMesh || o.children.length > 0)) {
         o.userData.buildingName = o.name;
         o.traverse((c) => { if (c.isMesh) c.userData.buildingName = o.name; });
         realBuildings.set(o.name, o);
-      }
-      // 分层视图只认 2号楼/6号楼（GLTFLoader 对只有子节点的节点给的是 Object3D，不能用 isGroup 判断）
-      const splitName = REAL_BUILDING_ALIASES[o.name] || o.name;
-      if (splitName === '2号楼' || splitName === '6号楼') {
-        o.userData.buildingName = splitName;
-        o.traverse((c) => { if (c.isMesh) c.userData.buildingName = splitName; });
-        splitBuildings.set(splitName, o);
       }
     });
     realGroup.add(obj);
@@ -1053,181 +1178,8 @@ function loadRealModel() {
 
 loadRealModel();
 
-// ---------- 分层展示（2号楼 / 6号楼） ----------
-const FLOOR_CONFIG = { '2号楼': null, '6号楼': null }; // null = 按3.8m层高自动估算
-const floorGroup = new THREE.Group();
-floorGroup.visible = false;
-scene.add(floorGroup);
 const gltfCache = new Map();
-const floorState = { active: false, name: null, layers: [], bandH: 3.8 };
 
-function floorCountFor(name, heightM) {
-  if (FLOOR_CONFIG[name]) return FLOOR_CONFIG[name];
-  return Math.max(3, Math.min(30, Math.round(heightM / 3.8)));
-}
-
-function pushVert(e, posAttr, uvAttr, i, M, v) {
-  v.set(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)).applyMatrix4(M);
-  e.pos.push(v.x, v.y, v.z);
-  if (uvAttr) e.uv.push(uvAttr.getX(i), uvAttr.getY(i));
-}
-
-// 把建筑网格按高度切成 numFloors 层（顶点转世界坐标，分块异步避免卡顿）
-async function splitBuilding(gltfScene, numFloors) {
-  const meshes = [];
-  gltfScene.updateMatrixWorld(true);
-  gltfScene.traverse((o) => { if (o.isMesh && o.geometry) meshes.push(o); });
-  const box = new THREE.Box3().setFromObject(gltfScene);
-  const bandH = (box.max.y - box.min.y) / numFloors;
-  const entries = Array.from({ length: numFloors }, () => []);
-  const v = new THREE.Vector3();
-  for (const m of meshes) {
-    const g = m.geometry;
-    const posAttr = g.attributes.position;
-    if (!posAttr) continue;
-    const uvAttr = g.attributes.uv;
-    const idx = g.index;
-    const mats = Array.isArray(m.material) ? m.material : [m.material];
-    const groups = g.groups.length
-      ? g.groups
-      : [{ start: 0, count: idx ? idx.count : posAttr.count, materialIndex: 0 }];
-    m.updateWorldMatrix(true, false);
-    const M = m.matrixWorld;
-    for (const grp of groups) {
-      const mat = mats[grp.materialIndex] || mats[0];
-      const total = grp.count === Infinity ? (idx ? idx.count : posAttr.count) - grp.start : grp.count;
-      const triCount = Math.floor(total / 3);
-      for (let t0 = 0; t0 < triCount; t0 += 150000) {
-        const tEnd = Math.min(triCount, t0 + 150000);
-        for (let t = t0; t < tEnd; t++) {
-          const i0 = idx ? idx.getX(grp.start + t * 3) : grp.start + t * 3;
-          const i1 = idx ? idx.getX(grp.start + t * 3 + 1) : grp.start + t * 3 + 1;
-          const i2 = idx ? idx.getX(grp.start + t * 3 + 2) : grp.start + t * 3 + 2;
-          v.set(posAttr.getX(i0), posAttr.getY(i0), posAttr.getZ(i0)).applyMatrix4(M);
-          const cy = (v.y
-            + v.set(posAttr.getX(i1), posAttr.getY(i1), posAttr.getZ(i1)).applyMatrix4(M).y
-            + v.set(posAttr.getX(i2), posAttr.getY(i2), posAttr.getZ(i2)).applyMatrix4(M).y) / 3;
-          let bi = Math.floor((cy - box.min.y) / bandH);
-          if (bi < 0) bi = 0;
-          else if (bi >= numFloors) bi = numFloors - 1;
-          let e = entries[bi].find((x) => x.mat === mat);
-          if (!e) { e = { mat, pos: [], uv: [] }; entries[bi].push(e); }
-          pushVert(e, posAttr, uvAttr, i0, M, v);
-          pushVert(e, posAttr, uvAttr, i1, M, v);
-          pushVert(e, posAttr, uvAttr, i2, M, v);
-        }
-        await yieldToMain();
-      }
-    }
-  }
-  const layers = [];
-  for (let i = 0; i < numFloors; i++) {
-    const lg = new THREE.Group();
-    for (const e of entries[i]) {
-      if (!e.pos.length) continue;
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(e.pos, 3));
-      if (e.uv.length) geo.setAttribute('uv', new THREE.Float32BufferAttribute(e.uv, 2));
-      geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, e.mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      lg.add(mesh);
-    }
-    layers.push(lg);
-    floorGroup.add(lg);
-  }
-  return { layers, bandH, baseY: box.min.y };
-}
-
-async function enterFloorMode(name) {
-  if (floorState.active) exitFloorMode();
-  if (xrayState.on) applyXray(false);
-  floorState.active = true;
-  floorState.name = name;
-  realGroup.visible = false;
-  buildingsGroup.visible = false;
-  labelsGroup.visible = false;
-  liveGroup.visible = false;
-  $('floor-title').textContent = name + ' 分层展示';
-  $('floor-ui').style.display = 'flex';
-  devStatus.style.display = 'block';
-  devStatus.textContent = '加载 ' + name + ' 模型并计算分层…';
-  showLoader('正在加载 ' + name + ' 分层模型…');
-  try {
-    let gltf = gltfCache.get(name);
-    if (!gltf) {
-      gltf = await makeGLTFLoader().loadAsync('/models/models/' + name + '.glb');
-      gltfCache.set(name, gltf);
-    }
-    const h = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3()).y;
-    const n = floorCountFor(name, h);
-    const { layers, bandH } = await splitBuilding(gltf.scene, n);
-    floorState.layers = layers;
-    floorState.bandH = bandH;
-    // 先归零再取局部包围盒：层几何顶点自带模型世界坐标，标签必须按局部坐标挂到层上
-    floorGroup.position.set(0, 0, 0);
-    floorGroup.updateMatrixWorld(true);
-    const layerBoxes = layers.map((l) => new THREE.Box3().setFromObject(l));
-    const b = new THREE.Box3();
-    layerBoxes.forEach((bb) => b.union(bb));
-    floorGroup.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
-    floorGroup.updateMatrixWorld(true);
-    // 相机框选：用居中后的世界包围盒，模型导出原点不一定在建筑中心；
-    // 展开后总高度 = 原高 + 层间展开量，否则高层建筑会被裁切
-    const fbox = b.clone().translate(floorGroup.position);
-    const fs = fbox.getSize(new THREE.Vector3());
-    const explodedH = fs.y + (layers.length - 1) * bandH * 1.6 * 0.6;
-    const ctr = fbox.getCenter(new THREE.Vector3());
-    ctr.y = fbox.min.y + explodedH / 2;
-    const rad = Math.max(Math.max(fs.x, fs.z), explodedH) * 0.8;
-    // 楼层标签（位置用居中前的局部包围盒，避免被 floorGroup 偏移叠加两次）
-    for (let i = 0; i < layers.length; i++) {
-      const lbB = layerBoxes[i];
-      if (lbB.isEmpty()) continue;
-      const lb = makeLabel((i + 1) + 'F', undefined, undefined, 0.5);
-      lb.position.set(lbB.max.x + 2.5, (lbB.min.y + lbB.max.y) / 2, (lbB.min.z + lbB.max.z) / 2);
-      layers[i].add(lb);
-    }
-    floorGroup.visible = true;
-    flyToPos(
-      new THREE.Vector3(ctr.x + rad * 1.1, ctr.y + rad * 0.9, ctr.z + rad * 1.4),
-      ctr
-    );
-  } catch (err) {
-    console.warn('分层展示加载失败', err);
-    exitFloorMode();
-    hideLoader();
-    return;
-  }
-  hideLoader();
-  devStatus.style.display = 'none';
-}
-
-function exitFloorMode() {
-  if (!floorState.active) return;
-  floorState.active = false;
-  floorGroup.visible = false;
-  // 分层几何体每次进入都会重建，退出时必须释放，否则反复进入会持续占用显存
-  floorGroup.traverse((o) => {
-    if (o.isMesh) o.geometry.dispose();
-    if (o.isSprite) { o.material.map?.dispose(); o.material.dispose(); }
-  });
-  while (floorGroup.children.length) floorGroup.remove(floorGroup.children[0]);
-  floorState.layers = [];
-  realGroup.visible = $('tg-real').checked && realLoaded;
-  buildingsGroup.visible = $('tg-white').checked;
-  labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
-  liveGroup.visible = $('tg-live').checked;
-  $('floor-ui').style.display = 'none';
-  if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
-}
-
-// 支持 URL 直达分层视图：?floor=2号楼 / ?floor=6号楼
-const initFloor = new URLSearchParams(location.search).get('floor');
-if (initFloor === '2号楼' || initFloor === '6号楼') {
-  setTimeout(() => enterFloorMode(initFloor), 2500);
-}
 
 // ---------- 透视模式：1号楼内部模拟（模拟数据） ----------
 const xrayState = { on: false };
@@ -1375,6 +1327,7 @@ function spawnRobot(src) {
     speed: 1.1 + Math.random() * 0.7, elev: null, targetFloor: null, rideIdx: 0,
   };
   r.obj.position.set(r.wp.x, floorTopY(f) + 0.75, r.wp.z);
+  r.beacon = addBeacon(g, f + 'F');
   ROBOTS.push(r);
 }
 function stepRobot(r, dx, dz, dist, dt) {
@@ -1398,6 +1351,7 @@ function updateRobots(dt) {
         r.state = 'wander';
         r.elev = null;
         r.floor = ev.floor;
+        setBeaconTag(r.beacon, r.floor + 'F');
         const l = lobbyOf(ev);
         r.obj.position.set(l.x, floorTopY(r.floor) + 0.75, l.z);
         r.wp = randWP();
@@ -1441,27 +1395,77 @@ function updateRobots(dt) {
   }
 }
 
-// 材质刷新（选中 / 透视 / 楼层线 三态）
-function refreshMeshMaterial(m) {
-  const mats = m.userData.mats;
-  if (selected === m.userData.building) { m.material = hlPlain; return; }
-  if (xrayState.on && m.userData.building.id === 'b1') {
-    if (!mats.xray) {
-      const sx = mats.lined[0].clone();
-      sx.transparent = true;
-      sx.opacity = 0.16;
-      sx.depthWrite = false;
-      const tx = mats.lined[2].clone();
-      tx.transparent = true;
-      tx.opacity = 0.1;
-      tx.depthWrite = false;
-      mats.xray = [sx, sx, tx, tx, sx, sx];
+// ---------- 全息白膜材质：菲涅尔透明壳 + 边缘加深 + 上升扫描光 ----------
+const holoState = { on: false };
+const holoMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  fog: true,
+  uniforms: {
+    uColor: { value: new THREE.Color(0xcfe4f4) },
+    uRim: { value: new THREE.Color(0x2e6fa8) },
+    uMinO: { value: 0.10 },
+    uMaxO: { value: 0.40 },
+    uPow: { value: 1.7 },
+    uTime: { value: 0 },
+    fogColor: { value: new THREE.Color(0xffffff) },
+    fogNear: { value: 900 },
+    fogFar: { value: 2600 },
+  },
+  vertexShader: `
+    varying vec3 vPosW;
+    varying vec3 vNrmW;
+    #include <fog_pars_vertex>
+    void main() {
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      vPosW = (modelMatrix * vec4(position, 1.0)).xyz;
+      vNrmW = normalize(mat3(modelMatrix) * normal);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
     }
-    m.material = mats.xray;
-    return;
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    uniform vec3 uRim;
+    uniform float uMinO;
+    uniform float uMaxO;
+    uniform float uPow;
+    uniform float uTime;
+    varying vec3 vPosW;
+    varying vec3 vNrmW;
+    #include <fog_pars_fragment>
+    void main() {
+      vec3 V = normalize(cameraPosition - vPosW);
+      float ndv = abs(dot(normalize(vNrmW), V));
+      float fr = pow(1.0 - ndv, uPow);
+      float a = mix(uMinO, uMaxO, fr);
+      vec3 col = mix(uColor, uRim, fr * 0.9);
+      float band = fract(vPosW.y * 0.045 - uTime * 0.05);
+      col += uRim * smoothstep(0.0, 0.10, band) * smoothstep(0.30, 0.10, band) * 0.55;
+      gl_FragColor = vec4(col, a);
+      #include <fog_fragment>
+    }
+  `,
+});
+function syncEdgesGlow() {
+  for (const [bid, list] of bldEdges) {
+    const on = holoState.on || (xrayState.on && bid === 'b1');
+    for (const e of list) {
+      e.material.opacity = on ? 0.9 : 0.55;
+      e.material.color.set(on ? 0x59c8ff : 0x8b96a2);
+    }
   }
-  m.material = $('tg-line').checked ? mats.lined : mats.plain;
 }
+
+// 材质刷新（选中 / 透视 / 全息 / 楼层线 多态）
+function refreshMeshMaterial(m) {
+  if (selected === m.userData.building) { m.material = hlPlain; return; }
+  if (xrayState.on && m.userData.building.id === 'b1') { m.material = holoMat; return; }
+  if (holoState.on) { m.material = holoMat; return; }
+  m.material = $('tg-line').checked ? m.userData.mats.lined : m.userData.mats.plain;
+}
+
 function applyXray(on) {
   xrayState.on = on;
   interiorGroup.visible = on;
@@ -1469,16 +1473,30 @@ function applyXray(on) {
     setHighlight(null);
     syncList();
     showWhiteModel(); // 透视需要白膜楼体，且必须隐藏精模，否则精模墙体挡住内部
+    openFloorPlan('1号楼');
   } else {
     restoreView();
+    closeFloorPlan();
   }
   for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
+  syncEdgesGlow();
   const btn = $('xray-btn');
   btn.textContent = on ? '退出透视（1号楼）' : '🔍 透视 1号楼（内部模拟）';
   btn.classList.toggle('on', on);
   $('sim-hint').style.display = on ? 'block' : 'none';
 }
 function flyToPos(pos, look) { if (cruiseState.on) stopCruise(); flyTarget = { pos, look }; }
+// 透视入口的相机定位：建筑正前方（沿当前视角方位，避开遮挡）、平视、整栋入画
+function flyFrontOf(bbox) {
+  const ctr = bbox.getCenter(new THREE.Vector3());
+  const size = bbox.getSize(new THREE.Vector3());
+  const dist = Math.max(size.x, size.z, size.y) * 1.15 + 24;
+  const midY = ctr.y;
+  const dir = new THREE.Vector3().subVectors(camera.position, ctr).setY(0);
+  if (dir.lengthSq() < 1) dir.set(0, 0, 1);
+  dir.normalize();
+  flyToPos(new THREE.Vector3(ctr.x + dir.x * dist, midY, ctr.z + dir.z * dist), new THREE.Vector3(ctr.x, midY, ctr.z));
+}
 
 // ---------- 物流设备模型 ----------
 const DEVICES = [
@@ -1543,10 +1561,6 @@ let downPos = null, selected = null;
 
 // 只在当前可见的那套模型上做拾取：隐藏的白膜/精模仍在场景里，
 // 不判断可见性会让隐藏模型挡住对可见模型的点击。
-function pickSplitBuilding() {
-  if (!realLoaded || !realGroup.visible) return null;
-  return raycaster.intersectObjects([...splitBuildings.values()], true)[0] || null;
-}
 function pickWhiteBuilding() {
   if (!buildingsGroup.visible) return null;
   return raycaster.intersectObjects(pickables, false)[0] || null;
@@ -1579,21 +1593,14 @@ let flyTarget = null;
 
 renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (floorState.active) return;
   pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
-  renderer.domElement.style.cursor = (pickSplitBuilding() || pickWhiteBuilding()) ? 'pointer' : '';
+  renderer.domElement.style.cursor = pickWhiteBuilding() ? 'pointer' : '';
 });
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
-  if (floorState.active) return; // 分层模式下不响应场景点击
   pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
-  const bHit = pickSplitBuilding();
-  if (bHit) {
-    const nm = bHit.object.userData.buildingName;
-    if (nm) { enterFloorMode(nm); return; }
-  }
   const hit = pickWhiteBuilding();
   if (hit) {
     const b = hit.object.userData.building;
@@ -1678,10 +1685,18 @@ $('tg-real').onchange = (e) => {
     }
   }
 };
-$('tg-tree').onchange = (e) => { treesGroup.visible = e.target.checked; };
 $('tg-alpha').onchange = (e) => {
   for (const mt of allMats) { mt.transparent = e.target.checked; mt.opacity = e.target.checked ? 0.55 : 1; mt.depthWrite = !e.target.checked; }
 };
+$('tg-holo').onchange = (e) => {
+  holoState.on = e.target.checked;
+  for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
+  syncEdgesGlow();
+};
+// 初始应用全息状态（默认开启，需在 selected/$ 等声明之后执行）
+holoState.on = $('tg-holo').checked;
+for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
+syncEdgesGlow();
 $('tg-dev').onchange = (e) => {
   devicesGroup.visible = e.target.checked;
   if (e.target.checked) loadDevices();
@@ -1713,39 +1728,104 @@ document.querySelectorAll('.weatherbox button').forEach((b) => {
   b.onclick = () => setWeather(b.dataset.w);
 });
 // ---------- 自动巡航（360° 逆时针环绕医院主体） ----------
-const cruiseState = { on: false, angle: 0, r: 400, h: 200, center: new THREE.Vector3(), startPos: new THREE.Vector3(), ease: 1 };
+const cruiseState = { on: false, automatic: false, angle: 0, r: 400, h: 200, center: new THREE.Vector3(), startPos: new THREE.Vector3(), ease: 1 };
 const cruiseTV = new THREE.Vector3();
+const cruiseButtons = [$('cruise-btn'), $('cruise-top-btn')];
 const CRUISE_SPEED = 0.12; // 弧度/秒，约 52 秒一圈
-function startCruise() {
-  if (cruiseState.on) return;
-  if (floorState.active) exitFloorMode();
+const CRUISE_IDLE_MS = 60_000;
+let lastActivityAt = performance.now();
+let pendingDemoLoads = 0;
+const activePointers = new Set();
+function syncCruiseButtons() {
+  for (const btn of cruiseButtons) {
+    btn.disabled = !realLoaded || pendingDemoLoads > 0;
+    btn.classList.toggle('on', cruiseState.on);
+    btn.setAttribute('aria-pressed', String(cruiseState.on));
+    btn.textContent = cruiseState.on ? '暂停巡航' : '开始巡航';
+  }
+}
+function startCruise(automatic = false) {
+  if (cruiseState.on || !realLoaded || pendingDemoLoads > 0) return;
+  if (demo6State.active) stopDemo6();
+  if (demo2State.active) stopDemo2();
+  if (xrayState.on) {
+    applyXray(false);
+    liveGroup.visible = $('tg-live').checked;
+  }
+  setDemoBack(false);
+  document.body.classList.remove('panel-open');
+  $('settings-btn').classList.remove('on');
   flyTarget = null;
-  const c = campusFocus || controls.target;
-  cruiseState.center.copy(c);
-  const rad = Math.max(campusRadius * 1.02, 60);
-  cruiseState.r = rad;
-  cruiseState.h = rad * 0.55;
-  const dx = camera.position.x - c.x, dz = camera.position.z - c.z;
-  cruiseState.angle = Math.atan2(-dz, dx);
+  const bounds = new THREE.Box3();
+  realBuildings.forEach(g => bounds.expandByObject(g));
+  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+  const c = cruiseState.center.copy(sphere.center);
+  const halfFov = Math.min(camera.fov * Math.PI / 360, Math.atan(Math.tan(camera.fov * Math.PI / 360) * camera.aspect));
+  const distance = Math.min(controls.maxDistance, Math.max(100, sphere.radius / Math.sin(halfFov) * 1.15));
+  cruiseState.r = distance * Math.cos(Math.PI / 6);
+  cruiseState.h = distance * Math.sin(Math.PI / 6);
+  // 先按医院中心应用控制约束并清空惯性，缓入中暂停也不会跳动。
+  const damping = controls.enableDamping;
+  controls.enableDamping = false;
+  controls.target.copy(c);
+  controls.update();
+  controls.enableDamping = damping;
+  cruiseState.angle = Math.atan2(c.z - camera.position.z, camera.position.x - c.x);
   cruiseState.startPos.copy(camera.position);
   cruiseState.ease = 0;
   cruiseState.on = true;
+  cruiseState.automatic = automatic;
   controls.enabled = false;
-  const btn = $('cruise-btn');
-  btn.classList.add('on');
-  btn.textContent = '停止巡航';
+  syncCruiseButtons();
 }
-function stopCruise() {
+function stopCruise(reset = false) {
   if (!cruiseState.on) return;
   cruiseState.on = false;
-  controls.enabled = true;
+  cruiseState.automatic = false;
   controls.target.copy(cruiseState.center);
-  const btn = $('cruise-btn');
-  btn.classList.remove('on');
-  btn.textContent = '自动巡航（360°逆时针）';
+  if (reset && overviewCam) {
+    flyTarget = null;
+    camera.position.copy(overviewCam.pos);
+    controls.target.copy(overviewCam.look);
+  }
+  controls.enabled = true;
+  controls.update();
+  lastActivityAt = performance.now();
+  syncCruiseButtons();
 }
-$('cruise-btn').onclick = () => (cruiseState.on ? stopCruise() : startCruise());
-renderer.domElement.addEventListener('pointerdown', () => { if (cruiseState.on) stopCruise(); });
+for (const btn of cruiseButtons) {
+  btn.onclick = () => {
+    lastActivityAt = performance.now();
+    if (cruiseState.on) stopCruise();
+    else startCruise();
+  };
+}
+function recordActivity(event) {
+  lastActivityAt = performance.now();
+  if (event.type === 'pointerdown') activePointers.add(event.pointerId);
+  if (event.type === 'pointerup' || event.type === 'pointercancel') activePointers.delete(event.pointerId);
+  if (event.target instanceof Element && event.target.closest('#cruise-btn, #cruise-top-btn')) return;
+  if (cruiseState.on && (cruiseState.automatic || event.type !== 'pointermove')) stopCruise(true);
+}
+for (const type of ['pointermove', 'pointerdown', 'pointerup', 'pointercancel', 'wheel', 'keydown', 'keyup', 'click']) {
+  window.addEventListener(type, recordActivity, { capture: true, passive: true });
+}
+window.addEventListener('blur', () => {
+  activePointers.clear();
+  lastActivityAt = performance.now();
+  if (cruiseState.automatic) stopCruise(true);
+});
+document.addEventListener('visibilitychange', () => {
+  lastActivityAt = performance.now();
+  if (document.hidden && cruiseState.automatic) stopCruise(true);
+});
+function checkCruiseIdle() {
+  syncCruiseButtons();
+  if (!document.hidden && !cruiseState.on && !flyTarget && !activePointers.size && performance.now() - lastActivityAt >= CRUISE_IDLE_MS) {
+    startCruise(true);
+  }
+}
+setInterval(checkCruiseIdle, 1000);
 
 $('xray-btn').onclick = () => {
   if (demo6State.active) stopDemo6();
@@ -1754,16 +1834,29 @@ $('xray-btn').onclick = () => {
     loadRobots();
     applyXray(true);
     liveGroup.visible = false;
-    flyToPos(new THREE.Vector3(TCX + 85, 62, TCZ + 95), new THREE.Vector3(TCX, 45, TCZ));
+    setDemoBack(true);
+    flyFrontOf(new THREE.Box3(
+      new THREE.Vector3(TCX - TW / 2, 0, TCZ - TD / 2),
+      new THREE.Vector3(TCX + TW / 2, TOWER_FLOORS * FLOOR_H, TCZ + TD / 2)
+    ));
   } else {
     applyXray(false);
     liveGroup.visible = $('tg-live').checked;
+    setDemoBack(false);
   }
 };
-$('floor-back').onclick = () => exitFloorMode();
-document.querySelectorAll('.flr-btn').forEach((b) => {
-  b.onclick = () => enterFloorMode(b.dataset.flr);
-});
+// 透视模式悬浮返回按钮
+function setDemoBack(on) { $('demo-back').style.display = on ? 'block' : 'none'; }
+$('demo-back').onclick = () => {
+  if (demo6State.active) stopDemo6();
+  if (demo2State.active) stopDemo2();
+  if (xrayState.on) {
+    applyXray(false);
+    liveGroup.visible = $('tg-live').checked;
+    if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
+  }
+  setDemoBack(false);
+};
 setWeather('sunny');
 syncTimeUI();
 
@@ -1851,7 +1944,7 @@ const LIVE_BUILDING_CFG = {
   '5号楼': { glb: ['5号楼', '5号楼01'], s: 1 },
   '6号楼': { glb: ['6号楼'], s: 0.91 },
   '7号楼': { glb: ['7号楼'], s: 1 },
-  '2号楼': { glb: null, s: 1, approx: { cx: -6.3, cz: 39.0 } }, // GLB 中无独立节点，白膜推算近似位置（待目视校准）
+  '2号楼': { glb: ['2号楼'], s: 1 },
 };
 function buildingTransformFor(floor) {
   const name = floor.buildingName;
@@ -1908,6 +2001,8 @@ async function createLiveMarker(r) {
     model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     g.add(model);
     g.remove(box);
+    mk.beacon = addBeacon(g, '·');
+    mk.floor = null;
   } catch (e) {
     console.warn('[twin] 机器人模型加载失败', file, e);
   }
@@ -1916,6 +2011,8 @@ async function createLiveMarker(r) {
 function removeLiveMarker(rid) {
   const mk = liveMarkers.get(rid);
   if (!mk) return;
+  const i = BEACONS.indexOf(mk.beacon);
+  if (i >= 0) BEACONS.splice(i, 1);
   liveGroup.remove(mk.obj);
   liveMarkers.delete(rid);
 }
@@ -1936,6 +2033,11 @@ function refreshLiveMarkers() {
       xf.cz - (p.y - xf.cadCY) * xf.s
     );
     mk.obj.rotation.y = Math.PI / 2 + (p.yawRad || 0);
+    const flNum = floor.floorNumber;
+    if (flNum !== mk.floor) {
+      mk.floor = flNum;
+      setBeaconTag(mk.beacon, flNum != null ? flNum + 'F' : '·');
+    }
   }
   for (const [rid, r] of liveState.robots) {
     if (liveMarkers.has(rid)) continue;
@@ -2007,6 +2109,13 @@ $('panel-close').onclick = () => {
   document.body.classList.remove('panel-open');
   $('settings-btn').classList.remove('on');
 };
+// 点击模拟/透视按钮后自动收起设置面板，避免居中弹窗挡住场景鼠标操作
+document.querySelectorAll('.simbox button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.body.classList.remove('panel-open');
+    $('settings-btn').classList.remove('on');
+  });
+});
 
 // ---------- ECharts 指标面板 ----------
 const chartsState = { inited: false, charts: {}, series: {} };
@@ -2062,15 +2171,15 @@ function refreshCharts() {
   const c2 = chartsState.charts['ch-energy-live'];
   if (c2) c2.setOption({
     backgroundColor: 'transparent',
-    grid: { left: 38, right: 8, top: 22, bottom: 18 },
-    legend: { top: 0, textStyle: { color: '#8fb8d8', fontSize: 9 }, itemWidth: 12, itemHeight: 6, data: ['用电', '用水', '用气'] },
+    grid: { left: 42, right: 10, top: 26, bottom: 20 },
+    legend: { top: 0, textStyle: { color: '#9fb8d0', fontSize: 11 }, itemWidth: 14, itemHeight: 7, data: ['用电', '用水', '用气'] },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: s.live.t, boundaryGap: false, axisLabel: { color: '#41617e', fontSize: 8, interval: 4 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
+    xAxis: { type: 'category', data: s.live.t, boundaryGap: false, axisLabel: { color: '#7a95b0', fontSize: 10, interval: 4 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.25)' } } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.1)' } }, axisLabel: { color: '#7a95b0', fontSize: 10 } },
     series: [
-      { name: '用电', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 1.5 }, data: s.live.pow },
-      { name: '用水', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 1.5 }, data: s.live.wat },
-      { name: '用气', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 1.5 }, data: s.live.gas },
+      { name: '用电', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, data: s.live.pow },
+      { name: '用水', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, data: s.live.wat },
+      { name: '用气', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, data: s.live.gas },
     ],
     color: ['#00e5ff', '#ffc84d', '#4cd98a'],
   });
@@ -2080,22 +2189,22 @@ function refreshCharts() {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item', formatter: '{b}: {c}%' },
     series: [{
-      type: 'pie', radius: ['58%', '78%'], center: ['50%', '52%'],
+      type: 'pie', radius: ['70%', '92%'], center: ['50%', '50%'],
       label: { show: false },
       data: [
         { value: Math.round(walk(56, 48, 64, 1)), name: '用电' },
         { value: Math.round(walk(24, 18, 30, 1)), name: '用水' },
         { value: Math.round(walk(20, 14, 26, 1)), name: '用气' },
       ],
-      itemStyle: { borderColor: 'rgba(8,14,28,.9)', borderWidth: 2 },
+      itemStyle: { borderRadius: 5, borderWidth: 0 },
       color: ['#00e5ff', '#ffc84d', '#4cd98a'],
     }],
     graphic: [{
-      type: 'text', left: 'center', top: '38%',
-      style: { text: '2.12 万元', fill: '#fff', fontSize: 13, fontWeight: 700 },
+      type: 'text', left: 'center', top: '40%',
+      style: { text: '2.12 万元', fill: '#fff', fontSize: 12, fontWeight: 700, textShadowColor: 'rgba(0,229,255,.6)', textShadowBlur: 8 },
     }, {
-      type: 'text', left: 'center', top: '52%',
-      style: { text: '今日成本', fill: '#5b7a95', fontSize: 9 },
+      type: 'text', left: 'center', top: '57%',
+      style: { text: '今日成本', fill: '#8fb8d8', fontSize: 9 },
     }],
   });
   s.water = walk(s.water, 280, 380, 8);
@@ -2122,8 +2231,8 @@ function refreshCharts() {
     backgroundColor: 'transparent',
     grid: { left: 32, right: 6, top: 8, bottom: 16 },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'category', data: ['08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18'], axisLabel: { color: '#41617e', fontSize: 8 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
+    xAxis: { type: 'category', data: ['08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18'], axisLabel: { color: '#7a95b0', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.25)' } } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.1)' } }, axisLabel: { color: '#7a95b0', fontSize: 10 } },
     series: [{
       type: 'bar', barWidth: '55%',
       data: [420, 980, 1350, 1620, 1480, 1560, 1420, 1180, 940, 720, 540].map((n) => Math.round(n + rnd(-60, 60))),
@@ -2142,12 +2251,12 @@ function refreshCharts() {
       backgroundColor: 'transparent',
       grid: { left: 62, right: 30, top: 4, bottom: 14 },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}: {c} kW' },
-      xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.08)' } }, axisLabel: { color: '#41617e', fontSize: 8 } },
-      yAxis: { type: 'category', inverse: true, data: rank.map((r) => r.name), axisLabel: { color: '#8fb8d8', fontSize: 9 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.2)' } } },
+      xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.1)' } }, axisLabel: { color: '#7a95b0', fontSize: 10 } },
+      yAxis: { type: 'category', inverse: true, data: rank.map((r) => r.name), axisLabel: { color: '#9fb8d0', fontSize: 11 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.25)' } } },
       series: [{
         type: 'bar', barWidth: 12,
         data: rank.map((r) => Math.round(r.value + rnd(-6, 6))),
-        label: { show: true, position: 'right', color: '#cfe0f2', fontSize: 9 },
+        label: { show: true, position: 'right', color: '#e8f4ff', fontSize: 11 },
         itemStyle: { borderRadius: [0, 3, 3, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(0,229,255,.25)' }, { offset: 1, color: '#00e5ff' }]) },
       }],
     });
@@ -2181,12 +2290,12 @@ function refreshRobotMetrics() {
   if (c) c.setOption({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item', formatter: '{b}: {c} 台' },
-    legend: { bottom: 0, textStyle: { color: '#8fb8d8', fontSize: 9 }, itemWidth: 10, itemHeight: 6 },
+    legend: { bottom: 0, textStyle: { color: '#9fb8d0', fontSize: 11 }, itemWidth: 12, itemHeight: 7 },
     series: [{
       type: 'pie', radius: ['45%', '70%'], center: ['50%', '42%'],
       label: { show: false },
       data: Object.entries(types).map(([t, n]) => ({ name: ROBOT_TYPE_NAMES[t] || t, value: n })),
-      itemStyle: { borderColor: 'rgba(8,14,28,.9)', borderWidth: 2 },
+      itemStyle: { borderRadius: 5, borderWidth: 0 },
       color: ['#00e5ff', '#ffc84d', '#4cd98a', '#7f8cff'],
     }],
   });
@@ -2224,13 +2333,13 @@ const BASEMAP = {
   offset: { x: 35, z: 10 },// 平移校准（米）：+X 向东、+Z 向南
   context: { z: 16, canvas: 2048, y: -0.35 },   // ~4.2km 背景，常驻不闪
   lod: {
-    canvas: 2048, y: -0.15,                     // ~1.05km(z18) / ~2.1km(z17)
+    canvas: 2048, y: -0.35,                     // 与背景共面，避免换级时视差
     levels: [{ maxDist: 550, z: 18 }, { maxDist: 1200, z: 17 }],
   },
   detail: { canvasW: 4096, y: -0.03, maxOpacity: 0.95, near: 260, far: 520 }, // 总平图贴花
 };
 try {
-  const saved = JSON.parse(localStorage.getItem('dt.basemap') || 'null');
+  const saved = JSON.parse(localStorage.getItem('dt.basemap.v2') || 'null');
   if (saved) {
     if (saved.center) BASEMAP.center = saved.center;
     if (typeof saved.rotationDeg === 'number') BASEMAP.rotationDeg = saved.rotationDeg;
@@ -2245,7 +2354,6 @@ scene.add(mapGroup);
 const surroundGroup = new THREE.Group();
 scene.add(surroundGroup);
 let mapReady = false;
-let detailPlane = null;
 const MAP_TILE = 256, MAP_R = 6378137;
 const MAP_COS = Math.cos((BASEMAP.center.lat * Math.PI) / 180);
 const lonToMerc = (lon) => ((lon + 180) / 360) * 2 * Math.PI * MAP_R;
@@ -2317,13 +2425,14 @@ function featherAlpha(ctx, w, h, px) {
 // 拼一个正方形 Mercator 画布，中心落在 geo（相对 BASEMAP.center 的东/北米）
 async function stitchPlane(z, planeY, canvasPx, geo, featherPx = 0) {
   const mercPerPx = (2 * Math.PI * MAP_R) / (Math.pow(2, z) * MAP_TILE);
-  const cxM = lonToMerc(BASEMAP.center.lon) + geo.east;
-  const cyM = latToMerc(BASEMAP.center.lat) + geo.north / MAP_COS;
-  const n = canvasPx / MAP_TILE;
+  const cxM = lonToMerc(BASEMAP.center.lon) + geo.east / MAP_COS;
+  const cyM = latToMerc(BASEMAP.center.lat) - geo.north / MAP_COS;
   const px0 = cxM / mercPerPx - canvasPx / 2;
   const py0 = cyM / mercPerPx - canvasPx / 2;
   const t0x = Math.floor(px0 / MAP_TILE), t0y = Math.floor(py0 / MAP_TILE);
   const offX = px0 - t0x * MAP_TILE, offY = py0 - t0y * MAP_TILE;
+  const cols = Math.ceil((canvasPx + offX) / MAP_TILE);
+  const rows = Math.ceil((canvasPx + offY) / MAP_TILE);
 
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = canvasPx;
@@ -2332,8 +2441,8 @@ async function stitchPlane(z, planeY, canvasPx, geo, featherPx = 0) {
   ctx.fillRect(0, 0, canvasPx, canvasPx);
   let failed = 0;
   const jobs = [];
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
       jobs.push(fetchTile(z, t0x + i, t0y + j)
         .then((bmp) => ctx.drawImage(bmp, i * MAP_TILE - offX, j * MAP_TILE - offY))
         .catch(() => { failed++; }));
@@ -2347,52 +2456,16 @@ async function stitchPlane(z, planeY, canvasPx, geo, featherPx = 0) {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const spanX = canvasPx * mercPerPx;   // 东西向真实米
-  const spanZ = spanX * MAP_COS;        // 南北向真实米（Mercator → 真实）
+  const span = canvasPx * mercPerPx * MAP_COS;
+  // 共面底图按绘制顺序叠加，不能互相写入深度遮挡。
   const plane = new THREE.Mesh(
-    new THREE.PlaneGeometry(spanX, spanZ),
-    new THREE.MeshLambertMaterial({ map: tex, color: 0xffffff, toneMapped: false })
+    new THREE.PlaneGeometry(span, span),
+    new THREE.MeshLambertMaterial({ map: tex, color: 0xffffff, toneMapped: false, depthWrite: false })
   );
   plane.rotation.x = -Math.PI / 2;      // 纹理上边 = 北 = -Z
   plane.position.set(geo.east, planeY, -geo.north);
   plane.receiveShadow = true;
   return plane;
-}
-
-// 总平图高精贴花：0.137m/px（约为 z18 卫星的 3.8 倍），边缘 25m 羽化，靠近时淡入
-async function loadDetailGround() {
-  const img = await new Promise((res, rej) => {
-    const im = new Image();
-    im.onload = () => res(im);
-    im.onerror = () => rej(new Error('site-plan 加载失败'));
-    im.src = '/digital-twin/assets/site-plan.jpg';
-  });
-  const cw = BASEMAP.detail.canvasW;
-  const ch = Math.round((cw * img.height) / img.width);
-  const canvas = document.createElement('canvas');
-  canvas.width = cw; canvas.height = ch;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, cw, ch);
-  // 45m 羽化，和卫星底图自然过渡
-  featherAlpha(ctx, cw, ch, Math.max(8, Math.round(45 * (cw / W))));
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  detailPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(W, H),
-    // 正片叠底：白纸底色不改变卫星影像，只把道路/红线/铺装压暗，避免出现“白纸补丁”
-    new THREE.MeshBasicMaterial({
-      map: tex, transparent: true, opacity: 0, depthWrite: false,
-      blending: THREE.MultiplyBlending, premultipliedAlpha: true, toneMapped: false,
-    })
-  );
-  detailPlane.rotation.x = -Math.PI / 2;
-  detailPlane.position.y = BASEMAP.detail.y;
-  detailPlane.renderOrder = 4;
-  detailPlane.receiveShadow = true;
-  detailPlane.visible = false;
-  scene.add(detailPlane);
 }
 
 // LOD 平面：按相机距离切换 z17/z18，目标点移出覆盖范围时重拼
@@ -2450,12 +2523,6 @@ function updateBasemap(now) {
   updateFades(now);
   const on = mapGroup.visible;
   const dist = camera.position.distanceTo(controls.target);
-  // 总平图贴花：越近越实，520m 外完全交给卫星；校准时关闭，避免挡住卫星对位
-  if (detailPlane) {
-    const k = (on && !CAL_MODE) ? 1 - THREE.MathUtils.smoothstep(dist, BASEMAP.detail.near, BASEMAP.detail.far) : 0;
-    detailPlane.material.opacity = k * BASEMAP.detail.maxOpacity;
-    detailPlane.visible = k > 0.01;
-  }
   if (!on || now < lodState.nextCheck) return;
   lodState.nextCheck = now + 250;
   const lv = BASEMAP.lod.levels.find((l) => dist < l.maxDist);
@@ -2486,7 +2553,6 @@ async function loadBasemap() {
     mapGroup.add(contextPlane);
     mapGroup.visible = $('tg-map').checked;
     if (mapGroup.visible) groundGroup.visible = false;
-    loadDetailGround().catch((e) => console.warn('[天地图] 总平图贴花失败', e));
     lodState.nextCheck = 0; // 下一帧按当前相机拉取 LOD
     console.log('[天地图] 卫星底图就绪', BASEMAP.center.lon + ',' + BASEMAP.center.lat);
   } catch (e) {
@@ -2512,18 +2578,8 @@ if (CAL_MODE) {
   const hud = document.createElement('div');
   hud.style.cssText = 'position:fixed;bottom:56px;right:12px;z-index:60;background:rgba(20,30,40,.86);color:#dfe8f0;font:12px/1.6 Menlo,monospace;padding:10px 12px;border-radius:10px;white-space:pre;pointer-events:none';
   document.body.appendChild(hud);
-  // 校准辅助：总平图用“正片叠底”叠在卫星底图上——白色底完全透明，只留下道路/河道/红线
-  const planTex = new THREE.TextureLoader().load('/digital-twin/assets/site-plan.jpg', (t) => { t.colorSpace = THREE.SRGBColorSpace; });
-  const planPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(W, H),
-    new THREE.MeshBasicMaterial({ map: planTex, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.MultiplyBlending, premultipliedAlpha: true })
-  );
-  planPlane.rotation.x = -Math.PI / 2;
-  planPlane.position.y = 0.05;
-  planPlane.renderOrder = 5;
-  scene.add(planPlane);
   const sync = () => {
-    hud.textContent = `底图校准（O 键开关总平图叠加）\n中心 ${BASEMAP.center.lon.toFixed(6)}, ${BASEMAP.center.lat.toFixed(6)}\n偏移 ${BASEMAP.offset.x.toFixed(1)}, ${BASEMAP.offset.z.toFixed(1)} m\n旋转 ${BASEMAP.rotationDeg.toFixed(2)}°\n方向键平移 · Q/E 旋转 · Shift ×10 · P 导出${planPlane.visible ? '' : '\n（总平图叠加已隐藏）'}`;
+    hud.textContent = `底图校准\n中心 ${BASEMAP.center.lon.toFixed(6)}, ${BASEMAP.center.lat.toFixed(6)}\n偏移 ${BASEMAP.offset.x.toFixed(1)}, ${BASEMAP.offset.z.toFixed(1)} m\n旋转 ${BASEMAP.rotationDeg.toFixed(2)}°\n方向键平移 · Q/E 旋转 · Shift ×10 · P 导出`;
   };
   sync();
   window.addEventListener('keydown', (e) => {
@@ -2535,7 +2591,6 @@ if (CAL_MODE) {
     else if (e.key === 'ArrowDown') BASEMAP.offset.z += k;
     else if (e.key === 'q' || e.key === 'Q') BASEMAP.rotationDeg -= e.shiftKey ? 1 : 0.1;
     else if (e.key === 'e' || e.key === 'E') BASEMAP.rotationDeg += e.shiftKey ? 1 : 0.1;
-    else if (e.key === 'o' || e.key === 'O') { planPlane.visible = !planPlane.visible; sync(); return; }
     else if (e.key === 'p' || e.key === 'P') {
       console.log(JSON.stringify({ center: BASEMAP.center, rotationDeg: +BASEMAP.rotationDeg.toFixed(2), offset: { x: +BASEMAP.offset.x.toFixed(1), z: +BASEMAP.offset.z.toFixed(1) } }));
       return;
@@ -2544,7 +2599,35 @@ if (CAL_MODE) {
     e.preventDefault();
     applyMapTransform();
     sync();
-    localStorage.setItem('dt.basemap', JSON.stringify({ center: BASEMAP.center, rotationDeg: BASEMAP.rotationDeg, offset: BASEMAP.offset }));
+    localStorage.setItem('dt.basemap.v2', JSON.stringify({ center: BASEMAP.center, rotationDeg: BASEMAP.rotationDeg, offset: BASEMAP.offset }));
+  });
+
+  // 模型配准校准：W/A/S/D 平移（Shift ×10）、Z/C 旋转、M 打印配置，自动存 localStorage
+  const modelHud = document.createElement('div');
+  modelHud.style.cssText = 'position:fixed;bottom:56px;left:12px;z-index:60;background:rgba(20,30,40,.86);color:#dfe8f0;font:12px/1.6 Menlo,monospace;padding:10px 12px;border-radius:10px;white-space:pre;pointer-events:none';
+  document.body.appendChild(modelHud);
+  const syncModel = () => {
+    modelHud.textContent = `模型配准校准\n平移 ${REAL_CAL.x.toFixed(1)}, ${REAL_CAL.z.toFixed(1)} m\n旋转 ${REAL_CAL.rotDeg.toFixed(2)}°\nW/A/S/D 平移 · Z/C 旋转 · Shift ×10 · M 导出`;
+  };
+  syncModel();
+  window.addEventListener('keydown', (e) => {
+    const k = e.shiftKey ? 10 : 1;
+    let hit = true;
+    if (e.key === 'w' || e.key === 'W') REAL_CAL.z -= k;
+    else if (e.key === 's' || e.key === 'S') REAL_CAL.z += k;
+    else if (e.key === 'a' || e.key === 'A') REAL_CAL.x -= k;
+    else if (e.key === 'd' || e.key === 'D') REAL_CAL.x += k;
+    else if (e.key === 'z' || e.key === 'Z') REAL_CAL.rotDeg -= e.shiftKey ? 1 : 0.25;
+    else if (e.key === 'c' || e.key === 'C') REAL_CAL.rotDeg += e.shiftKey ? 1 : 0.25;
+    else if (e.key === 'm' || e.key === 'M') {
+      console.log('[模型配准]', JSON.stringify({ x: +REAL_CAL.x.toFixed(1), z: +REAL_CAL.z.toFixed(1), rotDeg: +REAL_CAL.rotDeg.toFixed(2) }));
+      return;
+    } else hit = false;
+    if (!hit) return;
+    e.preventDefault();
+    applyRealCal();
+    syncModel();
+    localStorage.setItem('dt.realmodel.v2', JSON.stringify({ x: REAL_CAL.x, z: REAL_CAL.z, rotDeg: REAL_CAL.rotDeg }));
   });
 }
 
@@ -2591,7 +2674,6 @@ $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; }
 
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
 const demo6State = { active: false, robots: [], group: null };
-const demo6Mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide });
 async function spawnDemo6Robots(bbox, baseY) {
   const defs = [
     { file: '/models/models/detail/medicine.glb', floor: 3 },
@@ -2613,8 +2695,9 @@ async function spawnDemo6Robots(bbox, baseY) {
       const y = baseY + (def.floor - 1) * 3.8 + 0.8;
       g.position.set((bbox.min.x + bbox.max.x) / 2, y, (bbox.min.z + bbox.max.z) / 2);
       demo6State.group.add(g);
+      const bc = addBeacon(g, def.floor + 'F');
       demo6State.robots.push({
-        obj: g, y,
+        obj: g, y, floor: def.floor, beacon: bc,
         minX: bbox.min.x + 2, maxX: bbox.max.x - 2,
         minZ: bbox.min.z + 2, maxZ: bbox.max.z - 2,
         wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
@@ -2669,9 +2752,12 @@ async function loadDemo6Cad(baseY) {
       const yBase = baseY + ((f.floorNumber || 1) - 1) * 3.8;
       // 墙体（CAD lines → 场景坐标）
       const pts = [];
+      const segs = [];
       for (const [a, b] of lines) {
-        pts.push(xf.cx + (a[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (a[1] - xf.cadCY) * xf.s);
-        pts.push(xf.cx + (b[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (b[1] - xf.cadCY) * xf.s);
+        const x1 = xf.cx + (a[0] - xf.cadCX) * xf.s, z1 = xf.cz - (a[1] - xf.cadCY) * xf.s;
+        const x2 = xf.cx + (b[0] - xf.cadCX) * xf.s, z2 = xf.cz - (b[1] - xf.cadCY) * xf.s;
+        pts.push(x1, yBase + 0.06, z1, x2, yBase + 0.06, z2);
+        segs.push([x1, z1, x2, z2]);
       }
       const lg = new THREE.LineSegments(
         new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)),
@@ -2690,6 +2776,13 @@ async function loadDemo6Cad(baseY) {
         slab.position.set(xf.cx, yBase + 0.02, xf.cz);
         demo6State.group.add(slab);
       }
+      fpAddCadFloor('6号楼', f.floorNumber || 1, segs,
+        b ? {
+          minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
+          maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
+          minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
+          maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
+        } : null);
       drawn++;
     } catch (e) {
       console.warn('[6号楼模拟] CAD 楼层加载失败', f.floorKey, e.message);
@@ -2724,7 +2817,6 @@ async function startDemo6() {
   if (demo6State.active) { stopDemo6(); return; }
   if (demo2State.active) stopDemo2();
   if (xrayState.on) applyXray(false);
-  if (floorState.active) exitFloorMode();
   stopCruise();
   const grp = realBuildings.get('6号楼');
   if (!grp) { console.warn('[6号楼模拟] 精模中未找到 6号楼'); return; }
@@ -2732,31 +2824,44 @@ async function startDemo6() {
   btn.classList.add('on');
   btn.textContent = '退出 6号楼 模拟';
   demo6State.active = true;
+  setDemoBack(true);
+  openFloorPlan('6号楼');
   // 整体透视白膜（保存原材质，退出时还原）
   grp.traverse((o) => {
     if (o.isMesh) {
       o.userData._d6mat = o.material;
-      o.material = demo6Mat;
+      o.material = holoMat;
     }
   });
   demo6State.group = new THREE.Group();
   scene.add(demo6State.group);
   const bbox = new THREE.Box3().setFromObject(grp);
-  await spawnDemo6Robots(bbox, bbox.min.y);
-  await loadDemo6Cad(bbox.min.y);
+  pendingDemoLoads++;
+  syncCruiseButtons();
+  try {
+    await spawnDemo6Robots(bbox, bbox.min.y);
+    await loadDemo6Cad(bbox.min.y);
+  } finally {
+    pendingDemoLoads--;
+    syncCruiseButtons();
+  }
   liveGroup.visible = false;
-  // 相机框选 6号楼
   const ctr = bbox.getCenter(new THREE.Vector3());
-  const rad = Math.max(bbox.getSize(new THREE.Vector3()).length() * 0.6, 30);
+  const size = bbox.getSize(new THREE.Vector3());
+  const dist = Math.max(size.x, size.z, size.y) * 1.5 + 26;
+  const az = -3 * Math.PI / 180;
+  const look = new THREE.Vector3(ctr.x + 2, bbox.min.y + size.y * 0.44, ctr.z);
   flyToPos(
-    new THREE.Vector3(ctr.x + rad * 1.1, ctr.y + rad * 0.9, ctr.z + rad * 1.4),
-    ctr
+    new THREE.Vector3(ctr.x + dist * Math.sin(az), ctr.y, ctr.z + dist * Math.cos(az)),
+    look
   );
   console.log('[6号楼模拟] 透视白膜墙体已应用（整体，不分层）');
 }
 function stopDemo6() {
   if (!demo6State.active) return;
   demo6State.active = false;
+  setDemoBack(false);
+  demo6State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
   demo6State.robots = [];
   // 还原 6号楼 材质
   const grp = realBuildings.get('6号楼');
@@ -2770,6 +2875,7 @@ function stopDemo6() {
     demo6State.group = null;
   }
   liveGroup.visible = $('tg-live').checked;
+  closeFloorPlan();
   const btn = $('demo6-btn');
   btn.classList.remove('on');
   btn.textContent = '透视 6号楼（双机模拟）';
@@ -2800,10 +2906,11 @@ async function spawnDemo2Robots(bbox, baseY) {
       const y = baseY + (def.floor - 1) * 3.8 + 0.8;
       g.position.set((bbox.min.x + bbox.max.x) / 2, y, (bbox.min.z + bbox.max.z) / 2);
       demo2State.group.add(g);
+      const bc = addBeacon(g, def.floor + 'F');
       const margin = Math.min(2, Math.max(0.5, (bbox.max.x - bbox.min.x) / 4));
       const marginZ = Math.min(2, Math.max(0.5, (bbox.max.z - bbox.min.z) / 4));
       demo2State.robots.push({
-        obj: g, y,
+        obj: g, y, floor: def.floor, beacon: bc,
         minX: bbox.min.x + margin, maxX: bbox.max.x - margin,
         minZ: bbox.min.z + marginZ, maxZ: bbox.max.z - marginZ,
         wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
@@ -2850,9 +2957,12 @@ async function loadDemo2Cad(baseY) {
       if (!xf || !lines.length) continue;
       const yBase = baseY + ((f.floorNumber || 1) - 1) * 3.8;
       const pts = [];
+      const segs = [];
       for (const [a, b] of lines) {
-        pts.push(xf.cx + (a[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (a[1] - xf.cadCY) * xf.s);
-        pts.push(xf.cx + (b[0] - xf.cadCX) * xf.s, yBase + 0.06, xf.cz - (b[1] - xf.cadCY) * xf.s);
+        const x1 = xf.cx + (a[0] - xf.cadCX) * xf.s, z1 = xf.cz - (a[1] - xf.cadCY) * xf.s;
+        const x2 = xf.cx + (b[0] - xf.cadCX) * xf.s, z2 = xf.cz - (b[1] - xf.cadCY) * xf.s;
+        pts.push(x1, yBase + 0.06, z1, x2, yBase + 0.06, z2);
+        segs.push([x1, z1, x2, z2]);
       }
       const lg = new THREE.LineSegments(
         new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)),
@@ -2870,6 +2980,13 @@ async function loadDemo2Cad(baseY) {
         slab.position.set(xf.cx, yBase + 0.02, xf.cz);
         demo2State.group.add(slab);
       }
+      fpAddCadFloor('2号楼', f.floorNumber || 1, segs,
+        b ? {
+          minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
+          maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
+          minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
+          maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
+        } : null);
       drawn++;
     } catch (e) {
       console.warn('[2号楼模拟] CAD 楼层加载失败', f.floorKey, e.message);
@@ -2904,21 +3021,23 @@ async function startDemo2() {
   if (demo2State.active) { stopDemo2(); return; }
   if (demo6State.active) stopDemo6();
   if (xrayState.on) applyXray(false);
-  if (floorState.active) exitFloorMode();
   stopCruise();
   const btn = $('demo2-btn');
   btn.classList.add('on');
   btn.textContent = '退出 2号楼 模拟';
   demo2State.active = true;
+  setDemoBack(true);
+  openFloorPlan('2号楼');
   demo2State.group = new THREE.Group();
   scene.add(demo2State.group);
-  // 2号楼 无整体模型节点：独立加载精模并整体透视（退出时移除，无需还原材质）
   let bbox = null;
   try {
-    let gltf = gltfCache.get('2号楼');
-    if (!gltf) { gltf = await makeGLTFLoader().loadAsync('/models/models/2号楼.glb'); gltfCache.set('2号楼', gltf); }
-    const bld = gltf.scene.clone(true);
-    bld.traverse((o) => { if (o.isMesh) { o.material = demo6Mat; o.castShadow = true; } });
+    const source = realBuildings.get('2号楼');
+    if (!source) throw new Error('整体模型中的 2号楼 尚未就绪');
+    source.updateWorldMatrix(true, false);
+    const bld = source.clone(true);
+    source.matrixWorld.decompose(bld.position, bld.quaternion, bld.scale);
+    bld.traverse((o) => { if (o.isMesh) { o.material = holoMat; o.castShadow = true; } });
     demo2State.group.add(bld);
     bbox = new THREE.Box3().setFromObject(bld);
   } catch (e) {
@@ -2928,7 +3047,7 @@ async function startDemo2() {
   demo2State.bbox = bbox;
   // 隐藏原本占据 2号楼 位置的模型（整体精模 + 白膜），避免与透视体叠加；薄片（地面/道路）不处理
   const hideOverlap = (root) => root.traverse((o) => {
-    if (!o.isMesh || !o.geometry || !o.visible) return;
+    if ((!o.isMesh && !o.isLineSegments) || !o.geometry || !o.visible) return;
     const ob = new THREE.Box3().setFromObject(o);
     if (ob.max.y - ob.min.y < 3) return;
     if (ob.min.y > bbox.max.y || ob.max.y < bbox.min.y) return;
@@ -2940,20 +3059,30 @@ async function startDemo2() {
   hideOverlap(realGroup);
   hideOverlap(buildingsGroup);
   console.log('[2号楼模拟] 已隐藏原位置模型', demo2State.hidden.length, '个网格');
-  await spawnDemo2Robots(bbox, bbox.min.y);
-  await loadDemo2Cad(bbox.min.y);
+  pendingDemoLoads++;
+  syncCruiseButtons();
+  try {
+    await spawnDemo2Robots(bbox, bbox.min.y);
+    await loadDemo2Cad(bbox.min.y);
+  } finally {
+    pendingDemoLoads--;
+    syncCruiseButtons();
+  }
   liveGroup.visible = false;
-  const ctr = bbox.getCenter(new THREE.Vector3());
-  const rad = Math.max(bbox.getSize(new THREE.Vector3()).length() * 0.6, 30);
-  flyToPos(
-    new THREE.Vector3(ctr.x + rad * 1.1, ctr.y + rad * 0.9, ctr.z + rad * 1.4),
-    ctr
-  );
-  console.log('[2号楼模拟] 透视白膜已应用（独立 GLB，整体不分层）bbox中心', ctr.x.toFixed(1), ctr.z.toFixed(1));
+  // 相机：正南侧正视、平视（正北=-Z，正南=+Z），贴近建筑
+  {
+    const ctr = bbox.getCenter(new THREE.Vector3());
+    const size = bbox.getSize(new THREE.Vector3());
+    const dist = Math.max(size.z, size.y) * 0.95 + 16;
+    flyToPos(new THREE.Vector3(ctr.x, ctr.y, ctr.z + dist), ctr);
+  }
+  console.log('[2号楼模拟] 透视白膜已应用（独立 GLB，整体不分层）bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
 }
 function stopDemo2() {
   if (!demo2State.active) return;
   demo2State.active = false;
+  setDemoBack(false);
+  demo2State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
   demo2State.robots = [];
   demo2State.bbox = null;
   demo2State.hidden.forEach((o) => { o.visible = true; });
@@ -2963,6 +3092,7 @@ function stopDemo2() {
     demo2State.group = null;
   }
   liveGroup.visible = $('tg-live').checked;
+  closeFloorPlan();
   const btn = $('demo2-btn');
   btn.classList.remove('on');
   btn.textContent = '透视 2号楼（双机模拟）';
@@ -2970,17 +3100,330 @@ function stopDemo2() {
 }
 $('demo2-btn').onclick = () => (demo2State.active ? stopDemo2() : startDemo2());
 
+// ---------- 楼层平面图侧栏（2D 平面 + 机器人点位，点击定位到 3D） ----------
+const fpState = {
+  building: null,
+  center: { x: 0, z: 0 },
+  bounds: null,
+  floors: [], // [{ n, lines:[[x1,z1,x2,z2],...], shafts:[{x,z}] }]
+  cur: 0,
+  userPicked: false,
+  hidden: false,
+  lastDraw: 0,
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+};
+let fpChartsPrev = null;
+function fpHideCharts() {
+  const panel = $('charts-panel');
+  fpChartsPrev = panel.classList.contains('show');
+  if (fpChartsPrev) {
+    panel.classList.remove('show');
+    $('charts-left').classList.remove('show');
+    $('charts-btn').classList.remove('on');
+    $('charts-btn').textContent = '指标面板';
+  }
+}
+function fpRestoreCharts() {
+  if (fpChartsPrev) {
+    $('charts-panel').classList.add('show');
+    $('charts-left').classList.add('show');
+    $('charts-btn').classList.add('on');
+    $('charts-btn').textContent = '收起指标';
+    fpChartsPrev = null;
+  }
+}
+function fpOpen(building) {
+  fpState.building = building;
+  fpState.floors = [];
+  fpState.bounds = null;
+  fpState.cur = 0;
+  fpState.userPicked = false;
+  fpState.hidden = false;
+  fpState.lastDraw = 0;
+  fpState.zoom = 1;
+  fpState.panX = 0;
+  fpState.panY = 0;
+  $('fp-title').textContent = building;
+  $('floor-plan').classList.add('show');
+  fpHideCharts();
+  if (building === '1号楼') {
+    fpState.center = { x: TCX, z: TCZ };
+    fpState.bounds = { minX: TCX - TW / 2, maxX: TCX + TW / 2, minZ: TCZ - TD / 2, maxZ: TCZ + TD / 2 };
+    const outline = [];
+    const b = fpState.bounds;
+    outline.push([b.minX, b.minZ, b.maxX, b.minZ], [b.maxX, b.minZ, b.maxX, b.maxZ], [b.maxX, b.maxZ, b.minX, b.maxZ], [b.minX, b.maxZ, b.minX, b.minZ]);
+    const shafts = ELEVS.map((ev) => ({
+      x: ev.shaftX, z: ev.shaftZ,
+      rect: [
+        [ev.shaftX - 1.5, ev.shaftZ - 1.6, ev.shaftX + 1.5, ev.shaftZ - 1.6],
+        [ev.shaftX + 1.5, ev.shaftZ - 1.6, ev.shaftX + 1.5, ev.shaftZ + 1.6],
+        [ev.shaftX + 1.5, ev.shaftZ + 1.6, ev.shaftX - 1.5, ev.shaftZ + 1.6],
+        [ev.shaftX - 1.5, ev.shaftZ + 1.6, ev.shaftX - 1.5, ev.shaftZ - 1.6],
+      ],
+    }));
+    for (let f = 1; f <= TOWER_FLOORS; f++) {
+      fpState.floors.push({ n: f, lines: outline.slice(), shafts: shafts.map((s) => ({ x: s.x, z: s.z })), shaftRects: shafts.flatMap((s) => s.rect) });
+    }
+    fpPickFloor(3);
+    buildFloorChips();
+  }
+  fpDraw(true);
+}
+function fpClose() {
+  $('floor-plan').classList.remove('show');
+  fpState.building = null;
+  fpState.floors = [];
+  fpState.bounds = null;
+  fpState.cur = 0;
+  fpState.userPicked = false;
+  fpRestoreCharts();
+}
+function openFloorPlan(building) { fpOpen(building); }
+function closeFloorPlan() { fpClose(); }
+function fpPickFloor(n) {
+  const i = fpState.floors.findIndex((f) => f.n === n);
+  fpState.cur = i >= 0 ? i : 0;
+  buildFloorChips();
+}
+function fpAddCadFloor(building, n, segs, b) {
+  if (fpState.building !== building) return;
+  if (b) {
+    if (!fpState.bounds) {
+      fpState.bounds = { ...b };
+      fpState.center = { x: (b.minX + b.maxX) / 2, z: (b.minZ + b.maxZ) / 2 };
+    } else {
+      fpState.bounds.minX = Math.min(fpState.bounds.minX, b.minX);
+      fpState.bounds.maxX = Math.max(fpState.bounds.maxX, b.maxX);
+      fpState.bounds.minZ = Math.min(fpState.bounds.minZ, b.minZ);
+      fpState.bounds.maxZ = Math.max(fpState.bounds.maxZ, b.maxZ);
+    }
+  }
+  if (!fpState.floors.some((f) => f.n === n)) {
+    fpState.floors.push({ n, lines: segs, shafts: [], shaftRects: [] });
+    fpState.floors.sort((a, b2) => a.n - b2.n);
+    if (!fpState.userPicked) fpPickFloor(fpState.floors.some((f) => f.n === 3) ? 3 : fpState.floors[0].n);
+  } else {
+    const f = fpState.floors.find((x) => x.n === n);
+    f.lines = segs;
+  }
+  buildFloorChips();
+}
+function fpEnsureFloor(n) {
+  if (fpState.floors.some((f) => f.n === n)) return;
+  fpState.floors.push({ n, lines: [], shafts: [], shaftRects: [] });
+  fpState.floors.sort((a, b) => a.n - b.n);
+  buildFloorChips();
+}
+function buildFloorChips() {
+  const wrap = $('fp-floors');
+  wrap.innerHTML = '';
+  fpState.floors.forEach((f, i) => {
+    const el = document.createElement('button');
+    el.className = 'fp-flr' + (i === fpState.cur ? ' on' : '');
+    el.dataset.n = f.n;
+    el.innerHTML = f.n + 'F<span class="rd"></span>';
+    el.onclick = () => { fpState.cur = i; fpState.userPicked = true; fpState.zoom = 1; fpState.panX = 0; fpState.panY = 0; buildFloorChips(); fpDraw(true); };
+    wrap.appendChild(el);
+  });
+}
+function fpCollectRobots() {
+  const out = [];
+  const bname = fpState.building;
+  if (bname === '1号楼') {
+    ROBOTS.forEach((r, i) => out.push({ x: r.obj.position.x, z: r.obj.position.z, y: r.obj.position.y, floor: r.floor, label: '机器人 ' + (i + 1), kind: 'sim' }));
+  } else if (bname === '6号楼') {
+    demo6State.robots.forEach((r, i) => out.push({ x: r.obj.position.x, z: r.obj.position.z, y: r.obj.position.y, floor: r.floor, label: '机器人 ' + (i + 1), kind: 'sim' }));
+  } else if (bname === '2号楼') {
+    demo2State.robots.forEach((r, i) => out.push({ x: r.obj.position.x, z: r.obj.position.z, y: r.obj.position.y, floor: r.floor, label: '机器人 ' + (i + 1), kind: 'sim' }));
+  }
+  for (const [rid, mk] of liveMarkers) {
+    if (!mk.obj.visible) continue;
+    const r = liveState.robots.get(rid);
+    const loc = r && readyPose(r);
+    if (!loc) continue;
+    const floor = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
+    if (!floor || floor.buildingName !== bname) continue;
+    out.push({
+      x: mk.obj.position.x, z: mk.obj.position.z, y: mk.obj.position.y,
+      floor: floor.floorNumber || 0,
+      label: ((r.name || r.robotId || rid) + '').slice(0, 12),
+      kind: 'live',
+    });
+  }
+  return out;
+}
+function fpXform() {
+  const b = fpState.bounds;
+  const cv = $('fp-canvas');
+  const W = cv.width, H = cv.height;
+  if (!b) return null;
+  const z = fpState.zoom || 1;
+  const s = Math.min(W / (b.maxX - b.minX), H / (b.maxZ - b.minZ)) * 0.92 * z;
+  const ox = (W - (b.maxX - b.minX) * s) / 2 + (fpState.panX || 0);
+  const oy = (H - (b.maxZ - b.minZ) * s) / 2 + (fpState.panY || 0);
+  return {
+    s, ox, oy,
+    X: (x) => (x - b.minX) * s + ox,
+    Y: (z) => (z - b.minZ) * s + oy,
+    invX: (px) => (px - ox) / s + b.minX,
+    invZ: (py) => (py - oy) / s + b.minZ,
+  };
+}
+function fpDraw(force) {
+  const now = performance.now();
+  if (!force && now - fpState.lastDraw < 120) return;
+  fpState.lastDraw = now;
+  const cv = $('fp-canvas'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(8,16,30,0.88)';
+  ctx.fillRect(0, 0, W, H);
+  const all = fpCollectRobots();
+  for (const r of all) fpEnsureFloor(r.floor);
+  const hasSet = new Set(all.map((r) => r.floor));
+  document.querySelectorAll('.fp-flr').forEach((el) => el.classList.toggle('has', hasSet.has(+el.dataset.n || null)));
+  if (!fpState.bounds || !fpState.floors.length) {
+    ctx.fillStyle = '#5b7a95';
+    ctx.font = '13px "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('等待楼层数据…', W / 2, H / 2);
+    return;
+  }
+  const xf = fpXform();
+  ctx.strokeStyle = 'rgba(127,212,255,.07)';
+  ctx.lineWidth = 1;
+  for (let gx = 20; gx < W; gx += 20) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+  for (let gy = 20; gy < H; gy += 20) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+  const fl = fpState.floors[fpState.cur];
+  if (!fl) return;
+  ctx.strokeStyle = 'rgba(140,220,255,.6)';
+  ctx.lineWidth = 1.6;
+  for (const [x1, z1, x2, z2] of fl.lines) {
+    ctx.beginPath();
+    ctx.moveTo(xf.X(x1), xf.Y(z1));
+    ctx.lineTo(xf.X(x2), xf.Y(z2));
+    ctx.stroke();
+  }
+  for (const r of fl.shaftRects || []) {
+    ctx.strokeStyle = 'rgba(127,178,217,.5)';
+    ctx.beginPath();
+    ctx.moveTo(xf.X(r[0]), xf.Y(r[1]));
+    ctx.lineTo(xf.X(r[2]), xf.Y(r[3]));
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(140,220,255,.6)';
+  }
+  const cur = all.filter((r) => r.floor === fl.n);
+  const listEl = $('fp-robots');
+  listEl.innerHTML = '';
+  if (!cur.length) {
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = '当前楼层暂无机器人';
+    listEl.appendChild(d);
+  }
+  for (const r of cur) {
+    const px = xf.X(r.x), py = xf.Y(r.z);
+    const col = r.kind === 'sim' ? '77,195,255' : '76,217,138';
+    const grd = ctx.createRadialGradient(px, py, 0, px, py, 9);
+    grd.addColorStop(0, `rgba(${col},0.9)`);
+    grd.addColorStop(0.5, `rgba(${col},0.3)`);
+    grd.addColorStop(1, `rgba(${col},0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(px, py, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(px, py, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    const row = document.createElement('div');
+    row.className = 'fr';
+    const dot = document.createElement('i');
+    dot.className = 'dot ' + r.kind;
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = r.label;
+    const flEl = document.createElement('span');
+    flEl.textContent = r.floor + 'F';
+    row.appendChild(dot);
+    row.appendChild(nm);
+    row.appendChild(flEl);
+    row.onclick = () => fpFly(r);
+    listEl.appendChild(row);
+  }
+}
+function fpFly(r) {
+  const c = fpState.center || { x: 0, z: 0 };
+  let dx = r.x - c.x, dz = r.z - c.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 2) { dx = 0.7; dz = 0.7; } else { dx /= d; dz /= d; }
+  flyToPos(
+    new THREE.Vector3(r.x + dx * 24, Math.max(r.y + 15, 24), r.z + dz * 24),
+    new THREE.Vector3(r.x, r.y, r.z)
+  );
+}
+$('fp-close').onclick = () => { fpState.hidden = true; $('floor-plan').classList.remove('show'); };
+// 调试钩子：隐藏标签页 rAF 节流时可用 window.__dt.fpDraw(true) 手动刷新平面图
+window.__dt = { fpDraw, fpCollectRobots, fpState, get ROBOTS() { return ROBOTS; }, get BEACONS() { return BEACONS; }, get holoState() { return holoState; }, get xrayState() { return xrayState; }, get partMeshes() { return partMeshes; }, get holoMat() { return holoMat; }, get camera() { return camera; }, get flyTarget() { return flyTarget; }, get renderer() { return renderer; }, get scene() { return scene; }, get THREE() { return THREE; } };
+// 平面图交互：滚轮缩放（围绕中心）、拖动平移、点击定位机器人
+let fpDrag = null, fpDragMoved = false;
+$('fp-canvas').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (!fpState.bounds) return;
+  const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  fpState.zoom = Math.min(4, Math.max(0.6, (fpState.zoom || 1) * f));
+  fpDraw(true);
+}, { passive: false });
+$('fp-canvas').addEventListener('pointerdown', (e) => {
+  if (!fpState.bounds) return;
+  fpDrag = { x: e.offsetX, y: e.offsetY };
+  fpDragMoved = false;
+  $('fp-canvas').setPointerCapture(e.pointerId);
+});
+$('fp-canvas').addEventListener('pointermove', (e) => {
+  if (!fpDrag) return;
+  const dx = e.offsetX - fpDrag.x, dy = e.offsetY - fpDrag.y;
+  if (Math.hypot(dx, dy) > 3) fpDragMoved = true;
+  if (fpDragMoved) {
+    fpState.panX += dx;
+    fpState.panY += dy;
+    fpDrag.x = e.offsetX;
+    fpDrag.y = e.offsetY;
+    fpDraw(true);
+  }
+});
+$('fp-canvas').addEventListener('pointerup', () => { fpDrag = null; });
+$('fp-canvas').onclick = (e) => {
+  if (fpDragMoved) { fpDragMoved = false; return; }
+  if (!fpState.bounds || !fpState.floors.length) return;
+  const xf = fpXform();
+  const cv = e.target;
+  const rect = cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (cv.width / rect.width);
+  const my = (e.clientY - rect.top) * (cv.height / rect.height);
+  const fl = fpState.floors[fpState.cur];
+  const cur = fpCollectRobots().filter((r) => r.floor === fl.n);
+  let best = null, bestD = 16;
+  for (const r of cur) {
+    const d2 = Math.hypot(xf.X(r.x) - mx, xf.Y(r.z) - my);
+    if (d2 < bestD) { bestD = d2; best = r; }
+  }
+  if (best) fpFly(best);
+};
+
 // 记住左侧视图开关：刷新后保持上次的选择（白膜/周边白膜/卫星底图等）
-const VIEW_KEYS = ['tg-real', 'tg-white', 'tg-label', 'tg-line', 'tg-tex', 'tg-tree', 'tg-alpha', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map'];
-const VIEW_ORDER = ['tg-label', 'tg-line', 'tg-tex', 'tg-tree', 'tg-alpha', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map', 'tg-white', 'tg-real'];
+const VIEW_KEYS = ['tg-real', 'tg-white', 'tg-holo', 'tg-label', 'tg-line', 'tg-tex', 'tg-alpha', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map'];
+const VIEW_ORDER = ['tg-label', 'tg-line', 'tg-tex', 'tg-alpha', 'tg-holo', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map', 'tg-white', 'tg-real'];
 document.querySelector('.toggles')?.addEventListener('change', (e) => {
   if (!e.target.id || !VIEW_KEYS.includes(e.target.id)) return;
   const state = {};
   for (const id of VIEW_KEYS) state[id] = $(id).checked;
-  try { localStorage.setItem('dt.view.v2', JSON.stringify(state)); } catch { /* 隐私模式忽略 */ }
+  try { localStorage.setItem('dt.view.v3', JSON.stringify(state)); } catch { /* 隐私模式忽略 */ }
 });
 try {
-  const savedView = JSON.parse(localStorage.getItem('dt.view.v2') || 'null');
+  const savedView = JSON.parse(localStorage.getItem('dt.view.v3') || 'null');
   if (savedView) {
     setTimeout(() => {
       for (const id of VIEW_ORDER) {
@@ -3028,14 +3471,14 @@ function animate() {
   updateRobots(dt);
   updateDemo6(dt);
   updateDemo2(dt);
-  if (floorState.active && floorState.layers.length) {
-    const spread = +$('floor-spread').value / 100;
-    const step = floorState.bandH * 1.6;
-    floorState.layers.forEach((l, i) => {
-      const target = i * step * spread;
-      l.position.y += (target - l.position.y) * 0.12;
-    });
+  holoMat.uniforms.uTime.value = elapsed;
+  for (const b of BEACONS) {
+    const k = 0.5 + 0.5 * Math.sin(elapsed * 2.4 + b.phase);
+    b.beam.material.opacity = 0.2 + 0.16 * k;
+    b.ring.scale.setScalar(1 + 0.12 * k);
+    b.glow.material.opacity = 0.55 + 0.3 * k;
   }
+  if (fpState.building && !fpState.hidden) fpDraw(false);
   if (flyTarget) {
     camera.position.lerp(flyTarget.pos, 0.06);
     controls.target.lerp(flyTarget.look, 0.06);
@@ -3048,14 +3491,16 @@ function animate() {
     const c = cruiseState.center;
     cruiseTV.set(
       c.x + cruiseState.r * Math.cos(cruiseState.angle),
-      cruiseState.h,
+      c.y + cruiseState.h,
       c.z - cruiseState.r * Math.sin(cruiseState.angle)
     );
     if (k < 1) camera.position.lerpVectors(cruiseState.startPos, cruiseTV, k);
     else camera.position.copy(cruiseTV);
-    camera.lookAt(c.x, c.y + cruiseState.h * 0.22, c.z);
+    controls.target.copy(c);
+    camera.lookAt(c);
+  } else {
+    controls.update();
   }
-  controls.update();
   // 视角平面不得低于水平面
   const MIN_VIEW_Y = 0.6;
   if (controls.target.y < MIN_VIEW_Y) controls.target.y = MIN_VIEW_Y;
