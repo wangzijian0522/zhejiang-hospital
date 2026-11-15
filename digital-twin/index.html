@@ -186,6 +186,10 @@
     <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
     <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
+    <label><input type="checkbox" id="tg-water" checked> 水系</label>
+    <label><input type="checkbox" id="tg-viaduct" checked> 上塘高架</label>
+    <label><input type="checkbox" id="tg-green" checked> 公园树木</label>
+    <label><input type="checkbox" id="tg-landmark" checked> 地标</label>
     <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
     <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
   </div>
@@ -325,7 +329,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CITY } from './data/city.js';
+import { CONTEXT } from './data/context.js';
 
 // GLB 模型使用 Draco 压缩，统一注入解码器
 const dracoLoader = new DRACOLoader();
@@ -1818,6 +1824,14 @@ scene.add(mapGroup);
 // 周边建筑体量（按卫星影像标定）与底图共用同一套变换，校准时一起移动
 const surroundGroup = new THREE.Group();
 scene.add(surroundGroup);
+// 3D 环境：水系/高架/公园树木/地标，与底图/城市共用同一套地图变换
+const contextRoot = new THREE.Group();
+const waterGroup = new THREE.Group(); waterGroup.name = 'waterGroup';
+const viaductGroup = new THREE.Group(); viaductGroup.name = 'viaductGroup';
+const greenGroup = new THREE.Group(); greenGroup.name = 'greenGroup';
+const contextLabelGroup = new THREE.Group(); contextLabelGroup.name = 'contextLabels';
+contextRoot.add(waterGroup, viaductGroup, greenGroup, contextLabelGroup);
+scene.add(contextRoot);
 let mapReady = false;
 const MAP_TILE = 256, MAP_R = 6378137;
 const MAP_COS = Math.cos((BASEMAP.center.lat * Math.PI) / 180);
@@ -1829,6 +1843,8 @@ function applyMapTransform() {
   mapGroup.rotation.y = (BASEMAP.rotationDeg * Math.PI) / 180;
   surroundGroup.position.copy(mapGroup.position);
   surroundGroup.rotation.y = mapGroup.rotation.y;
+  contextRoot.position.copy(mapGroup.position);
+  contextRoot.rotation.y = mapGroup.rotation.y;
 }
 
 // 世界坐标 → 底图局部坐标（东/北，米）
@@ -2167,6 +2183,172 @@ function buildCity() {
 buildCity();
 surroundGroup.visible = $('tg-surround').checked;
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
+
+// ---------- 3D 环境：水系 / 上塘高架 / 公园树木 / 地标 ----------
+let waterTex = null;
+function contextRingGeometry(ring, uvScale) {
+  const contour = ring.map((p) => new THREE.Vector2(p[0], p[1]));
+  const faces = THREE.ShapeUtils.triangulateShape(contour, []);
+  if (!faces.length) return null;
+  const pos = new Float32Array(contour.length * 3);
+  const uv = new Float32Array(contour.length * 2);
+  const nrm = new Float32Array(contour.length * 3);
+  contour.forEach((p, i) => {
+    pos[i * 3] = p.x; pos[i * 3 + 1] = 0; pos[i * 3 + 2] = p.y;
+    uv[i * 2] = p.x / uvScale; uv[i * 2 + 1] = p.y / uvScale;
+    nrm[i * 3 + 1] = 1;
+  });
+  const idx = [];
+  for (const f of faces) idx.push(f[0], f[1], f[2]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setIndex(idx);
+  return g;
+}
+
+function buildContext() {
+  greenGroup.position.y = 0.06;
+  // 水面：贴图缓慢流动，颜色与天空/雾一致，不抢主体
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const cg = c.getContext('2d');
+  cg.fillStyle = '#6fa6b8'; cg.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 26; i++) {
+    cg.strokeStyle = `rgba(232,246,251,${0.06 + Math.random() * 0.10})`;
+    cg.lineWidth = 1 + Math.random() * 1.2;
+    cg.beginPath();
+    const y = Math.random() * 128;
+    for (let x = 0; x <= 128; x += 8) cg.lineTo(x, y + Math.sin(x * 0.11 + i) * 2.5);
+    cg.stroke();
+  }
+  waterTex = new THREE.CanvasTexture(c);
+  waterTex.wrapS = waterTex.wrapT = THREE.RepeatWrapping;
+  waterTex.colorSpace = THREE.SRGBColorSpace;
+  waterTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const waterMat = new THREE.MeshBasicMaterial({ map: waterTex, color: 0xffffff, side: THREE.DoubleSide });
+  for (const w of CONTEXT.water) {
+    const g = contextRingGeometry(w.ring, 70);
+    if (!g) continue;
+    const m = new THREE.Mesh(g, waterMat);
+    m.position.y = 0.18;
+    m.receiveShadow = true;
+    waterGroup.add(m);
+  }
+
+  // 公园草地 + 实例化树
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0x5b7350, roughness: 0.96 });
+  for (const gr of CONTEXT.green) {
+    const g = contextRingGeometry(gr.ring, 40);
+    if (!g) continue;
+    const m = new THREE.Mesh(g, grassMat);
+    m.receiveShadow = true;
+    greenGroup.add(m);
+  }
+  if (CONTEXT.trees.length) {
+    const n = CONTEXT.trees.length;
+    const trunkGeo = new THREE.CylinderGeometry(0.18, 0.26, 2.8, 5);
+    const crownGeo = new THREE.IcosahedronGeometry(1, 0);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4b3c, roughness: 1 });
+    const crownMat = new THREE.MeshStandardMaterial({ color: 0x4f6f49, roughness: 0.92, flatShading: true });
+    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
+    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, n);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    CONTEXT.trees.forEach(([x, z, s], i) => {
+      v.set(x, 1.4 * s, z); sc.set(s, s, s);
+      m4.compose(v, q, sc); trunks.setMatrixAt(i, m4);
+      v.set(x, 3.9 * s, z); sc.set(2.1 * s, 2.5 * s, 2.1 * s);
+      m4.compose(v, q, sc); crowns.setMatrixAt(i, m4);
+    });
+    trunks.instanceMatrix.needsUpdate = true;
+    crowns.instanceMatrix.needsUpdate = true;
+    trunks.frustumCulled = crowns.frustumCulled = false;
+    greenGroup.add(trunks, crowns);
+  }
+
+  // 上塘高架：桥面 + 护栏 + 桥墩（无高度字段，按 11.5m 桥面/24m 宽近似）
+  const deckMat = new THREE.MeshStandardMaterial({ color: 0x70757a, roughness: 0.92 });
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0xd0d3d5, roughness: 0.95 });
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xe3e6e8, roughness: 0.9 });
+  const DECK_Y = 11.5, DECK_T = 1.4, W = 24;
+  const deckGeos = [], railGeos = [], pierGeos = [];
+  const one = new THREE.Vector3(1, 1, 1), p3 = new THREE.Vector3(), q3 = new THREE.Quaternion(), m4 = new THREE.Matrix4(), upY = new THREE.Vector3(0, 1, 0);
+  const addBox = (arr, w, h, d, x, y, z, ang) => {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    q3.setFromAxisAngle(upY, ang);
+    p3.set(x, y, z);
+    m4.compose(p3, q3, one);
+    geo.applyMatrix4(m4);
+    arr.push(geo);
+  };
+  for (const v of CONTEXT.viaduct) {
+    for (const part of v.parts) {
+      for (let i = 1; i < part.length; i++) {
+        const a = part[i - 1], b = part[i];
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const len = Math.hypot(dx, dz);
+        if (len < 0.4) continue;
+        const ang = Math.atan2(dx, dz);
+        const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+        addBox(deckGeos, W, DECK_T, len + 0.35, mx, DECK_Y - DECK_T / 2, mz, ang);
+        const nx = Math.cos(ang), nz = -Math.sin(ang);
+        for (const side of [-1, 1]) {
+          addBox(railGeos, 0.35, 0.9, len + 0.35,
+            mx + nx * side * (W / 2 - 0.25), DECK_Y + 0.45, mz + nz * side * (W / 2 - 0.25), ang);
+        }
+      }
+      let acc = 0, target = 0;
+      for (let i = 1; i < part.length; i++) {
+        const a = part[i - 1], b = part[i];
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const len = Math.hypot(dx, dz);
+        if (len < 0.4) continue;
+        while (target <= acc + len) {
+          const t = (target - acc) / len;
+          const x = a[0] + dx * t, z = a[1] + dz * t;
+          addBox(pierGeos, 1.8, DECK_Y - DECK_T, 1.8, x, (DECK_Y - DECK_T) / 2, z, 0);
+          addBox(pierGeos, 6, 0.8, 2.4, x, DECK_Y - DECK_T - 0.4, z, Math.atan2(dx, dz));
+          target += 30;
+        }
+        acc += len;
+      }
+    }
+  }
+  const addMerged = (geos, mat) => {
+    if (!geos.length) return;
+    const g = mergeGeometries(geos, false);
+    if (!g) return;
+    const m = new THREE.Mesh(g, mat);
+    m.castShadow = m.receiveShadow = true;
+    viaductGroup.add(m);
+  };
+  addMerged(deckGeos, deckMat);
+  addMerged(railGeos, railMat);
+  addMerged(pierGeos, concreteMat);
+
+  // 地标
+  for (const l of CONTEXT.labels) {
+    const sp = makeLabel(l.text, 'rgba(10,20,34,0.82)', '#dff2ff', 1.1);
+    sp.position.set(l.x, l.kind === 'viaduct' ? 30 : l.kind === 'water' ? 18 : 22, l.z);
+    contextLabelGroup.add(sp);
+  }
+
+  const toggles = [
+    ['tg-water', waterGroup],
+    ['tg-viaduct', viaductGroup],
+    ['tg-green', greenGroup],
+    ['tg-landmark', contextLabelGroup],
+  ];
+  for (const [id, g] of toggles) {
+    const el = $(id);
+    if (!el) continue;
+    g.visible = el.checked;
+    el.onchange = () => { g.visible = el.checked; };
+  }
+  console.log('[环境] 水系', CONTEXT.water.length, '公园', CONTEXT.green.length, '高架段', CONTEXT.viaduct.reduce((s, v) => s + v.parts.length, 0), '树', CONTEXT.trees.length);
+}
+buildContext();
 
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
 const demo6State = { active: false, robots: [], group: null };
@@ -2876,8 +3058,8 @@ $('fp-canvas').onclick = (e) => {
 };
 
 // 记住左侧视图开关：刷新后保持上次的选择（整体/设备/机器人/周边/底图）
-const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map'];
-const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map', 'tg-real'];
+const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-landmark', 'tg-surround', 'tg-map'];
+const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-landmark', 'tg-surround', 'tg-map', 'tg-real'];
 document.querySelector('.toggles')?.addEventListener('change', (e) => {
   if (!e.target.id || !VIEW_KEYS.includes(e.target.id)) return;
   const state = {};
@@ -2929,6 +3111,10 @@ function animate() {
   updateClouds(dt, elapsed);
   updateRain(dt, camera.position);
   updateSnow(dt, camera.position, elapsed);
+  if (waterTex) {
+    waterTex.offset.x = (waterTex.offset.x + dt * 0.012) % 1;
+    waterTex.offset.y = (waterTex.offset.y + dt * 0.007) % 1;
+  }
   updateDemo6(dt);
   updateDemo2(dt);
   holoMat.uniforms.uTime.value = elapsed;
