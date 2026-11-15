@@ -212,7 +212,7 @@
     <label><input type="checkbox" id="tg-alpha"> 半透明</label>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
     <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
-    <label><input type="checkbox" id="tg-surround"> 周边白膜</label>
+    <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
     <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
   </div>
   <div class="timebox">
@@ -364,7 +364,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { BUILDINGS, IMG, UNLOCATED, NOTES } from './data/buildings.js';
-import { SURROUNDINGS } from './data/surroundings.js';
+import { CITY } from './data/city.js';
 
 // GLB 模型使用 Draco 压缩，统一注入解码器
 const dracoLoader = new DRACOLoader();
@@ -532,7 +532,7 @@ function makeCloud() {
 const clouds = [];
 for (let i = 0; i < 14; i++) {
   const c = makeCloud();
-  c.position.set((Math.random() * 2 - 1) * 1400, 150 + Math.random() * 130, (Math.random() * 2 - 1) * 1400);
+  c.position.set((Math.random() * 2 - 1) * 1400, 400 + Math.random() * 260, (Math.random() * 2 - 1) * 1400);
   c.userData.spd = 1.2 + Math.random() * 2.4;
   c.userData.ph = Math.random() * Math.PI * 2;
   cloudGroup.add(c);
@@ -1149,7 +1149,7 @@ function loadRealModel() {
     // 初始视角：医院主体居中，东南方位、30° 俯角鸟瞰
     const focus = computeCampusFocus() || new THREE.Vector3(0, 0, 0);
     const rad = campusRadius;
-    const az = 33 * Math.PI / 180, elev = 30 * Math.PI / 180, dist = rad * 2.0;
+    const az = 33 * Math.PI / 180, elev = 34 * Math.PI / 180, dist = rad * 2.6;
     const iv = new THREE.Vector3(
       focus.x + dist * Math.cos(elev) * Math.sin(az),
       dist * Math.sin(elev),
@@ -2656,57 +2656,75 @@ if (CAL_MODE) {
   });
 }
 
-// 周边建筑体量：坐标由天地图 z18 影像逐排标定（tools/make-surroundings.js），
-// 与卫星底图共用变换，改校准值时一起移动。
-function buildSurrounding() {
-  const BODY_COLORS = [0xe4e7ea, 0xdfe2e5, 0xe8e3da, 0xdde1e6];
-  const ROOF_COLORS = [0x6a6f75, 0x74797f, 0x5f646a];
-  const bodyCache = new Map();
-  const roofCache = new Map();
-  const topMat = new THREE.MeshStandardMaterial({ color: 0x7b8086, roughness: 0.95 });
-  const unitCone = new THREE.ConeGeometry(1, 1, 4);
-  unitCone.rotateY(Math.PI / 4); // 45° 烘进几何体：缩放后再旋转会变成斜楔
-  for (const b of SURROUNDINGS) {
-    const floors = Math.max(2, Math.round(b.h / 3.2));
-    const ci = Math.abs(Math.round(b.x * 3 + b.z * 5)) % BODY_COLORS.length;
-    const key = floors + '/' + ci;
-    let bodyMat = bodyCache.get(key);
-    if (!bodyMat) {
-      bodyMat = new THREE.MeshStandardMaterial({
-        color: BODY_COLORS[ci], roughness: 0.9, metalness: 0,
-        map: floorTex(floors), transparent: true, opacity: 0.88, depthWrite: false,
-      });
-      bodyCache.set(key, bodyMat);
-    }
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(b.w, b.h, b.d),
-      [bodyMat, bodyMat, topMat, topMat, bodyMat, bodyMat]
-    );
-    body.position.set(b.x, b.h / 2, b.z);
-    body.rotation.y = (b.rot * Math.PI) / 180;
-    body.renderOrder = 6;
-    surroundGroup.add(body);
 
-    const ri = Math.abs(Math.round(b.x * 7 + b.z * 11)) % ROOF_COLORS.length;
-    let roofMat = roofCache.get(ri);
-    if (!roofMat) {
-      roofMat = new THREE.MeshStandardMaterial({
-        color: ROOF_COLORS[ri], roughness: 0.95, metalness: 0,
-        transparent: true, opacity: 0.92, depthWrite: false,
-      });
-      roofCache.set(ri, roofMat);
+// 真实建筑轮廓（百度建筑 2020，WGS84；已换算到地图坐标系），与底图共用变换
+const CITY_HEIGHT_SCALE = 1.0;
+function buildCity() {
+  if (!CITY || !CITY.buildings.length) return;
+  const cw = document.createElement('canvas');
+  cw.width = cw.height = 32;
+  const cg = cw.getContext('2d');
+  cg.fillStyle = '#eef1f4'; cg.fillRect(0, 0, 32, 32);
+  cg.fillStyle = 'rgba(105,120,135,0.32)'; cg.fillRect(0, 21, 32, 5);
+  cg.fillStyle = 'rgba(255,255,255,0.35)'; cg.fillRect(0, 26, 32, 2);
+  const cityTex = new THREE.CanvasTexture(cw);
+  cityTex.colorSpace = THREE.SRGBColorSpace;
+  cityTex.wrapS = cityTex.wrapT = THREE.RepeatWrapping;
+  cityTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const SHADES = [0xffffff, 0xf2f4f6, 0xe9edf1, 0xf7f4ef];
+  const wallPos = [], wallNrm = [], wallUv = [], wallCol = [], roofPos = [];
+  const contour = [];
+  let bi = 0;
+  for (const item of CITY.buildings) {
+    bi++;
+    const h = Math.min(200, Math.max(3, item[0] * CITY_HEIGHT_SCALE));
+    const n = (item.length - 1) / 2;
+    if (n < 3) continue;
+    contour.length = 0;
+    for (let i = 0; i < n; i++) {
+      const x = item[1 + i * 2], z = item[2 + i * 2];
+      if (i === n - 1 && Math.abs(x - item[1]) < 0.01 && Math.abs(z - item[2]) < 0.01) break;
+      contour.push(new THREE.Vector2(x, z));
     }
-    const roofH = 2.6 + Math.min(1.4, b.w * 0.03);
-    const roof = new THREE.Mesh(unitCone, roofMat);
-    roof.rotation.y = (b.rot * Math.PI) / 180;
-    roof.scale.set(b.w / Math.SQRT2, roofH, b.d / Math.SQRT2);
-    roof.position.set(b.x, b.h + roofH / 2, b.z);
-    roof.renderOrder = 6;
-    surroundGroup.add(roof);
+    const m = contour.length;
+    if (m < 3) continue;
+    const baseCol = new THREE.Color(SHADES[bi % SHADES.length]);
+    const vTop = h / 3.2;
+    for (let i = 0; i < m; i++) {
+      const a = contour[i], b = contour[(i + 1) % m];
+      wallPos.push(a.x, 0, a.y, b.x, 0, b.y, b.x, h, b.y);
+      wallPos.push(a.x, 0, a.y, b.x, h, b.y, a.x, h, a.y);
+      let nx = b.y - a.y, nz = -(b.x - a.x);
+      const len = Math.hypot(nx, nz) || 1; nx /= len; nz /= len;
+      for (let k = 0; k < 6; k++) wallNrm.push(nx, 0, nz);
+      const u = len / 4;
+      wallUv.push(0, 0, u, 0, u, vTop, 0, 0, u, vTop, 0, vTop);
+      for (let k = 0; k < 6; k++) wallCol.push(baseCol.r, baseCol.g, baseCol.b);
+    }
+    const tris = THREE.ShapeUtils.triangulateShape(contour, []);
+    for (const t of tris) {
+      const a = contour[t[0]], b = contour[t[1]], c = contour[t[2]];
+      roofPos.push(a.x, h, a.y, b.x, h, b.y, c.x, h, c.y);
+    }
   }
-  console.log('[周边体量] 已按影像标定', SURROUNDINGS.length, '栋');
+  const wallGeo = new THREE.BufferGeometry();
+  wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPos, 3));
+  wallGeo.setAttribute('normal', new THREE.Float32BufferAttribute(wallNrm, 3));
+  wallGeo.setAttribute('uv', new THREE.Float32BufferAttribute(wallUv, 2));
+  wallGeo.setAttribute('color', new THREE.Float32BufferAttribute(wallCol, 3));
+  const roofGeo = new THREE.BufferGeometry();
+  roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(roofPos, 3));
+  roofGeo.computeVertexNormals();
+  const wallMat = new THREE.MeshStandardMaterial({ map: cityTex, vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x7a7f85, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+  const walls = new THREE.Mesh(wallGeo, wallMat);
+  const roofs = new THREE.Mesh(roofGeo, roofMat);
+  walls.receiveShadow = true;
+  roofs.receiveShadow = true;
+  surroundGroup.add(walls, roofs);
+  console.log('[城市体量] 真实轮廓', CITY.buildings.length, '栋（半径 ' + CITY.radius + 'm）');
 }
-buildSurrounding();
+buildCity();
 surroundGroup.visible = $('tg-surround').checked;
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
 
