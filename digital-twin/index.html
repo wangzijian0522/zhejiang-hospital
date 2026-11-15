@@ -141,6 +141,22 @@
   #fp-robots .fr .dot.live { background: #4cd98a; box-shadow: 0 0 5px #4cd98a; }
   #fp-robots .empty { font-size: 10px; color: #5b7a95; padding: 4px 6px; }
   .charts-col.show .charts-anim { opacity: 1; transform: translateX(0); }
+  /* 机器人实时状态列表 */
+  #rb-card { flex: 1 1 auto; min-height: 0; }
+  #robot-live-list { flex: 1; min-height: 0; overflow-y: auto; margin: 2px -4px 0 0; padding-right: 4px; }
+  #robot-live-list::-webkit-scrollbar { width: 4px; }
+  #robot-live-list::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 2px; }
+  .rl-empty { font-size: 11px; color: #5b7a95; padding: 8px 4px; }
+  .rl-row { display: flex; align-items: center; gap: 7px; padding: 4px 4px; border-bottom: 1px dashed rgba(127,212,255,.08); }
+  .rl-row:last-child { border-bottom: none; }
+  .rl-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .rl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #dfe9f2; }
+  .rl-sub { max-width: 92px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #8fb8d8; }
+  .rl-sub.pos { color: #4cd98a; }
+  .rl-sub.warn { color: #ffc84d; }
+  .rl-batt { width: 44px; height: 6px; flex-shrink: 0; background: rgba(0,229,255,.12); border-radius: 3px; overflow: hidden; }
+  .rl-batt i { display: block; height: 100%; border-radius: 3px; }
+  .rl-pct { width: 28px; flex-shrink: 0; text-align: right; font-size: 10.5px; color: #9fb8d0; font-variant-numeric: tabular-nums; }
   .cost-list { margin-top: 6px; }
   .cost-list .row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 2px; border-bottom: 1px dashed rgba(127,212,255,.1); }
   .cost-list .row:last-child { border-bottom: none; }
@@ -302,28 +318,9 @@
   </div>
 </div>
 <div id="charts-panel" class="charts-col show">
-  <div class="chart-card charts-anim" style="transition-delay:.04s">
-    <h4><span class="num">02</span>能源实时监测 <span class="en">ENERGY LIVE</span><span class="tag">实时 1s</span></h4>
-    <div class="metric-row">
-      <div class="metric-item"><div class="k">用电负荷</div><div class="v" id="en-pow">2,987 kW</div></div>
-      <div class="metric-item"><div class="k">用水流量</div><div class="v" id="en-wat">16.5 m³/h</div></div>
-      <div class="metric-item"><div class="k">用气流量</div><div class="v" id="en-gas">68.8 m³/h</div></div>
-    </div>
-    <div class="chart-box" id="ch-energy-live"></div>
-  </div>
-  <div class="chart-card charts-anim" style="transition-delay:.1s">
-    <h4><span class="num">03</span>资源成本构成 <span class="en">RESOURCE COST</span><span class="tag">按成本</span></h4>
-    <div class="chart-box" id="ch-cost"></div>
-    <div class="cost-list">
-      <div class="row"><span class="dot" style="background:#00e5ff"></span>用电 <span class="val" id="ct-pow">19,833 kWh</span></div>
-      <div class="row"><span class="dot" style="background:#ffc84d"></span>用水 <span class="val" id="ct-wat">334 m³</span></div>
-      <div class="row"><span class="dot" style="background:#4cd98a"></span>用气 <span class="val" id="ct-gas">1,314 m³</span></div>
-    </div>
-  </div>
-  <div class="chart-card charts-anim" style="transition-delay:.16s">
-    <h4><span class="num">05</span>楼宇能耗排行 <span class="en">BUILDING RANK</span><span class="tag">实时 kW</span></h4>
-    <div class="chart-box" id="ch-rank"></div>
-    <div style="font-size:11px;color:#5b7a95;margin-top:2px">总负荷 <b style="color:#ffc84d" id="rk-total">2,987 kW</b></div>
+  <div class="chart-card charts-anim" id="rb-card" style="transition-delay:.04s">
+    <h4><span class="num">02</span>机器人实时状态 <span class="en">ROBOT STATUS</span><span class="tag" id="rb-live-count">--</span></h4>
+    <div id="robot-live-list"><div class="rl-empty">等待中控数据…</div></div>
   </div>
   <div class="chart-card charts-anim" style="transition-delay:.22s">
     <h4><span class="num">06</span>实时告警 <span class="en">ALERT CENTER</span><span class="badge-count" id="al-count">3</span></h4>
@@ -1978,6 +1975,7 @@ function updateLiveHud() {
   const stale = liveState.robots.size - readyCount;
   if (!liveState.connected) liveHud.textContent = '实时机器人：连接中…';
   else liveHud.textContent = `实时机器人：${readyCount} 台就位${stale ? '（' + stale + ' 台未配准/离线）' : ''}`;
+  renderRobotLiveList();
 }
 async function createLiveMarker(r) {
   const type = liveTypeOf(r);
@@ -2123,10 +2121,7 @@ function initCharts() {
   if (chartsState.inited || !window.echarts) return;
   chartsState.inited = true;
   const mk = (id) => { const el = $(id); if (!el) return null; const c = window.echarts.init(el, null, { renderer: 'canvas' }); chartsState.charts[id] = c; return c; };
-  mk('ch-energy-live');
-  mk('ch-cost');
   mk('ch-flow');
-  mk('ch-rank');
   mk('ch-robot-type');
   refreshCharts();
   refreshRobotMetrics();
@@ -2142,7 +2137,6 @@ const dashState = {
   load: 2987, flowWater: 16.5, flowGas: 68.8,
   flow: 13270, inHosp: 1162, mz: 740, zy: 422,
   pk: 1256, guard: 290,
-  live: { pow: [], wat: [], gas: [], t: [] },
 };
 const fmtK = (n) => Math.round(n).toLocaleString('en-US');
 function refreshCharts() {
@@ -2157,61 +2151,6 @@ function refreshCharts() {
   $('ov-trend').textContent = '▲ ' + rnd(1.5, 4.5).toFixed(1) + '%';
   $('ov-dev').textContent = (326 + Math.floor(rnd(0, 6))) + '/342';
   $('ov-rate').textContent = (94 + rnd(0.5, 2.5)).toFixed(1) + '%';
-  $('en-pow').textContent = fmtK(Math.round(s.load)) + ' kW';
-  $('en-wat').textContent = s.flowWater.toFixed(1) + ' m³/h';
-  $('en-gas').textContent = s.flowGas.toFixed(1) + ' m³/h';
-  // 02 能源实时折线
-  const now = new Date();
-  const tt = [now.getHours(), now.getMinutes(), now.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
-  s.live.t.push(tt);
-  s.live.pow.push(Math.round(s.load + rnd(-80, 80)));
-  s.live.wat.push(+s.flowWater.toFixed(1));
-  s.live.gas.push(+s.flowGas.toFixed(1));
-  if (s.live.t.length > 20) { s.live.t.shift(); s.live.pow.shift(); s.live.wat.shift(); s.live.gas.shift(); }
-  const c2 = chartsState.charts['ch-energy-live'];
-  if (c2) c2.setOption({
-    backgroundColor: 'transparent',
-    grid: { left: 42, right: 10, top: 26, bottom: 20 },
-    legend: { top: 0, textStyle: { color: '#9fb8d0', fontSize: 11 }, itemWidth: 14, itemHeight: 7, data: ['用电', '用水', '用气'] },
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: s.live.t, boundaryGap: false, axisLabel: { color: '#7a95b0', fontSize: 10, interval: 4 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.25)' } } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.1)' } }, axisLabel: { color: '#7a95b0', fontSize: 10 } },
-    series: [
-      { name: '用电', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, data: s.live.pow },
-      { name: '用水', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, data: s.live.wat },
-      { name: '用气', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2 }, data: s.live.gas },
-    ],
-    color: ['#00e5ff', '#ffc84d', '#4cd98a'],
-  });
-  // 03 资源成本环形
-  const c3 = chartsState.charts['ch-cost'];
-  if (c3) c3.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', formatter: '{b}: {c}%' },
-    series: [{
-      type: 'pie', radius: ['70%', '92%'], center: ['50%', '50%'],
-      label: { show: false },
-      data: [
-        { value: Math.round(walk(56, 48, 64, 1)), name: '用电' },
-        { value: Math.round(walk(24, 18, 30, 1)), name: '用水' },
-        { value: Math.round(walk(20, 14, 26, 1)), name: '用气' },
-      ],
-      itemStyle: { borderRadius: 5, borderWidth: 0 },
-      color: ['#00e5ff', '#ffc84d', '#4cd98a'],
-    }],
-    graphic: [{
-      type: 'text', left: 'center', top: '40%',
-      style: { text: '2.12 万元', fill: '#fff', fontSize: 12, fontWeight: 700, textShadowColor: 'rgba(0,229,255,.6)', textShadowBlur: 8 },
-    }, {
-      type: 'text', left: 'center', top: '57%',
-      style: { text: '今日成本', fill: '#8fb8d8', fontSize: 9 },
-    }],
-  });
-  s.water = walk(s.water, 280, 380, 8);
-  s.gas = walk(s.gas, 1100, 1500, 30);
-  $('ct-pow').textContent = fmtK(Math.round(s.power)) + ' kWh';
-  $('ct-wat').textContent = Math.round(s.water) + ' m³';
-  $('ct-gas').textContent = fmtK(Math.round(s.gas)) + ' m³';
   // 04 运营详情
   s.flow = walk(s.flow, 11500, 14500, 260);
   s.inHosp = walk(s.inHosp, 1050, 1250, 25);
@@ -2239,33 +2178,107 @@ function refreshCharts() {
       itemStyle: { borderRadius: [2, 2, 0, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#00e5ff' }, { offset: 1, color: 'rgba(43,127,212,.25)' }]) },
     }],
   });
-  // 05 楼宇能耗排行（按场景楼宇，体量决定基准值）
-  const c5 = chartsState.charts['ch-rank'];
-  if (c5) {
-    const rank = BUILDINGS.map((b) => {
-      const flr = Math.max(...b.parts.map((p) => p.floors));
-      const hgt = Math.max(...b.parts.map((p) => p.height));
-      return { name: b.short, value: Math.round(hgt * flr * 0.3) };
-    }).sort((a, b) => b.value - a.value).slice(0, 3);
-    c5.setOption({
-      backgroundColor: 'transparent',
-      grid: { left: 62, right: 30, top: 4, bottom: 14 },
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: '{b}: {c} kW' },
-      xAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.1)' } }, axisLabel: { color: '#7a95b0', fontSize: 10 } },
-      yAxis: { type: 'category', inverse: true, data: rank.map((r) => r.name), axisLabel: { color: '#9fb8d0', fontSize: 11 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.25)' } } },
-      series: [{
-        type: 'bar', barWidth: 12,
-        data: rank.map((r) => Math.round(r.value + rnd(-6, 6))),
-        label: { show: true, position: 'right', color: '#e8f4ff', fontSize: 11 },
-        itemStyle: { borderRadius: [0, 3, 3, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: 'rgba(0,229,255,.25)' }, { offset: 1, color: '#00e5ff' }]) },
-      }],
-    });
+}
+// 机器人实时状态列表（右侧面板，中控实时数据）
+const ROBOT_REASON_TEXT = {
+  POSE_STALE: '位姿过期', MAP_UNRESOLVED: '地图未解析', POSE_UNAVAILABLE: '无位姿',
+  ROBOT_DISABLED: '已停用', ADAPTER_UNSUPPORTED: '适配不支持', REGISTRATION_MISSING: '缺配准', REGISTRATION_STALE: '配准过期',
+};
+const robotRows = new Map();
+function robotStatusText(r) {
+  const st = r.state || {};
+  if (st.onlineStatus === 'online') return st.operationStatus === 'busy' ? '运行中' : st.operationStatus === 'free' ? '空闲' : '在线';
+  if (st.onlineStatus === 'offline') return '离线';
+  return '未知';
+}
+function robotLocText(r) {
+  const loc = readyPose(r);
+  if (loc) {
+    const f = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
+    if (f) return { text: f.buildingName + ' ' + f.floorNumber + 'F', cls: 'pos' };
   }
-  $('rk-total').textContent = fmtK(Math.round(s.load)) + ' kW';
+  const lc = (r.cadLocations || [])[0];
+  const text = ROBOT_REASON_TEXT[lc && lc.reasonCode] || (lc && lc.reasonCode) || '';
+  return { text, cls: text ? 'warn' : '' };
+}
+function buildRobotRow() {
+  const root = document.createElement('div');
+  root.className = 'rl-row';
+  const dot = document.createElement('i'); dot.className = 'rl-dot';
+  const name = document.createElement('span'); name.className = 'rl-name';
+  const sub = document.createElement('span'); sub.className = 'rl-sub';
+  const batt = document.createElement('span'); batt.className = 'rl-batt';
+  const fill = document.createElement('i'); batt.appendChild(fill);
+  const pct = document.createElement('span'); pct.className = 'rl-pct';
+  root.append(dot, name, sub, batt, pct);
+  return { root, dot, name, sub, fill, pct };
+}
+function updateRobotRow(row, r) {
+  const st = r.state || {};
+  const online = st.onlineStatus;
+  row.dot.style.background = online === 'online' ? '#4cd98a' : online === 'offline' ? '#7a95b0' : '#ffc84d';
+  row.dot.style.boxShadow = online === 'online' ? '0 0 5px #4cd98a' : 'none';
+  row.name.textContent = r.name || r.sn || ('机器人 ' + r.robotId);
+  const loc = robotLocText(r);
+  let subText = robotStatusText(r);
+  if (st.freshness === 'stale') subText += ' · 过期';
+  row.sub.textContent = subText + (loc.text ? ' · ' + loc.text : '');
+  row.sub.className = 'rl-sub' + (loc.cls ? ' ' + loc.cls : '');
+  const batt = st.batteryPercent;
+  if (batt == null) {
+    row.fill.style.width = '0%';
+    row.fill.style.background = 'transparent';
+    row.pct.textContent = '--';
+    row.pct.style.color = '#5b7a95';
+  } else {
+    row.fill.style.width = batt + '%';
+    row.fill.style.background = batt >= 50 ? '#4cd98a' : batt >= 20 ? '#ffc84d' : '#ff6b6b';
+    row.pct.textContent = batt + '%';
+    row.pct.style.color = '#9fb8d0';
+  }
+  row.root.title = row.name.textContent + ' · ' + row.sub.textContent + ' · 电量 ' + row.pct.textContent;
+}
+function renderRobotLiveList() {
+  const box = $('robot-live-list');
+  if (!box) return;
+  const robots = Array.from(liveState.robots.values());
+  const countEl = $('rb-live-count');
+  const online = robots.filter((r) => r.state && r.state.onlineStatus === 'online').length;
+  if (countEl) countEl.textContent = robots.length ? '在线 ' + online + '/' + robots.length : '--';
+  let empty = box.querySelector('.rl-empty');
+  if (!robots.length) {
+    for (const row of robotRows.values()) row.root.remove();
+    robotRows.clear();
+    if (!empty) { empty = document.createElement('div'); empty.className = 'rl-empty'; empty.textContent = '等待中控数据…'; box.appendChild(empty); }
+    return;
+  }
+  if (empty) empty.remove();
+  const seen = new Set();
+  const ordered = robots.slice().sort((a, b) => {
+    const rank = (r) => {
+      const st = r.state || {};
+      const on = st.onlineStatus === 'online' ? 0 : st.onlineStatus === 'unknown' ? 2 : 1;
+      return (readyPose(r) ? 0 : 100) + on;
+    };
+    const ka = rank(a), kb = rank(b);
+    if (ka !== kb) return ka - kb;
+    return (parseInt(a.robotId, 10) || 0) - (parseInt(b.robotId, 10) || 0);
+  });
+  for (const r of ordered) {
+    seen.add(r.robotId);
+    let row = robotRows.get(r.robotId);
+    if (!row) { row = buildRobotRow(); robotRows.set(r.robotId, row); }
+    updateRobotRow(row, r);
+    box.appendChild(row.root);
+  }
+  for (const [id, row] of robotRows) {
+    if (seen.has(id)) continue;
+    row.root.remove();
+    robotRows.delete(id);
+  }
 }
 // 机器人指标（中控实时数据）
-const ROBOT_TYPE_NAMES = { medicine: '送药', meal: '送餐', waste: '污物', platform: '平台' };
-function refreshRobotMetrics() {
+const ROBOT_TYPE_NAMES = { medicine: '送药', meal: '送餐', waste: '污物', platform: '平台' };function refreshRobotMetrics() {
   if (!chartsState.inited) return;
   const blank = () => {
     for (const id of ['rb-total', 'rb-ready', 'rb-batt', 'rb-busy', 'rb-chg', 'rb-off']) $(id).textContent = '--';
