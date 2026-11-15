@@ -1453,7 +1453,7 @@ setInterval(fetchRealWeather, 10 * 60 * 1000);
 const liveGroup = new THREE.Group();
 scene.add(liveGroup);
 const liveHud = $('live-hud');
-const liveState = { ws: null, connected: false, seq: -1, floors: new Map(), robots: new Map(), reconnectDelay: 1000 };
+const liveState = { ws: null, connected: false, disabled: false, seq: -1, floors: new Map(), robots: new Map(), reconnectDelay: 1000 };
 const liveMarkers = new Map(); // robotId -> { obj, modelType }
 const liveBuildingXf = new Map(); // buildingName -> {cx, cz, baseY, s} 或 null
 const LIVE_TYPE_FILES = {
@@ -1510,7 +1510,8 @@ function buildingTransformFor(floor) {
 function updateLiveHud() {
   const readyCount = Array.from(liveState.robots.values()).filter(readyPose).length;
   const stale = liveState.robots.size - readyCount;
-  if (!liveState.connected) liveHud.textContent = '实时机器人：连接中…';
+  if (liveState.disabled) liveHud.textContent = '实时机器人：中控凭证未配置';
+  else if (!liveState.connected) liveHud.textContent = '实时机器人：连接中…';
   else liveHud.textContent = `实时机器人：${readyCount} 台就位${stale ? '（' + stale + ' 台未配准/离线）' : ''}`;
   renderRobotLiveList();
 }
@@ -1609,10 +1610,20 @@ function handleLiveMessage(msg) {
   }
   if (t === 'error' || t === 'auth.error') {
     console.warn('[twin] 数据流错误:', JSON.stringify(msg).slice(0, 300));
+    if (msg.data && msg.data.code === 'RELAY_UNCONFIGURED') {
+      liveState.connected = false;
+      liveState.disabled = true;
+      const w = liveState.ws;
+      liveState.ws = null; // 停止重连，直到刷新页面
+      if (w) w.close();
+      updateLiveHud();
+      return;
+    }
     if (liveState.ws) liveState.ws.close();
   }
 }
 function connectLive() {
+  if (liveState.disabled) return;
   try {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/twin`);
@@ -1620,6 +1631,7 @@ function connectLive() {
     ws.onopen = () => console.log('[twin] 已连接本服务中继');
     ws.onmessage = (ev) => { try { handleLiveMessage(JSON.parse(ev.data)); } catch (e) { console.warn('[twin] 消息解析失败', e); } };
     ws.onclose = () => {
+      if (liveState.ws !== ws) return; // 已主动放弃（如凭证未配置）
       liveState.connected = false;
       liveHud.textContent = '实时机器人：重连中…';
       setTimeout(connectLive, Math.min(liveState.reconnectDelay, 30000));
