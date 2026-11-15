@@ -21,6 +21,12 @@
   .toggles label { font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer; background: rgba(0,229,255,.07); border: 1px solid rgba(0,229,255,.18); color: #a9c8e0; padding: 3px 9px; border-radius: 12px; }
   .toggles label:hover { background: rgba(0,229,255,.16); }
   .toggles input { accent-color: #00e5ff; }
+  .tg-group { width: 100%; font-size: 10px; color: #5b7a95; letter-spacing: 1px; margin: 6px 0 -2px; }
+  #legend { position: fixed; left: 12px; bottom: 12px; z-index: 9; background: rgba(8,16,28,.78); border: 1px solid rgba(0,229,255,.22); border-radius: 8px; padding: 8px 10px; color: #bfd6e8; font-size: 11px; line-height: 1.65; pointer-events: none; }
+  #legend .lg-title { color: #7fd4ff; font-size: 10px; letter-spacing: 1px; margin-bottom: 3px; }
+  #legend .lg-row { display: flex; align-items: center; gap: 6px; }
+  #legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  #legend .lg-src { margin-top: 4px; color: #5b7a95; font-size: 9px; }
   .timebox, .weatherbox { padding: 8px 16px 8px; border-bottom: 1px solid rgba(0,229,255,.15); }
   .timebox .row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }
   .timebox b, .weatherbox b { font-size: 12px; color: #7fd4ff; }
@@ -182,16 +188,23 @@
   <h1>浙江省人民医院数字孪生项目</h1>
   <div class="sub">数据：整体/2号/6号 GLB + 百度建筑轮廓 + 天地图卫星</div>
   <div class="toggles">
+    <div class="tg-group">基础</div>
     <label><input type="checkbox" id="tg-real" checked> 整体模型</label>
     <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
+    <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
+    <div class="tg-group">城市环境</div>
+    <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
+    <label><input type="checkbox" id="tg-water" checked> 水系</label>
+    <label><input type="checkbox" id="tg-green" checked> 公园树木</label>
+    <label><input type="checkbox" id="tg-street" checked> 行道树</label>
+    <label><input type="checkbox" id="tg-viaduct" checked> 上塘高架</label>
+    <label><input type="checkbox" id="tg-bridge" checked> 桥梁</label>
+    <div class="tg-group">标注</div>
+    <label><input type="checkbox" id="tg-landmark" checked> 地标</label>
+    <label><input type="checkbox" id="tg-poi" checked> 名称标注</label>
+    <div class="tg-group">业务</div>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
     <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
-    <label><input type="checkbox" id="tg-water" checked> 水系</label>
-    <label><input type="checkbox" id="tg-viaduct" checked> 上塘高架</label>
-    <label><input type="checkbox" id="tg-green" checked> 公园树木</label>
-    <label><input type="checkbox" id="tg-landmark" checked> 地标</label>
-    <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
-    <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
   </div>
   <div class="timebox">
     <div class="row"><b>时间 / 太阳</b><span id="time-val">12:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime"> 实时</label></div>
@@ -213,6 +226,15 @@
   </div>
 </div>
 <div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转</div>
+<div id="legend">
+  <div class="lg-title">图例 / 数据</div>
+  <div class="lg-row"><i class="sw" style="background:#6fa6b8"></i>水系</div>
+  <div class="lg-row"><i class="sw" style="background:#4f6f49"></i>公园 / 行道树</div>
+  <div class="lg-row"><i class="sw" style="background:#70757a"></i>上塘高架</div>
+  <div class="lg-row"><i class="sw" style="background:#8b9096"></i>桥梁</div>
+  <div class="lg-row"><i class="sw" style="background:#e6e9ec"></i>周边建筑</div>
+  <div class="lg-src">天地图影像 · 百度建筑 2020 · 杭州分块</div>
+</div>
 <button id="demo-back" style="display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:56; background:rgba(20,30,40,.85); color:#cfe0f2; border:1px solid rgba(0,229,255,.4); border-radius:18px; padding:7px 24px; font-size:13px; letter-spacing:2px; cursor:pointer;">← 返回总览</button>
 <div id="topbar">
   <div class="tb-left">
@@ -1829,8 +1851,11 @@ const contextRoot = new THREE.Group();
 const waterGroup = new THREE.Group(); waterGroup.name = 'waterGroup';
 const viaductGroup = new THREE.Group(); viaductGroup.name = 'viaductGroup';
 const greenGroup = new THREE.Group(); greenGroup.name = 'greenGroup';
+const streetTreeGroup = new THREE.Group(); streetTreeGroup.name = 'streetTreeGroup';
+const bridgeGroup = new THREE.Group(); bridgeGroup.name = 'bridgeGroup';
 const contextLabelGroup = new THREE.Group(); contextLabelGroup.name = 'contextLabels';
-contextRoot.add(waterGroup, viaductGroup, greenGroup, contextLabelGroup);
+const poiLabelGroup = new THREE.Group(); poiLabelGroup.name = 'poiLabels';
+contextRoot.add(waterGroup, viaductGroup, greenGroup, streetTreeGroup, bridgeGroup, contextLabelGroup, poiLabelGroup);
 scene.add(contextRoot);
 let mapReady = false;
 const MAP_TILE = 256, MAP_R = 6378137;
@@ -2327,10 +2352,76 @@ function buildContext() {
   addMerged(railGeos, railMat);
   addMerged(pierGeos, concreteMat);
 
+  // 行道树：主路两侧，实例化
+  if (CONTEXT.streetTrees.length) {
+    const n = CONTEXT.streetTrees.length;
+    const trunkGeo = new THREE.CylinderGeometry(0.16, 0.22, 2.4, 5);
+    const crownGeo = new THREE.IcosahedronGeometry(1, 0);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x584a3c, roughness: 1 });
+    const crownMat = new THREE.MeshStandardMaterial({ color: 0x4d7046, roughness: 0.94, flatShading: true });
+    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
+    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, n);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    CONTEXT.streetTrees.forEach(([x, z, s], i) => {
+      v.set(x, 1.2 * s, z); sc.set(s, s, s);
+      m4.compose(v, q, sc); trunks.setMatrixAt(i, m4);
+      v.set(x, 3.25 * s, z); sc.set(1.65 * s, 1.95 * s, 1.65 * s);
+      m4.compose(v, q, sc); crowns.setMatrixAt(i, m4);
+    });
+    trunks.instanceMatrix.needsUpdate = true;
+    crowns.instanceMatrix.needsUpdate = true;
+    trunks.frustumCulled = crowns.frustumCulled = false;
+    streetTreeGroup.position.y = 0.02;
+    streetTreeGroup.add(trunks, crowns);
+  }
+
+  // 桥：4 座，低模桥面 + 栏杆
+  const bridgeDeckMat = new THREE.MeshStandardMaterial({ color: 0x8b9096, roughness: 0.94 });
+  const bridgeRailMat = new THREE.MeshStandardMaterial({ color: 0xc4c9ce, roughness: 0.9 });
+  const bDeck = [], bRail = [];
+  for (const b of CONTEXT.bridges) {
+    for (const part of b.parts) {
+      for (let i = 1; i < part.length; i++) {
+        const a = part[i - 1], c = part[i];
+        const dx = c[0] - a[0], dz = c[1] - a[1];
+        const len = Math.hypot(dx, dz);
+        if (len < 0.5) continue;
+        const ang = Math.atan2(dx, dz);
+        const mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+        addBox(bDeck, 4.6, 0.35, len + 0.2, mx, 2.4, mz, ang);
+        const nx = Math.cos(ang), nz = -Math.sin(ang);
+        for (const side of [-1, 1]) {
+          addBox(bRail, 0.2, 0.9, len + 0.2, mx + nx * side * 2.2, 2.95, mz + nz * side * 2.2, ang);
+        }
+      }
+    }
+  }
+  const mergeTo = (group, geos, mat) => {
+    if (!geos.length) return;
+    const g = mergeGeometries(geos, false);
+    if (!g) return;
+    const m = new THREE.Mesh(g, mat);
+    m.castShadow = m.receiveShadow = true;
+    group.add(m);
+  };
+  mergeTo(bridgeGroup, bDeck, bridgeDeckMat);
+  mergeTo(bridgeGroup, bRail, bridgeRailMat);
+
+  // 路名 / POI：单独一组，按距离 LOD
+  for (const l of [...CONTEXT.roadLabels, ...CONTEXT.poiLabels]) {
+    const isRoad = l.kind === 'road';
+    const sp = makeLabel(l.text, 'rgba(10,20,34,0.82)', isRoad ? '#cfe8ff' : '#e8f4ff', isRoad ? 0.68 : 0.8);
+    sp.position.set(l.x, isRoad ? 5 : 20, l.z);
+    sp.userData.kind = l.kind;
+    if (isRoad) { sp.material.depthTest = true; sp.material.depthWrite = false; }
+    poiLabelGroup.add(sp);
+  }
+
   // 地标
   for (const l of CONTEXT.labels) {
     const sp = makeLabel(l.text, 'rgba(10,20,34,0.82)', '#dff2ff', 1.1);
     sp.position.set(l.x, l.kind === 'viaduct' ? 30 : l.kind === 'water' ? 18 : 22, l.z);
+    sp.userData.kind = l.kind;
     contextLabelGroup.add(sp);
   }
 
@@ -2338,7 +2429,10 @@ function buildContext() {
     ['tg-water', waterGroup],
     ['tg-viaduct', viaductGroup],
     ['tg-green', greenGroup],
+    ['tg-street', streetTreeGroup],
+    ['tg-bridge', bridgeGroup],
     ['tg-landmark', contextLabelGroup],
+    ['tg-poi', poiLabelGroup],
   ];
   for (const [id, g] of toggles) {
     const el = $(id);
@@ -2346,7 +2440,9 @@ function buildContext() {
     g.visible = el.checked;
     el.onchange = () => { g.visible = el.checked; };
   }
-  console.log('[环境] 水系', CONTEXT.water.length, '公园', CONTEXT.green.length, '高架段', CONTEXT.viaduct.reduce((s, v) => s + v.parts.length, 0), '树', CONTEXT.trees.length);
+  console.log('[环境] 水系', CONTEXT.water.length, '公园', CONTEXT.green.length, '高架段', CONTEXT.viaduct.reduce((s, v) => s + v.parts.length, 0),
+    '园树', CONTEXT.trees.length, '行道树', CONTEXT.streetTrees.length, '桥', CONTEXT.bridges.length,
+    '地标', CONTEXT.labels.length, '路名', CONTEXT.roadLabels.length, 'POI', CONTEXT.poiLabels.length);
 }
 buildContext();
 
@@ -3058,8 +3154,8 @@ $('fp-canvas').onclick = (e) => {
 };
 
 // 记住左侧视图开关：刷新后保持上次的选择（整体/设备/机器人/周边/底图）
-const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-landmark', 'tg-surround', 'tg-map'];
-const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-landmark', 'tg-surround', 'tg-map', 'tg-real'];
+const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map'];
+const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map', 'tg-real'];
 document.querySelector('.toggles')?.addEventListener('change', (e) => {
   if (!e.target.id || !VIEW_KEYS.includes(e.target.id)) return;
   const state = {};
@@ -3082,6 +3178,19 @@ try {
 } catch { /* 忽略损坏的本地状态 */ }
 
 // ---------- 渲染循环 ----------
+const labelWorld = new THREE.Vector3();
+function updateLabelLOD() {
+  const check = (group, limits) => {
+    if (!group.visible) return;
+    for (const sp of group.children) {
+      labelWorld.set(sp.position.x, sp.position.y, sp.position.z).applyMatrix4(contextRoot.matrixWorld);
+      const d = labelWorld.distanceTo(camera.position);
+      sp.visible = d < (limits[sp.userData.kind] ?? limits.default);
+    }
+  };
+  check(contextLabelGroup, { default: 1200, water: 1400, viaduct: 1000, park: 1000 });
+  check(poiLabelGroup, { default: 950, road: 700, poi: 950 });
+}
 const timer = new THREE.Timer();
 function animate() {
   requestAnimationFrame(animate);
@@ -3151,6 +3260,7 @@ function animate() {
   const MIN_VIEW_Y = 0.6;
   if (controls.target.y < MIN_VIEW_Y) controls.target.y = MIN_VIEW_Y;
   if (camera.position.y < MIN_VIEW_Y) camera.position.y = MIN_VIEW_Y;
+  updateLabelLOD();
   renderer.render(scene, camera);
 }
 animate();

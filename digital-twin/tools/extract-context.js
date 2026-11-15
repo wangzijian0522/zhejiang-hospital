@@ -1,7 +1,7 @@
-// 从杭州分块 shp 提取医院周边 3D 环境：水系 / 上塘高架 / 公园树木 / 地标
+// 从杭州分块 shp 提取医院周边 3D 环境：水系 / 上塘高架 / 公园 / 行道树 / 桥 / 标注
 // 坐标与 data/city.js 完全一致：WGS84 -> 以 BASEMAP 中心为原点的地图米（x=东, z=南），
 // 与卫星底图、周边建筑共用同一个 group 变换。
-// 用法：node tools/extract-context.js [--radius=1600] [--src=/path/杭州 分块]
+// 用法：node tools/extract-context.js [--radius=1500] [--src=/path/杭州 分块]
 const fs = require('fs');
 const path = require('path');
 
@@ -79,6 +79,11 @@ function ringArea(ring) {
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
   return Math.abs(a) / 2;
 }
+function ringBox(ring) {
+  let x0 = 1e30, x1 = -1e30, z0 = 1e30, z1 = -1e30;
+  for (const p of ring) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]); }
+  return { ring, minX: x0, maxX: x1, minZ: z0, maxZ: z1 };
+}
 function inRing(x, z, ring) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -86,6 +91,13 @@ function inRing(x, z, ring) {
     if (((zi > z) !== (zj > z)) && (x < ((xj - xi) * (z - zi)) / (zj - zi) + xi)) inside = !inside;
   }
   return inside;
+}
+function inBoxes(x, z, boxes) {
+  for (const b of boxes) {
+    if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
+    if (inRing(x, z, b.ring)) return true;
+  }
+  return false;
 }
 function nearestRingPoint(ring) {
   let best = 1e30, bp = ring[0];
@@ -95,7 +107,6 @@ function nearestRingPoint(ring) {
   }
   return bp;
 }
-// 折线裁剪到半径 R 的圆内，返回连续段
 function clipLineCircle(pts, R) {
   const pieces = [];
   let cur = null;
@@ -138,13 +149,26 @@ function mulberry32(a) {
   };
 }
 
+const CAMPUS = { x0: -168, x1: 153, z0: -123, z1: 103 };
+
+// 已有城市建筑，用于行道树避让
+let CITY_BOXES = [];
+try {
+  const src = fs.readFileSync(path.resolve(__dirname, '../data/city.js'), 'utf8');
+  const city = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf('}') + 1));
+  CITY_BOXES = city.buildings.map((b) => {
+    const ring = [];
+    for (let i = 1; i < b.length; i += 2) ring.push([b[i], b[i + 1]]);
+    return ring.length >= 3 ? ringBox(ring) : null;
+  }).filter(Boolean);
+} catch { CITY_BOXES = []; }
+
 // ---------- 水系 ----------
 const waterDbf = readDbf(path.join(SRC, '杭州 水系.dbf'));
 const water = [];
 for (const r of readShp(path.join(SRC, '杭州 水系.shp'))) {
   const name = waterDbf.get(r.i, 'Name') || '';
-  const cx = (r.bbox[0] + r.bbox[2]) / 2, cy = (r.bbox[1] + r.bbox[3]) / 2;
-  const [mx, mz] = toMap(cx, cy);
+  const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
   if (dist(mx, mz) > RADIUS) continue;
   for (const part of r.parts) {
     if (part.length < 3) continue;
@@ -153,6 +177,7 @@ for (const r of readShp(path.join(SRC, '杭州 水系.shp'))) {
     if (ring.length >= 3 && ringArea(ring) > 20) water.push({ name, ring });
   }
 }
+const WATER_BOXES = water.map((w) => ringBox(w.ring));
 
 // ---------- 公园绿地 ----------
 const greenDbf = readDbf(path.join(SRC, '杭州 绿地.dbf'));
@@ -162,8 +187,7 @@ for (const r of readShp(path.join(SRC, '杭州 绿地.shp'))) {
   const name = greenDbf.get(r.i, 'Name') || '';
   if (!(name.includes('公园') || name === '古艮山门')) continue;
   if (name.includes('医院')) continue;
-  const cx = (r.bbox[0] + r.bbox[2]) / 2, cy = (r.bbox[1] + r.bbox[3]) / 2;
-  const [mx, mz] = toMap(cx, cy);
+  const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
   if (dist(mx, mz) > RADIUS) continue;
   const ring = r.parts[0];
   if (!ring || ring.length < 3) continue;
@@ -171,7 +195,7 @@ for (const r of readShp(path.join(SRC, '杭州 绿地.shp'))) {
   if (area < 300) continue;
   const xs = ring.map((p) => p[0]), zs = ring.map((p) => p[1]);
   const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...zs) - Math.min(...zs);
-  if (bw > 400 || bh > 400) continue; // 排除细长/异常大的绿地
+  if (bw > 400 || bh > 400) continue;
   const key = name + '|' + Math.round((Math.min(...xs) + Math.max(...xs)) / 2 / 20) + '|' + Math.round((Math.min(...zs) + Math.max(...zs)) / 2 / 20);
   const prev = seen.get(key);
   if (prev) { if (ring.length > prev.ring.length) prev.ring = ring; continue; }
@@ -181,6 +205,7 @@ for (const r of readShp(path.join(SRC, '杭州 绿地.shp'))) {
   seen.set(key, entry);
   green.push(entry);
 }
+const GREEN_BOXES = green.map((g) => ringBox(g.ring));
 
 // ---------- 上塘高架 ----------
 const roadDbf = readDbf(path.join(SRC, '杭州 城市快速路.dbf'));
@@ -188,8 +213,7 @@ const viaduct = [];
 for (const r of readShp(path.join(SRC, '杭州 城市快速路.shp'))) {
   const name = roadDbf.get(r.i, 'Name') || '';
   if (!name.includes('上塘高架')) continue;
-  const cx = (r.bbox[0] + r.bbox[2]) / 2, cy = (r.bbox[1] + r.bbox[3]) / 2;
-  const [mx, mz] = toMap(cx, cy);
+  const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
   if (dist(mx, mz) > RADIUS) continue;
   const parts = [];
   for (const p of r.parts) for (const c of clipLineCircle(p, RADIUS)) parts.push(c);
@@ -205,7 +229,7 @@ for (const g of green) {
   const spacing = 13;
   for (let x = x0 + 8; x <= x1 - 8; x += spacing) {
     for (let z = z0 + 8; z <= z1 - 8; z += spacing) {
-      const px = x + (rng() * 2 - 1) * 5, pz = z + (rng() * 2 - 1) * 5;
+      const px = x + (rng() * 2 - 1) * 4, pz = z + (rng() * 2 - 1) * 4;
       if (!inRing(px, pz, g.ring)) continue;
       trees.push([+px.toFixed(1), +pz.toFixed(1), +(0.85 + rng() * 0.45).toFixed(2)]);
       if (trees.length >= 600) break;
@@ -215,7 +239,68 @@ for (const g of green) {
   if (trees.length >= 600) break;
 }
 
-// ---------- 地标 ----------
+// ---------- 行道树（主路两侧，避开院区/水面/绿地/建筑） ----------
+const roadAllDbf = readDbf(path.join(SRC, '路网.dbf'));
+const roadAll = readShp(path.join(SRC, '路网.shp'));
+const HALF = { '55': 12, '30': 8 };
+const streetTrees = [];
+let streetTotal = 0;
+for (const r of roadAll) {
+  const fc = roadAllDbf.get(r.i, 'fclass');
+  if (!HALF[fc]) continue;
+  const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
+  if (dist(mx, mz) > RADIUS) continue;
+  const offset = HALF[fc] + 2.4;
+  for (const p of r.parts) {
+    const parts = clipLineCircle(p, RADIUS - 4);
+    for (const part of parts) {
+      for (let i = 1; i < part.length; i++) {
+        const a = part[i - 1], b = part[i];
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const len = Math.hypot(dx, dz);
+        if (len < 6) continue;
+        streetTotal += Math.floor(len / 26) * 2;
+        const nx = -dz / len, nz = dx / len;
+        for (let t = 10; t < len; t += 26) {
+          const x = a[0] + (dx * t) / len, z = a[1] + (dz * t) / len;
+          for (const side of [-1, 1]) {
+            const px = x + nx * offset * side, pz = z + nz * offset * side;
+            if (dist(px, pz) > RADIUS - 10) continue;
+            if (px > CAMPUS.x0 && px < CAMPUS.x1 && pz > CAMPUS.z0 && pz < CAMPUS.z1) continue;
+            if (inBoxes(px, pz, WATER_BOXES) || inBoxes(px, pz, GREEN_BOXES)) continue;
+            if (inBoxes(px, pz, CITY_BOXES)) continue;
+            streetTrees.push([+px.toFixed(1), +pz.toFixed(1), +(0.68 + rng() * 0.28).toFixed(2)]);
+          }
+        }
+      }
+    }
+  }
+}
+const streetBefore = streetTrees.length;
+if (streetTrees.length > 800) {
+  const step = streetTrees.length / 800;
+  const sampled = [];
+  for (let i = 0; i < 800; i++) sampled.push(streetTrees[Math.floor(i * step)]);
+  streetTrees.length = 0;
+  streetTrees.push(...sampled);
+}
+
+// ---------- 桥梁 ----------
+const pedDbf = readDbf(path.join(SRC, '杭州 行人道路.dbf'));
+const BRIDGE_NAMES = new Set(['朝晖桥', '青园桥', '德胜路桥', '映月桥']);
+const bridgeMap = new Map();
+for (const r of readShp(path.join(SRC, '杭州 行人道路.shp'))) {
+  const name = pedDbf.get(r.i, 'Name') || '';
+  if (!BRIDGE_NAMES.has(name)) continue;
+  const parts = [];
+  for (const p of r.parts) for (const c of clipLineCircle(p, RADIUS)) parts.push(c);
+  if (!parts.length) continue;
+  if (!bridgeMap.has(name)) bridgeMap.set(name, []);
+  bridgeMap.get(name).push(...parts);
+}
+const bridges = [...bridgeMap.entries()].map(([name, parts]) => ({ name, parts }));
+
+// ---------- 标注 ----------
 const labels = [];
 for (const w of water) {
   if (!w.name || (w.name !== '京杭运河' && w.name !== '上塘河')) continue;
@@ -224,20 +309,12 @@ for (const w of water) {
   labels.push({ text: w.name, x: +c[0].toFixed(1), z: +c[1].toFixed(1), kind: 'water' });
 }
 {
-  let best = null;
-  for (const v of viaduct) for (const p of v.parts) {
-    let len = 0;
-    for (let i = 1; i < p.length; i++) len += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
-    if (!best || len > best.len) best = { len, p };
+  let bestD = 1e30, bp = null;
+  for (const v of viaduct) for (const p of v.parts) for (const q of p) {
+    const d = q[0] * q[0] + q[1] * q[1];
+    if (d < bestD) { bestD = d; bp = q; }
   }
-  if (best) {
-    let bestD = 1e30, bp = null;
-    for (const v of viaduct) for (const p of v.parts) for (const q of p) {
-      const d = q[0] * q[0] + q[1] * q[1];
-      if (d < bestD) { bestD = d; bp = q; }
-    }
-    if (bp) labels.push({ text: '上塘高架', x: +bp[0].toFixed(1), z: +bp[1].toFixed(1), kind: 'viaduct' });
-  }
+  if (bp) labels.push({ text: '上塘高架', x: +bp[0].toFixed(1), z: +bp[1].toFixed(1), kind: 'viaduct' });
 }
 {
   const park = green.find((g) => g.name.includes('朝晖公园')) || green[0];
@@ -247,12 +324,70 @@ for (const w of water) {
   }
 }
 
+// 路名
+const ROAD_LABELS = ['上塘路', '绍兴路', '文晖路', '德胜路', '潮王路', '东新路', '中山北路', '朝晖路'];
+const roadLabels = [];
+{
+  const byName = new Map();
+  for (const r of roadAll) {
+    const name = roadAllDbf.get(r.i, 'Name') || '';
+    if (!ROAD_LABELS.includes(name)) continue;
+    for (const p of r.parts) {
+      for (const c of clipLineCircle(p, RADIUS)) {
+        let bestPart = null, bestD = 1e30;
+        // 取该段的中点作为路名位置，选离院区最近的一段
+        for (let i = 1; i < c.length; i++) {
+          const a = c[i - 1], b = c[i];
+          const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+          const d = dist(mx, mz);
+          if (d < bestD) { bestD = d; bestPart = [mx, mz]; }
+        }
+        if (bestPart) {
+          const prev = byName.get(name);
+          if (!prev || bestD < prev.d) byName.set(name, { text: name, x: +bestPart[0].toFixed(1), z: +bestPart[1].toFixed(1), kind: 'road', d: bestD });
+        }
+      }
+    }
+  }
+  for (const e of byName.values()) { delete e.d; roadLabels.push(e); }
+}
+
+// POI
+function collectPoi(file, wanted, kind) {
+  if (!fs.existsSync(file)) return [];
+  const D = readDbf(file.replace(/\.shp$/i, '.dbf'));
+  const found = new Map();
+  for (const r of readShp(file)) {
+    const n = D.get(r.i, 'Name');
+    if (!wanted.includes(n)) continue;
+    const [x, z] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
+    const d = dist(x, z);
+    if (d > RADIUS) continue;
+    const prev = found.get(n);
+    if (!prev || d < prev.d) found.set(n, { text: n, x: +x.toFixed(1), z: +z.toFixed(1), kind, d });
+  }
+  return [...found.values()].map((e) => { delete e.d; return e; });
+}
+const poiLabels = [
+  ...collectPoi(path.join(SRC, '杭州 住宅区.shp'), ['朝晖四小区', '朝晖九区'], 'poi'),
+  ...collectPoi(path.join(SRC, '杭州 学校.shp'), ['浙江工业大学', '朝晖中学'], 'poi'),
+  ...collectPoi(path.join(SRC, '杭州 医院区域.shp'), ['市第六人民医院'], 'poi'),
+  ...collectPoi(path.join(SRC, '杭州 公交站场区域.shp'), ['朝晖五区'], 'poi'),
+  ...collectPoi(path.join(SRC, '杭州 体育场.shp'), ['杭州游泳健身中心-球类馆'], 'poi').map((e) => ({ ...e, text: '游泳健身中心' })),
+];
+
 const out = `// 医院周边 3D 环境（WGS84 -> BASEMAP 地图米，x=东 z=南）
 // 由 tools/extract-context.js 生成：--radius=${RADIUS}
-// 水系/绿地：杭州 水系.shp / 杭州 绿地.shp；高架：杭州 城市快速路.shp(Name=上塘高架)
-export const CONTEXT = ${JSON.stringify({ radius: RADIUS, water, green, viaduct, trees, labels }, null, 0)};
+// 水系/绿地：杭州 水系.shp / 杭州 绿地.shp；高架：杭州 城市快速路.shp(Name=上塘高架)；
+// 行道树/路名：路网.shp；桥：杭州 行人道路.shp；POI：住宅区/学校/医院/公交/体育场
+export const CONTEXT = ${JSON.stringify({
+  radius: RADIUS, water, green, viaduct, trees, labels,
+  roadLabels, poiLabels, streetTrees, bridges,
+}, null, 0)};
 `;
 const target = path.resolve(__dirname, '../data/context.js');
 fs.writeFileSync(target, out);
-console.log('water', water.length, 'green', green.length, 'viaduct parts', viaduct.reduce((s, v) => s + v.parts.length, 0), 'trees', trees.length, 'labels', labels.length);
+console.log('water', water.length, 'green', green.length, 'viaduct parts', viaduct.reduce((s, v) => s + v.parts.length, 0),
+  'parkTrees', trees.length, 'streetTrees', streetTrees.length, '(candidates', streetBefore + ')',
+  'bridges', bridges.length, 'labels', labels.length, 'roadLabels', roadLabels.length, 'poiLabels', poiLabels.length);
 console.log('→', target, (fs.statSync(target).size / 1024).toFixed(1) + 'KB');
