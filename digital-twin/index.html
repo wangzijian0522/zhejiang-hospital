@@ -1076,6 +1076,8 @@ function loadRealModel() {
         o.receiveShadow = true;
         // 模型里的贴片树（shu* 节点）按要求隐藏
         if (/^shu\d+$/i.test(o.name)) o.visible = false;
+        // 整体 GLB 自带的“氛围建筑”是旧版周边白模(透明 BLEND)，与百度建筑体量重复
+        if (o.name === '氛围建筑') o.visible = false;
       }
       // 注册所有楼栋节点（含 5号楼01 等拆分塔楼），供实时机器人落位
       if (o.name && /号楼\d*$/.test(o.name) && (o.isMesh || o.children.length > 0)) {
