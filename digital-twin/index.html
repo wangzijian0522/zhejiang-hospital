@@ -628,6 +628,19 @@ function sunElvAt(hour) {
   return Math.sin(a) * 1.22;
 }
 function updateSun() {
+  if (focusState.active) {
+    const tgt = focusState.center || controls.target;
+    sunLight.intensity = 1.16;
+    sunLight.color.set(0xffffff);
+    sunLight.position.set(tgt.x - 190, tgt.y + 260, tgt.z + 220);
+    sunLight.target.position.copy(tgt);
+    sunLight.target.updateMatrixWorld();
+    hemi.intensity = 0.56;
+    fillLight.intensity = 0.30;
+    sunDisc.visible = false;
+    sunHalo.visible = false;
+    return;
+  }
   const tgt = controls.target;
   sunDir.copy(sunDirAt(timeState.hour));
   const elv = sunElvAt(timeState.hour);
@@ -686,6 +699,7 @@ for (const w of Object.values(WEATHER)) {
 }
 const weatherState = { mode: 'sunny', flash: 0, flashTimer: 0 };
 scene.fog = new THREE.Fog(0xffffff, 900, 2600);
+const focusState = { active: false, center: null, saved: null, stage: null };
 
 function setWeather(mode) {
   weatherState.mode = mode;
@@ -698,6 +712,13 @@ function setWeather(mode) {
   document.querySelectorAll('.weatherbox button').forEach((b) => b.classList.toggle('on', b.dataset.w === mode));
 }
 function updateSkyFog() {
+  if (focusState.active) {
+    scene.background.set(0x050b14);
+    scene.fog.color.set(0x050b14);
+    scene.fog.near = 120;
+    scene.fog.far = 1500;
+    return;
+  }
   const w = WEATHER[weatherState.mode];
   fogCol.copy(skyCol).lerp(w.skyColor, weatherBlend);
   scene.background.copy(fogCol);
@@ -3583,7 +3604,9 @@ async function startDemo6() {
   grp.traverse((o) => {
     if (o.isMesh) {
       o.userData._d6mat = o.material;
+      o.userData._d6shadow = o.castShadow;
       o.material = holoMat;
+      o.castShadow = false;
     }
   });
   demo6State.group = new THREE.Group();
@@ -3620,7 +3643,12 @@ function stopDemo6() {
   const grp = realBuildings.get('6号楼');
   if (grp) {
     grp.traverse((o) => {
-      if (o.isMesh && o.userData._d6mat) { o.material = o.userData._d6mat; delete o.userData._d6mat; }
+      if (o.isMesh && o.userData._d6mat) {
+        o.material = o.userData._d6mat;
+        o.castShadow = o.userData._d6shadow !== false;
+        delete o.userData._d6mat;
+        delete o.userData._d6shadow;
+      }
     });
   }
   if (demo6State.group) {
@@ -3641,6 +3669,119 @@ const demo2State = {
   active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
   plates: new Map(), selectedFloor: 3,
 };
+function demo2FocusStage(bbox) {
+  const cx = (bbox.min.x + bbox.max.x) / 2;
+  const cz = (bbox.min.z + bbox.max.z) / 2;
+  const y = bbox.min.y - 0.34;
+  const size = Math.max(190, (bbox.max.x - bbox.min.x) * 1.9, (bbox.max.z - bbox.min.z) * 1.9);
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(128, 128, 8, 128, 128, 128);
+  grd.addColorStop(0, 'rgba(25,63,78,0.96)');
+  grd.addColorStop(0.48, 'rgba(10,27,38,0.94)');
+  grd.addColorStop(1, 'rgba(3,8,15,0.98)');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const group = new THREE.Group();
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 1, depthWrite: false })
+  );
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.set(cx, y, cz);
+  plane.renderOrder = -2;
+  group.add(plane);
+
+  const grid = new THREE.GridHelper(size, 48, 0x1c5365, 0x0d2b37);
+  grid.position.set(cx, y + 0.02, cz);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.22;
+  group.add(grid);
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(size * 0.23, size * 0.235, 72),
+    new THREE.MeshBasicMaterial({
+      color: 0x2e9fba, transparent: true, opacity: 0.34,
+      side: THREE.DoubleSide, depthWrite: false,
+    })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(cx, y + 0.03, cz);
+  group.add(ring);
+  return group;
+}
+
+function enterDemo2Focus(bbox) {
+  if (focusState.active) return;
+  const groups = [
+    mapGroup, surroundGroup, contextRoot, realGroup, groundGroup,
+    devicesGroup, liveGroup, skyDome, cloudGroup, sunDisc, sunHalo, rain, snow,
+  ];
+  const saved = {
+    groups: groups.map((g) => [g, g.visible]),
+    bg: scene.background.clone(),
+    fog: { color: scene.fog.color.clone(), near: scene.fog.near, far: scene.fog.far },
+    exposure: renderer.toneMappingExposure,
+    dpr: renderer.getPixelRatio(),
+    fov: camera.fov,
+    shadow: renderer.shadowMap.enabled,
+    sunShadow: sunLight.castShadow,
+    sun: sunLight.intensity, hemi: hemi.intensity, fill: fillLight.intensity,
+  };
+  focusState.saved = saved;
+  focusState.active = true;
+  focusState.center = bbox.getCenter(new THREE.Vector3());
+  for (const [g] of saved.groups) g.visible = false;
+  scene.background.set(0x050b14);
+  scene.fog.color.set(0x050b14);
+  scene.fog.near = 120;
+  scene.fog.far = 1500;
+  renderer.toneMappingExposure = 0.95;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = false;
+  sunLight.castShadow = false;
+  camera.fov = 38;
+  camera.updateProjectionMatrix();
+  const stage = demo2FocusStage(bbox);
+  demo2State.group.add(stage);
+  focusState.stage = stage;
+  updateSun();
+  updateSkyFog();
+}
+
+function exitDemo2Focus() {
+  if (!focusState.active) return;
+  const s = focusState.saved;
+  focusState.active = false;
+  for (const [g, visible] of s.groups) g.visible = visible;
+  if (s.bg) scene.background.copy(s.bg);
+  if (s.fog) {
+    scene.fog.color.copy(s.fog.color);
+    scene.fog.near = s.fog.near;
+    scene.fog.far = s.fog.far;
+  }
+  renderer.toneMappingExposure = s.exposure;
+  renderer.setPixelRatio(s.dpr);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.fov = s.fov;
+  camera.updateProjectionMatrix();
+  renderer.shadowMap.enabled = s.shadow;
+  renderer.shadowMap.needsUpdate = true;
+  sunLight.castShadow = s.sunShadow;
+  sunLight.intensity = s.sun;
+  hemi.intensity = s.hemi;
+  fillLight.intensity = s.fill;
+  if (focusState.stage?.parent) focusState.stage.parent.remove(focusState.stage);
+  focusState.stage = null;
+  focusState.saved = null;
+  focusState.center = null;
+  updateSun();
+  updateSkyFog();
+}
+
 function demo2LargestLoop(segs) {
   if (!segs.length) return null;
   const adj = new Map();
@@ -3780,9 +3921,10 @@ function demo2SelectFloor(n) {
   demo2State.selectedFloor = n;
   for (const [num, p] of demo2State.plates) {
     const on = num === n;
-    p.mesh.material.opacity = on ? 0.26 : 0.10;
-    p.mesh.material.emissiveIntensity = on ? 1.0 : 0.42;
-    p.edge.material.opacity = on ? 0.98 : 0.58;
+    p.mesh.material.opacity = on ? 0.18 : 0.04;
+    p.mesh.material.emissiveIntensity = on ? 0.95 : 0.25;
+    p.edge.material.opacity = on ? 0.92 : 0.16;
+    p.edge.visible = on;
     p.label.visible = on;
   }
 }
@@ -3839,7 +3981,7 @@ async function spawnDemo2Robots(bbox, baseY) {
       const model = gltf.scene.clone(true);
       const mb = new THREE.Box3().setFromObject(model);
       const ms = mb.getSize(new THREE.Vector3());
-      const s = 1.1 / Math.max(ms.y, 0.01);
+      const s = 1.65 / Math.max(ms.y, 0.01);
       model.scale.setScalar(s);
       model.position.set(0, -mb.min.y * s, 0);
       model.traverse((o) => {
@@ -3921,19 +4063,12 @@ async function loadDemo2Cad(baseY) {
       const xf = demo2CadXfFor(f);
       if (!xf || !lines.length) continue;
       const yBase = baseY + ((f.floorNumber || 1) - 1) * 3.8;
-      const pts = [];
       const segs = [];
       for (const [a, b] of lines) {
         const x1 = xf.cx + (a[0] - xf.cadCX) * xf.s, z1 = xf.cz - (a[1] - xf.cadCY) * xf.s;
         const x2 = xf.cx + (b[0] - xf.cadCX) * xf.s, z2 = xf.cz - (b[1] - xf.cadCY) * xf.s;
-        pts.push(x1, yBase + 0.06, z1, x2, yBase + 0.06, z2);
         segs.push([x1, z1, x2, z2]);
       }
-      const lg = new THREE.LineSegments(
-        new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)),
-        new THREE.LineBasicMaterial({ color: 0xdfe9f2, transparent: true, opacity: 0.85, depthWrite: false })
-      );
-      demo2State.group.add(lg);
       const b = geo.bounds || f.bounds;
       const n = f.floorNumber || 1;
       const fb = b ? {
@@ -3942,12 +4077,10 @@ async function loadDemo2Cad(baseY) {
         minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
         maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
       } : demo2State.bbox;
-      if (n >= 1) {
-        const loop = demo2CadLoop(segs, yBase);
-        const bboxArea = Math.max(1, (fb.maxX - fb.minX) * (fb.maxZ - fb.minZ));
-        const useLoop = loop && demo2LoopArea(loop) >= bboxArea * 0.12;
-        demo2AddFloorPlate(n, baseY, useLoop ? loop : null, fb, true);
-      }
+      const loop = demo2CadLoop(segs, yBase);
+      const bboxArea = Math.max(1, (fb.maxX - fb.minX) * (fb.maxZ - fb.minZ));
+      const useLoop = loop && demo2LoopArea(loop) >= bboxArea * 0.12;
+      if (n >= 1) demo2AddFloorPlate(n, baseY, useLoop ? loop : null, fb, true);
       fpAddCadFloor('2号楼', n, segs,
         b ? {
           minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
@@ -4011,7 +4144,14 @@ async function startDemo2() {
     bld.traverse((o) => {
       if (!o.isMesh) return;
       o.material = holoMat;
-      o.castShadow = true;
+      o.castShadow = false;
+      o.geometry.computeBoundingBox();
+      const gs = o.geometry.boundingBox.getSize(new THREE.Vector3());
+      // 场地/雨棚等扁平几何在暗场里会变成大块薄片，聚焦模式下直接隐藏
+      if (gs.y < 0.8) {
+        o.visible = false;
+        return;
+      }
       const edgeGeo = new THREE.EdgesGeometry(o.geometry, 38);
       if (edgeGeo.attributes.position.count) {
         const edge = new THREE.LineSegments(edgeGeo, holoEdgeMat);
@@ -4029,6 +4169,7 @@ async function startDemo2() {
   demo2State.bbox = bbox;
   demo2State.plates.clear();
   demo2BuildFloorPlates(bbox.min.y, bbox);
+  enterDemo2Focus(bbox);
   // 原 2 号楼整栋隐藏（含 <3m 的雨棚/门头薄板）；门头文字是独立节点，单独隐藏
   const source = realBuildings.get('2号楼');
   if (source) { demo2State.source = source; source.visible = false; }
@@ -4056,6 +4197,7 @@ async function startDemo2() {
 function stopDemo2() {
   if (!demo2State.active) return;
   demo2State.active = false;
+  exitDemo2Focus();
   setDemoBack(false);
   demo2State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
   demo2State.robots = [];
