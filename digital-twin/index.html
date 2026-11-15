@@ -343,6 +343,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CITY } from './data/city.js';
 import { CONTEXT } from './data/context.js';
 
@@ -368,6 +369,14 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xcfe2f2);
 scene.fog = new THREE.Fog(0xcfe2f2, 900, 2200);
 
+// 轻量室内环境贴图：给城市玻璃/金属立面提供柔和反射与间接光，避免纯直射的塑料感
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.18;
+  pmrem.dispose();
+}
+
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 4000);
 camera.position.set(W * 0.05, 300, H * 1.15);
 
@@ -386,11 +395,11 @@ controls.mouseButtons = {
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.0;
 
-const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c6d4, 1.15);
+const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c6d4, 0.88);
 scene.add(hemi);
-const sunLight = new THREE.DirectionalLight(0xfff6e8, 2.4);
+const sunLight = new THREE.DirectionalLight(0xfff6e8, 2.0);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(4096, 4096);
 sunLight.shadow.camera.near = 120;
@@ -643,6 +652,7 @@ function updateSun() {
   else if (elv > -0.14) skyCol.copy(NIGHT).lerp(SUNSET, (elv + 0.14) / 0.14);
   else skyCol.copy(NIGHT);
   hemi.intensity = 0.22 + Math.max(0, elv) * 0.8;
+  fillLight.intensity = 0.04 + Math.max(0, elv) * 0.32;
   // 天空穹顶配色
   const u = skyDomeMat.uniforms;
   const cT = u.topCol.value, cM = u.midCol.value, cB = u.botCol.value;
@@ -695,8 +705,12 @@ function updateSkyFog() {
   scene.fog.color.copy(fogCol);
   scene.fog.near = w.fogNear;
   scene.fog.far = w.fogFar;
-  groundMapMat.color.copy(w.tintColor);
-  groundPlainMat.color.copy(w.tintColor);
+  const nightDim = 1 - THREE.MathUtils.clamp(-sunElvAt(timeState.hour) * 2.2, 0, 1) * 0.82;
+  groundMapMat.color.copy(w.tintColor).multiplyScalar(nightDim);
+  groundPlainMat.color.copy(w.tintColor).multiplyScalar(nightDim);
+  for (const child of mapGroup.children) {
+    if (child.material && child.material.color) child.material.color.setRGB(nightDim * 0.9, nightDim * 0.95, nightDim * 1.04);
+  }
   // 天空穹顶与天气融合；白云在晴天/多云显示
   skyDomeMat.uniforms.weatherCol.value.set(w.sky);
   skyDomeMat.uniforms.weatherBlend.value = weatherBlend;
@@ -2184,134 +2198,431 @@ if (CAL_MODE) {
 
 // 真实建筑轮廓（百度建筑 2020，WGS84；已换算到地图坐标系），与底图共用变换
 const CITY_HEIGHT_SCALE = 1.0;
-let cityWallMat = null;
+// 医院周边精细半径：近处高精度立面/女儿墙/底商，远处做轻量体量，保证聚焦区域质感
+const CITY_DETAIL_R = 650;
+const CITY_HEIGHT_MAX = 260;
+const CITY_BAY = 4.0, CITY_FLOOR = 3.2;
+const CITY_TILE_U = CITY_BAY * 2, CITY_TILE_V = CITY_FLOOR * 2;
+const CITY_ZONE_PRIORITY = { hospital: 0, school: 1, sports: 2, commercial: 3, residential: 4 };
 let roofPropsGroup = null;
-// 高度分层配色：低层暖灰 -> 高层冷蓝灰，屋顶略深，形成城市高度层次
-function cityTierColor(h) {
-  const tiers = [
-    [12, 0xe7e4dd],
-    [24, 0xd9dedd],
-    [36, 0xc7d1d2],
-    [48, 0xb4c3c8],
-    [60, 0xa2b5be],
-    [Infinity, 0x93aab5],
-  ];
-  for (const [lim, hex] of tiers) if (h < lim) return new THREE.Color(hex);
-  return new THREE.Color(tiers[tiers.length - 1][1]);
+let cityShellGroup = null;
+let aviationMat = null;
+let lampMat = null;
+let lampGlowMat = null;
+const cityMats = [];
+const cityNearBuildings = [];
+
+function cityHash(ax, az) {
+  let h = (Math.round(ax * 13.7) * 374761393 + Math.round(az * 7.3) * 668265263) >>> 0;
+  h = (h ^ (h >>> 13)) * 1274126177 >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function pointInRing(x, z, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], zi = ring[i][1], xj = ring[j][0], zj = ring[j][1];
+    if (((zi > z) !== (zj > z)) && (x < ((xj - xi) * (z - zi)) / (zj - zi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function cityCategory(cx, cz, h, area) {
+  let best = null;
+  for (const zn of CONTEXT.zones || []) {
+    if (!pointInRing(cx, cz, zn.ring)) continue;
+    const p = CITY_ZONE_PRIORITY[zn.cls];
+    if (p == null) continue;
+    if (!best || p < best.p) best = { cls: zn.cls, p };
+  }
+  if (best) return best.cls;
+  if (h >= 60 || area > 3000) return 'office';
+  if (h <= 50) return 'residential';
+  return 'mixed';
+}
+function cityFacadeKind(cat, h, area) {
+  if (cat === 'school' || cat === 'sports') return 'mixed';
+  if (cat === 'hospital') return 'office';
+  if (h >= 70 && area > 260) return 'glass';
+  if (cat === 'residential') return h >= 42 ? 'office' : 'residential';
+  if (cat === 'office' || h >= 60) return 'office';
+  return 'mixed';
+}
+// 低饱和、暖灰到冷蓝灰的分区色；高度越高越冷、略暗，再叠加确定性微扰
+function cityColor(cat, h, seed) {
+  const pal = {
+    residential: [0xd3cabb, 0xccc2b2, 0xc5bbaa],
+    office: [0xb4c1c8, 0xa9b8c1, 0x9fb2bd],
+    mixed: [0xc8c5bd, 0xbfbeb7, 0xb6bab8],
+    school: [0xd0c09f, 0xc6b794],
+    hospital: [0xd7e0de, 0xccd8d6],
+    sports: [0xc7cdcb, 0xbdc4c2],
+    commercial: [0xc1cacd, 0xb6c1c5],
+  }[cat] || [0xc8c5bd];
+  const c = new THREE.Color(pal[Math.floor(seed * pal.length) % pal.length]);
+  const t = THREE.MathUtils.clamp(h / 100, 0, 1);
+  c.offsetHSL((seed - 0.5) * 0.028, (seed - 0.5) * 0.06 - t * 0.02, 0.02 - t * 0.07 + (seed - 0.5) * 0.045);
+  return c;
+}
+
+function facadeCanvas(kind, size, emissive) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const cell = size / 2;
+  const glass = kind === 'glass' || kind === 'office';
+  if (emissive) {
+    g.fillStyle = '#000000';
+    g.fillRect(0, 0, size, size);
+  } else {
+    g.fillStyle = kind === 'glass' ? '#c2d2da' : kind === 'office' ? '#d7e0e4' : kind === 'residential' ? '#dcd9d1' : '#d6d3cb';
+    g.fillRect(0, 0, size, size);
+    g.fillStyle = 'rgba(120,130,135,0.075)';
+    for (let i = 0; i < 2; i++) g.fillRect(i * cell + cell * 0.5 - 1, 0, 2, size);
+  }
+  const litRate = kind === 'residential' ? 3 : kind === 'glass' ? 4 : kind === 'office' ? 4 : 2;
+  for (let r = 0; r < 2; r++) {
+    for (let col = 0; col < 2; col++) {
+      const x = col * cell, y = r * cell;
+      const mx = kind === 'residential' ? cell * 0.22 : glass ? cell * 0.05 : cell * 0.11;
+      const my = kind === 'residential' ? cell * 0.18 : cell * 0.12;
+      const ww = cell - mx * 2, wh = cell - my * 2 - cell * 0.06;
+      const wx = x + mx, wy = y + my;
+      const variant = (r * 2 + col) % 4;
+      const lit = ((r * 11 + col * 7 + (kind === 'office' ? 3 : 0) + (kind === 'glass' ? 5 : 0)) % 10) < litRate;
+      if (emissive) {
+        if (!lit) continue;
+        const cool = kind === 'office' || kind === 'glass';
+        const a = 0.20 + ((r * 5 + col * 3) % 4) * 0.07;
+        g.fillStyle = cool ? `rgba(168,208,232,${a})` : `rgba(255,188,118,${a})`;
+        g.fillRect(wx, wy, ww, wh);
+        g.fillStyle = cool ? 'rgba(212,234,246,0.50)' : 'rgba(255,214,158,0.52)';
+        g.fillRect(wx + ww * 0.16, wy + wh * 0.14, ww * 0.68, wh * 0.66);
+        continue;
+      }
+      g.fillStyle = glass ? '#a9b8bf' : '#bdb7ab';
+      g.fillRect(wx - 2, wy - 2, ww + 4, wh + 4);
+      const gr = g.createLinearGradient(0, wy, 0, wy + wh);
+      if (glass) {
+        gr.addColorStop(0, '#22343f');
+        gr.addColorStop(0.45, '#67818f');
+        gr.addColorStop(1, '#9fb8c5');
+      } else {
+        gr.addColorStop(0, '#1d2a31');
+        gr.addColorStop(0.5, '#4b5e68');
+        gr.addColorStop(1, '#7d9099');
+      }
+      g.fillStyle = gr;
+      g.fillRect(wx, wy, ww, wh);
+      g.fillStyle = glass ? '#b1c0c7' : '#c0baae';
+      g.fillRect(wx + ww * 0.5 - 1, wy, 2, wh);
+      if (glass) {
+        g.fillRect(wx + ww * 0.25 - 1, wy, 2, wh);
+        g.fillRect(wx + ww * 0.75 - 1, wy, 2, wh);
+      }
+      g.fillStyle = 'rgba(80,90,95,0.18)';
+      g.fillRect(wx - 2, wy + wh + 2, ww + 4, 2);
+      if (kind === 'residential') {
+        if (variant === 0) {
+          g.fillStyle = 'rgba(205,202,192,0.58)';
+          g.fillRect(x + cell * 0.10, y + cell * 0.80, cell * 0.80, cell * 0.10);
+        } else if (variant === 1) {
+          g.fillStyle = 'rgba(225,221,210,0.42)';
+          for (let b = 0; b < 4; b++) g.fillRect(wx + 2, wy + wh * (0.16 + b * 0.2), ww - 4, 2);
+        } else if (variant === 2) {
+          g.fillStyle = 'rgba(120,124,126,0.9)';
+          g.fillRect(wx + ww * 0.68, wy + wh * 0.62, ww * 0.26, wh * 0.26);
+          g.fillStyle = 'rgba(70,74,76,0.6)';
+          g.fillRect(wx + ww * 0.70, wy + wh * 0.64, ww * 0.22, 2);
+        } else {
+          g.fillStyle = 'rgba(244,233,214,0.28)';
+          g.fillRect(wx + ww * 0.08, wy + wh * 0.10, ww * 0.84, wh * 0.8);
+          g.fillStyle = 'rgba(220,205,182,0.5)';
+          g.fillRect(wx + ww * 0.08, wy + wh * 0.1, ww * 0.18, wh * 0.8);
+        }
+      } else if (variant === 1) {
+        g.fillStyle = 'rgba(220,226,228,0.32)';
+        for (let b = 0; b < 5; b++) g.fillRect(wx + 2, wy + wh * (0.12 + b * 0.17), ww - 4, 2);
+      } else if (variant === 2) {
+        g.fillStyle = 'rgba(38,54,64,0.30)';
+        g.fillRect(wx + ww * 0.55, wy, ww * 0.45, wh);
+      }
+    }
+  }
+  if (!emissive) {
+    g.fillStyle = 'rgba(48,55,59,0.34)';
+    for (let r = 1; r < 2; r++) g.fillRect(0, r * cell - 1, size, 3);
+  }
+  return c;
+}
+function podiumCanvas(emissive) {
+  const w = 256, h = 128;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.fillStyle = emissive ? '#000000' : '#2f3a41';
+  g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 8; i++) {
+    const x = i * 32;
+    if (!emissive) {
+      const gr = g.createLinearGradient(0, 12, 0, h);
+      gr.addColorStop(0, '#6d8b99');
+      gr.addColorStop(0.55, '#8ba4b0');
+      gr.addColorStop(1, '#42525c');
+      g.fillStyle = gr;
+      g.fillRect(x + 4, 14, 24, h - 20);
+      g.fillStyle = 'rgba(220,235,240,0.22)';
+      g.fillRect(x + 4, 14, 24, 6);
+      g.fillStyle = '#1f282e';
+      g.fillRect(x + 30, 0, 2, h);
+    } else if ((i * 7) % 10 < 6) {
+      g.fillStyle = `rgba(255,206,146,${0.45 + (i % 3) * 0.15})`;
+      g.fillRect(x + 6, 20, 20, h - 34);
+      g.fillStyle = 'rgba(255,235,200,0.75)';
+      g.fillRect(x + 10, 26, 12, 10);
+    }
+  }
+  if (!emissive) {
+    g.fillStyle = 'rgba(230,238,240,0.7)';
+    g.fillRect(0, 0, w, 6);
+    g.fillStyle = 'rgba(10,16,20,0.4)';
+    g.fillRect(0, h - 6, w, 6);
+  }
+  return c;
+}
+function canvasTexture(c, repeat = true) {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+  t.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+function facadeSet(kind) {
+  return {
+    high: { day: canvasTexture(facadeCanvas(kind, 512, false)), night: canvasTexture(facadeCanvas(kind, 512, true)) },
+    low: { day: canvasTexture(facadeCanvas(kind, 128, false)), night: canvasTexture(facadeCanvas(kind, 128, true)) },
+  };
+}
+function makeCityMat(kind, opts = {}) {
+  const set = facadeSet(kind);
+  const m = new THREE.MeshStandardMaterial({
+    map: set.high.day,
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    roughness: opts.roughness ?? 0.9,
+    metalness: opts.metalness ?? 0,
+    emissive: 0xffffff,
+    emissiveMap: set.high.night,
+    emissiveIntensity: 0,
+    envMapIntensity: opts.env ?? 0.4,
+  });
+  m.userData.facade = { highMap: set.high.day, lowMap: set.low.day, highEmissive: set.high.night, lowEmissive: set.low.night };
+  m.userData.nightGain = opts.nightGain ?? 1;
+  cityMats.push(m);
+  return m;
 }
 function buildRoofProps() {
   roofPropsGroup = new THREE.Group();
   roofPropsGroup.name = 'roofProps';
   surroundGroup.add(roofPropsGroup);
-  const boxMat = new THREE.MeshStandardMaterial({ color: 0x9aa1a5, roughness: 0.94 });
-  const tankMat = new THREE.MeshStandardMaterial({ color: 0xb4babd, roughness: 0.9 });
-  const boxes = [], tanks = [];
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0x8f9496, roughness: 0.82, metalness: 0.04, envMapIntensity: 0.2 });
+  const tankMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a2, roughness: 0.78, metalness: 0.08, envMapIntensity: 0.22 });
+  const boxes = [], tanks = [], antennas = [];
   let seed = 1234567;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-  for (const item of CITY.buildings) {
-    const h = Math.min(200, Math.max(3, item[0] * CITY_HEIGHT_SCALE));
-    if (h < 12) continue;
-    const n = (item.length - 1) / 2;
-    if (n < 3) continue;
-    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-    for (let i = 0; i < n; i++) {
-      const x = item[1 + i * 2], z = item[2 + i * 2];
-      x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
-    }
-    const w = x1 - x0, d = z1 - z0;
-    if (w < 5 || d < 5 || w * d < 90) continue;
+  for (const b of cityNearBuildings) {
+    const { minX, maxX, minZ, maxZ, h, area, cx, cz } = b;
+    if (h < 12 || area < 90) continue;
+    const w = maxX - minX, d = maxZ - minZ;
+    if (w < 5 || d < 5) continue;
     const count = w * d > 520 ? 2 : 1;
     for (let k = 0; k < count; k++) {
-      const sx = 1.3 + rnd() * 2.8;
-      const sy = 0.8 + rnd() * 1.6;
-      const sz = 1.3 + rnd() * 2.8;
-      const x = x0 + w * (0.18 + rnd() * 0.64);
-      const z = z0 + d * (0.18 + rnd() * 0.64);
+      const sx = 1.2 + rnd() * 2.6;
+      const sy = 0.7 + rnd() * 1.5;
+      const sz = 1.2 + rnd() * 2.6;
+      const x = minX + w * (0.18 + rnd() * 0.64);
+      const z = minZ + d * (0.18 + rnd() * 0.64);
       v.set(x, h + sy / 2 + 0.02, z);
       sc.set(sx, sy, sz);
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI);
       m4.compose(v, q, sc);
-      if (rnd() < 0.78) boxes.push(m4.clone());
-      else tanks.push(m4.clone());
+      if (rnd() < 0.78) boxes.push({ m: m4.clone(), c: rnd() });
+      else tanks.push({ m: m4.clone(), c: rnd() });
     }
+    if (h >= 80) antennas.push({ x: cx, z: cz, h });
   }
+  const tint = (mesh, list) => {
+    const col = new THREE.Color();
+    list.forEach(({ c }, i) => {
+      col.setHSL(0.56, 0.02, 0.22 + c * 0.10);
+      mesh.setColorAt(i, col);
+    });
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  };
   const addInst = (geo, mat, list) => {
     if (!list.length) return;
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);
-    list.forEach((m, i) => mesh.setMatrixAt(i, m));
+    list.forEach(({ m }, i) => mesh.setMatrixAt(i, m));
     mesh.instanceMatrix.needsUpdate = true;
+    tint(mesh, list);
     mesh.castShadow = true;
+    mesh.frustumCulled = false;
     roofPropsGroup.add(mesh);
   };
   addInst(new THREE.BoxGeometry(1, 1, 1), boxMat, boxes);
-  addInst(new THREE.CylinderGeometry(0.55, 0.55, 1, 8), tankMat, tanks);
-  console.log('[屋顶] 设备', boxes.length + tanks.length, '个');
+  addInst(new THREE.CylinderGeometry(0.55, 0.55, 1, 10), tankMat, tanks);
+  if (antennas.length) {
+    const geo = new THREE.CylinderGeometry(0.09, 0.14, 5, 5);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x6f777c, roughness: 0.5, metalness: 0.5, envMapIntensity: 0.6 });
+    const mesh = new THREE.InstancedMesh(geo, mat, antennas.length);
+    antennas.forEach((a, i) => {
+      v.set(a.x, a.h + 2.5, a.z);
+      sc.set(1, 1, 1); q.identity();
+      m4.compose(v, q, sc);
+      mesh.setMatrixAt(i, m4);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.castShadow = true;
+    mesh.frustumCulled = false;
+    roofPropsGroup.add(mesh);
+  }
+  console.log('[屋顶] 设备', boxes.length + tanks.length, '个 · 天线', antennas.length, '根');
+}
+function wallBucket() { return { pos: [], nrm: [], uv: [], col: [] }; }
+function pushWalls(dst, contour, h, color, u0, v0) {
+  const m = contour.length;
+  const cb = color.clone().multiplyScalar(0.72);
+  const ct = color.clone().multiplyScalar(1.0);
+  for (let i = 0; i < m; i++) {
+    const a = contour[i], b = contour[(i + 1) % m];
+    const dx = b.x - a.x, dz = b.y - a.y;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.15) continue;
+    const nx = dz / len, nz = -dx / len;
+    const u = len / CITY_TILE_U, v = h / CITY_TILE_V;
+    dst.pos.push(a.x, 0, a.y, b.x, 0, b.y, b.x, h, b.y);
+    dst.pos.push(a.x, 0, a.y, b.x, h, b.y, a.x, h, a.y);
+    for (let k = 0; k < 6; k++) dst.nrm.push(nx, 0, nz);
+    dst.uv.push(u0, v0, u0 + u, v0, u0 + u, v0 + v);
+    dst.uv.push(u0, v0, u0 + u, v0 + v, u0, v0 + v);
+    dst.col.push(cb.r, cb.g, cb.b, cb.r, cb.g, cb.b, ct.r, ct.g, ct.b);
+    dst.col.push(cb.r, cb.g, cb.b, ct.r, ct.g, ct.b, ct.r, ct.g, ct.b);
+  }
+}
+function pushRoof(r, contour, h, color) {
+  const tris = THREE.ShapeUtils.triangulateShape(contour, []);
+  const rc = color.clone().lerp(new THREE.Color(0x6f7578), 0.72).multiplyScalar(0.86);
+  for (const t of tris) {
+    const a = contour[t[0]], b = contour[t[1]], c = contour[t[2]];
+    r.pos.push(a.x, h, a.y, b.x, h, b.y, c.x, h, c.y);
+    for (let k = 0; k < 3; k++) r.col.push(rc.r, rc.g, rc.b);
+  }
+}
+function pushParapet(p, contour, h, color) {
+  const ph = h + 0.78, inn = 0.30;
+  const co = color.clone().multiplyScalar(1.08);
+  const cc = color.clone().multiplyScalar(1.16);
+  const ci = color.clone().multiplyScalar(0.93);
+  const m = contour.length;
+  for (let i = 0; i < m; i++) {
+    const a = contour[i], b = contour[(i + 1) % m];
+    const dx = b.x - a.x, dz = b.y - a.y;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.3) continue;
+    const nx = dz / len, nz = -dx / len;
+    const ix = -nx * inn, iz = -nz * inn;
+    // 外墙
+    p.pos.push(a.x, h, a.y, b.x, h, b.y, b.x, ph, b.y);
+    p.pos.push(a.x, h, a.y, b.x, ph, b.y, a.x, ph, a.y);
+    for (let k = 0; k < 6; k++) { p.nrm.push(nx, 0, nz); p.col.push(co.r, co.g, co.b); }
+    // 顶面压顶
+    p.pos.push(a.x, ph, a.y, b.x, ph, b.y, b.x + ix, ph, b.y + iz);
+    p.pos.push(a.x, ph, a.y, b.x + ix, ph, b.y + iz, a.x + ix, ph, a.y + iz);
+    for (let k = 0; k < 6; k++) { p.nrm.push(0, 1, 0); p.col.push(cc.r, cc.g, cc.b); }
+    // 内侧回落，形成有厚度的女儿墙
+    p.pos.push(a.x + ix, ph, a.y + iz, b.x + ix, ph, b.y + iz, b.x + ix, h, b.y + iz);
+    p.pos.push(a.x + ix, ph, a.y + iz, b.x + ix, h, b.y + iz, a.x + ix, h, a.y + iz);
+    for (let k = 0; k < 6; k++) { p.nrm.push(-nx, 0, -nz); p.col.push(ci.r, ci.g, ci.b); }
+  }
+}
+function pushPodium(p, contour, h, color, u0) {
+  const ph = Math.min(4.2, Math.max(2.8, h * 0.32));
+  const cb = color.clone().multiplyScalar(0.92);
+  const m = contour.length;
+  for (let i = 0; i < m; i++) {
+    const a = contour[i], b = contour[(i + 1) % m];
+    const dx = b.x - a.x, dz = b.y - a.y;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.3) continue;
+    const nx = dz / len, nz = -dx / len;
+    const u = len / 10;
+    p.pos.push(a.x, 0, a.y, b.x, 0, b.y, b.x, ph, b.y);
+    p.pos.push(a.x, 0, a.y, b.x, ph, b.y, a.x, ph, a.y);
+    for (let k = 0; k < 6; k++) { p.nrm.push(nx, 0, nz); p.col.push(cb.r, cb.g, cb.b); }
+    p.uv.push(u0, 0, u0 + u, 0, u0 + u, 1);
+    p.uv.push(u0, 0, u0 + u, 1, u0, 1);
+  }
+}
+function pushCanopy(c, contour, h, color) {
+  const ph = Math.min(4.2, Math.max(2.8, h * 0.32)) + 0.16;
+  const out = 0.72;
+  const ct = color.clone().multiplyScalar(1.18);
+  const cf = color.clone().multiplyScalar(1.02);
+  const m = contour.length;
+  for (let i = 0; i < m; i++) {
+    const a = contour[i], b = contour[(i + 1) % m];
+    const dx = b.x - a.x, dz = b.y - a.y;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.3) continue;
+    const nx = dz / len, nz = -dx / len;
+    // 雨棚顶面
+    c.pos.push(a.x, ph, a.y, b.x, ph, b.y, b.x + nx * out, ph, b.y + nz * out);
+    c.pos.push(a.x, ph, a.y, b.x + nx * out, ph, b.y + nz * out, a.x + nx * out, ph, a.y + nz * out);
+    for (let k = 0; k < 6; k++) { c.nrm.push(0, 1, 0); c.col.push(ct.r, ct.g, ct.b); }
+    // 前沿
+    c.pos.push(a.x + nx * out, ph, a.y + nz * out, b.x + nx * out, ph, b.y + nz * out, b.x + nx * out, ph - 0.28, b.y + nz * out);
+    c.pos.push(a.x + nx * out, ph, a.y + nz * out, b.x + nx * out, ph - 0.28, b.y + nz * out, a.x + nx * out, ph - 0.28, a.y + nz * out);
+    for (let k = 0; k < 6; k++) { c.nrm.push(nx, 0, nz); c.col.push(cf.r, cf.g, cf.b); }
+  }
 }
 function buildCity() {
   if (!CITY || !CITY.buildings.length) return;
-  const cw = document.createElement('canvas');
-  cw.width = cw.height = 32;
-  const cg = cw.getContext('2d');
-  cg.fillStyle = '#eef1f4'; cg.fillRect(0, 0, 32, 32);
-  cg.fillStyle = 'rgba(105,120,135,0.32)'; cg.fillRect(0, 21, 32, 5);
-  cg.fillStyle = 'rgba(255,255,255,0.35)'; cg.fillRect(0, 26, 32, 2);
-  const cityTex = new THREE.CanvasTexture(cw);
-  cityTex.colorSpace = THREE.SRGBColorSpace;
-  cityTex.wrapS = cityTex.wrapT = THREE.RepeatWrapping;
-  cityTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  // 夜景只让窗带发光，墙体不整体发亮
-  const ew = document.createElement('canvas');
-  ew.width = ew.height = 32;
-  const eg = ew.getContext('2d');
-  eg.fillStyle = '#000000'; eg.fillRect(0, 0, 32, 32);
-  eg.fillStyle = '#ffffff'; eg.fillRect(0, 21, 32, 5);
-  const cityEmissiveTex = new THREE.CanvasTexture(ew);
-  cityEmissiveTex.colorSpace = THREE.SRGBColorSpace;
-  cityEmissiveTex.wrapS = cityEmissiveTex.wrapT = THREE.RepeatWrapping;
+  const matNearRes = makeCityMat('residential', { roughness: 0.9, env: 0.18, nightGain: 0.44 });
+  const matNearOffice = makeCityMat('office', { roughness: 0.72, metalness: 0.08, env: 0.32, nightGain: 0.52 });
+  const matNearMixed = makeCityMat('mixed', { roughness: 0.88, env: 0.2, nightGain: 0.36 });
+  const matNearGlass = makeCityMat('glass', { roughness: 0.26, metalness: 0.42, env: 0.65, nightGain: 0.65 });
+  const matFarA = makeCityMat('mixed', { roughness: 0.92, env: 0.12, nightGain: 0.28 });
+  const matFarB = makeCityMat('office', { roughness: 0.82, metalness: 0.05, env: 0.2, nightGain: 0.36 });
+  const podiumDay = canvasTexture(podiumCanvas(false), true);
+  podiumDay.wrapT = THREE.ClampToEdgeWrapping;
+  const podiumNight = canvasTexture(podiumCanvas(true), true);
+  podiumNight.wrapT = THREE.ClampToEdgeWrapping;
+  const matPodium = new THREE.MeshStandardMaterial({
+    map: podiumDay, vertexColors: true, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.18,
+    emissive: 0xffffff, emissiveMap: podiumNight, emissiveIntensity: 0, envMapIntensity: 0.7,
+  });
+  matPodium.userData.facade = { highMap: podiumDay, lowMap: podiumDay, highEmissive: podiumNight, lowEmissive: podiumNight };
+  matPodium.userData.nightGain = 0.3;
+  cityMats.push(matPodium);
+  const matParapet = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.02, envMapIntensity: 0.45 });
+  const matCanopy = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.62, metalness: 0.12, envMapIntensity: 0.6 });
+  const matRoof = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.9, metalness: 0.03, envMapIntensity: 0.3 });
 
-  // 高画质立面：每 4m 一个开间、每 3.2m 一层；窗格 + 窗台 + 楼层线
-  const makeFacadeTex = (emissive) => {
-    const size = 128;
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const g = c.getContext('2d');
-    if (emissive) {
-      g.fillStyle = '#000000'; g.fillRect(0, 0, size, size);
-      g.fillStyle = '#ffd8a2';
-      g.fillRect(22, 24, 42, 80);
-      g.fillStyle = 'rgba(255,220,170,0.28)';
-      g.fillRect(66, 24, 40, 80);
-    } else {
-      g.fillStyle = '#f4f5f5'; g.fillRect(0, 0, size, size);
-      g.fillStyle = '#dde2e4'; g.fillRect(0, 0, size, 8);
-      g.fillStyle = '#dfe4e6';
-      g.fillRect(20, 22, 88, 84);
-      const gr = g.createLinearGradient(0, 24, 0, 104);
-      gr.addColorStop(0, '#aebec5');
-      gr.addColorStop(0.5, '#8fa3ad');
-      gr.addColorStop(1, '#9fb0b8');
-      g.fillStyle = gr;
-      g.fillRect(22, 24, 84, 80);
-      g.fillStyle = '#dfe4e6';
-      g.fillRect(63, 24, 2, 80);
-      g.fillStyle = '#d8dee1';
-      g.fillRect(20, 104, 88, 4);
-    }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    return t;
+  const buckets = {
+    nearRes: wallBucket(), nearOffice: wallBucket(), nearMixed: wallBucket(), nearGlass: wallBucket(),
+    farA: wallBucket(), farB: wallBucket(),
   };
-  const cityTexHigh = makeFacadeTex(false);
-  const cityEmissiveHigh = makeFacadeTex(true);
-  const wallPos = [], wallNrm = [], wallUv = [], wallCol = [], roofPos = [], roofCol = [];
+  const roofs = { near: { pos: [], col: [] }, far: { pos: [], col: [] } };
+  const parapet = { pos: [], nrm: [], col: [] };
+  const podium = { pos: [], nrm: [], uv: [], col: [] };
+  const canopy = { pos: [], nrm: [], col: [] };
+  const aviation = [];
+  cityNearBuildings.length = 0;
   const contour = [];
-  let bi = 0;
+  let nearCount = 0, farCount = 0;
+
   for (const item of CITY.buildings) {
-    bi++;
-    const h = Math.min(200, Math.max(3, item[0] * CITY_HEIGHT_SCALE));
+    const h = Math.min(CITY_HEIGHT_MAX, Math.max(3, item[0] * CITY_HEIGHT_SCALE));
     const n = (item.length - 1) / 2;
     if (n < 3) continue;
     contour.length = 0;
@@ -2322,55 +2633,106 @@ function buildCity() {
     }
     const m = contour.length;
     if (m < 3) continue;
-    const baseCol = cityTierColor(h);
-    baseCol.offsetHSL(0, 0, ((bi % 5) - 2) * 0.004);
-    const vTop = h / 3.2;
+    let area2 = 0, cx = 0, cz = 0;
     for (let i = 0; i < m; i++) {
-      const a = contour[i], b = contour[(i + 1) % m];
-      wallPos.push(a.x, 0, a.y, b.x, 0, b.y, b.x, h, b.y);
-      wallPos.push(a.x, 0, a.y, b.x, h, b.y, a.x, h, a.y);
-      let nx = b.y - a.y, nz = -(b.x - a.x);
-      const len = Math.hypot(nx, nz) || 1; nx /= len; nz /= len;
-      for (let k = 0; k < 6; k++) wallNrm.push(nx, 0, nz);
-      const u = len / 4;
-      wallUv.push(0, 0, u, 0, u, vTop, 0, 0, u, vTop, 0, vTop);
-      const cb = baseCol.clone().multiplyScalar(0.9);
-      const ct = baseCol.clone().multiplyScalar(1.04);
-      wallCol.push(cb.r, cb.g, cb.b, cb.r, cb.g, cb.b, ct.r, ct.g, ct.b);
-      wallCol.push(cb.r, cb.g, cb.b, ct.r, ct.g, ct.b, ct.r, ct.g, ct.b);
+      const p = contour[i], q = contour[(i + 1) % m];
+      area2 += p.x * q.y - q.x * p.y;
+      cx += p.x; cz += p.y;
     }
-    const tris = THREE.ShapeUtils.triangulateShape(contour, []);
-    const roofC = baseCol.clone().multiplyScalar(0.8);
-    for (const t of tris) {
-      const a = contour[t[0]], b = contour[t[1]], c = contour[t[2]];
-      roofPos.push(a.x, h, a.y, b.x, h, b.y, c.x, h, c.y);
-      for (let k = 0; k < 3; k++) roofCol.push(roofC.r, roofC.g, roofC.b);
+    const area = Math.abs(area2) / 2;
+    if (area < 12) continue;
+    if (area2 < 0) contour.reverse();
+    cx /= m; cz /= m;
+    const cat = cityCategory(cx, cz, h, area);
+    const seed = cityHash(cx, cz);
+    const baseCol = cityColor(cat, h, seed);
+    const near = Math.hypot(cx, cz) <= CITY_DETAIL_R;
+    const kind = cityFacadeKind(cat, h, area);
+    const u0 = Math.floor(seed * 2) / 2;
+    const v0 = Math.floor(((seed * 7) % 1) * 2) / 2;
+    let bucket;
+    if (near) {
+      bucket = kind === 'glass' ? buckets.nearGlass : kind === 'office' ? buckets.nearOffice : kind === 'residential' ? buckets.nearRes : buckets.nearMixed;
+    } else {
+      bucket = cat === 'office' || h >= 50 ? buckets.farB : buckets.farA;
+    }
+    pushWalls(bucket, contour, h, baseCol, u0, v0);
+    pushRoof(near ? roofs.near : roofs.far, contour, h, baseCol);
+    if (near) {
+      nearCount++;
+      let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+      for (const p of contour) {
+        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+        minZ = Math.min(minZ, p.y); maxZ = Math.max(maxZ, p.y);
+      }
+      cityNearBuildings.push({ cx, cz, minX, maxX, minZ, maxZ, h, area, cat });
+      if (h >= 8 && area >= 80) pushParapet(parapet, contour, h, baseCol);
+      if (h >= 8 && area >= 220) pushPodium(podium, contour, h, baseCol, u0);
+      if (h >= 10 && area >= 300) pushCanopy(canopy, contour, h, baseCol);
+      if (h >= 80) aviation.push(cx, h + 1.1, cz);
+    } else {
+      farCount++;
     }
   }
-  const wallGeo = new THREE.BufferGeometry();
-  wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPos, 3));
-  wallGeo.setAttribute('normal', new THREE.Float32BufferAttribute(wallNrm, 3));
-  wallGeo.setAttribute('uv', new THREE.Float32BufferAttribute(wallUv, 2));
-  wallGeo.setAttribute('color', new THREE.Float32BufferAttribute(wallCol, 3));
-  const roofGeo = new THREE.BufferGeometry();
-  roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(roofPos, 3));
-  roofGeo.setAttribute('color', new THREE.Float32BufferAttribute(roofCol, 3));
-  roofGeo.computeVertexNormals();
-  const wallMat = new THREE.MeshStandardMaterial({ map: cityTexHigh, vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide, emissive: 0x000000, emissiveMap: cityEmissiveHigh });
-  wallMat.userData.facade = { lowMap: cityTex, highMap: cityTexHigh, lowEmissive: cityEmissiveTex, highEmissive: cityEmissiveHigh };
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
-  cityWallMat = wallMat;
-  const walls = new THREE.Mesh(wallGeo, wallMat);
-  const roofs = new THREE.Mesh(roofGeo, roofMat);
-  walls.castShadow = true;
-  roofs.castShadow = true;
-  walls.receiveShadow = true;
-  roofs.receiveShadow = true;
-  surroundGroup.add(walls, roofs);
-  console.log('[城市体量] 真实轮廓', CITY.buildings.length, '栋（半径 ' + CITY.radius + 'm）');
+
+  const addWalls = (bucket, mat, name) => {
+    if (!bucket.pos.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(bucket.pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(bucket.nrm, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(bucket.uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(bucket.col, 3));
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = name;
+    mesh.castShadow = mesh.receiveShadow = true;
+    surroundGroup.add(mesh);
+  };
+  const addSimple = (data, mat, group, computeNormals) => {
+    if (!data.pos.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(data.pos, 3));
+    if (data.nrm) geo.setAttribute('normal', new THREE.Float32BufferAttribute(data.nrm, 3));
+    if (data.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(data.uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(data.col, 3));
+    if (computeNormals) geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+  };
+
+  addWalls(buckets.nearRes, matNearRes, 'cityNearRes');
+  addWalls(buckets.nearOffice, matNearOffice, 'cityNearOffice');
+  addWalls(buckets.nearMixed, matNearMixed, 'cityNearMixed');
+  addWalls(buckets.nearGlass, matNearGlass, 'cityNearGlass');
+  addWalls(buckets.farA, matFarA, 'cityFarA');
+  addWalls(buckets.farB, matFarB, 'cityFarB');
+  addSimple(roofs.near, matRoof, surroundGroup, true);
+  addSimple(roofs.far, matRoof, surroundGroup, true);
+
+  cityShellGroup = new THREE.Group();
+  cityShellGroup.name = 'cityShell';
+  surroundGroup.add(cityShellGroup);
+  addSimple(parapet, matParapet, cityShellGroup, false);
+  addSimple(podium, matPodium, cityShellGroup, false);
+  addSimple(canopy, matCanopy, cityShellGroup, false);
+
+  if (aviation.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(aviation, 3));
+    aviationMat = new THREE.PointsMaterial({
+      color: 0xff4a3d, map: makeGlowTexture(64), size: 6, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, toneMapped: false,
+    });
+    const pts = new THREE.Points(geo, aviationMat);
+    pts.frustumCulled = false;
+    surroundGroup.add(pts);
+  }
+  console.log('[城市体量] 真实轮廓', CITY.buildings.length, '栋（半径 ' + CITY.radius + 'm）',
+    '· 近景', nearCount, '远景区', farCount,
+    '· 立面组', Object.entries(buckets).map(([k, v]) => k + ':' + (v.pos.length / 18)).join(','));
 }
-buildRoofProps();
 buildCity();
+buildRoofProps();
 surroundGroup.visible = $('tg-surround').checked;
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
 
@@ -2378,13 +2740,16 @@ $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; }
 const QUALITY = { mode: 'auto', value: 'high', done: false, started: false, frames: 0, t0: 0 };
 function applyQuality(q) {
   QUALITY.value = q;
-  if (cityWallMat && cityWallMat.userData.facade) {
-    const f = cityWallMat.userData.facade;
-    cityWallMat.map = q === 'low' ? f.lowMap : f.highMap;
-    cityWallMat.emissiveMap = q === 'low' ? f.lowEmissive : f.highEmissive;
-    cityWallMat.needsUpdate = true;
+  for (const m of cityMats) {
+    const f = m.userData.facade;
+    if (!f) continue;
+    m.map = q === 'low' ? f.lowMap : f.highMap;
+    m.emissiveMap = q === 'low' ? f.lowEmissive : f.highEmissive;
+    m.needsUpdate = true;
   }
+  if (cityShellGroup) cityShellGroup.visible = q !== 'low';
   if (roofPropsGroup) roofPropsGroup.visible = q === 'high';
+  if (aviationMat) aviationMat.size = q === 'high' ? 6 : 4.2;
   const px = q === 'high' ? 2 : q === 'medium' ? 1.5 : 1;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, px));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -2615,33 +2980,70 @@ function buildContext() {
   mergeTo(bridgeGroup, bDeck, bridgeDeckMat);
   mergeTo(bridgeGroup, bRail, bridgeRailMat);
 
-  // 地面路网：主干道带虚线，支路沥青面，两侧人行道
-  const makeAsphalt = (lane) => {
-    const w = 64, h = 256;
+  // 地面路网：按数据宽度（米）分主干/街巷，沥青+车道线+路缘石+人行道
+  const makeAsphalt = (kind) => {
+    const w = 128, h = 512;
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const g = c.getContext('2d');
-    g.fillStyle = '#5b6063'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 260; i++) {
-      g.fillStyle = `rgba(255,255,255,${0.015 + Math.random() * 0.025})`;
+    g.fillStyle = kind === 'arterial' ? '#363b3e' : kind === 'street' ? '#3f4447' : '#494d4f';
+    g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.012 + Math.random() * 0.03})`;
       g.fillRect(Math.random() * w, Math.random() * h, 1, 1);
     }
-    if (lane) {
-      g.fillStyle = 'rgba(230,232,230,0.85)';
-      g.fillRect(2, 0, 2, h); g.fillRect(w - 4, 0, 2, h);
-      g.fillStyle = 'rgba(240,240,235,0.9)';
-      for (let y = 0; y < h; y += 64) g.fillRect(w / 2 - 1, y, 2, 34);
+    for (let i = 0; i < 40; i++) {
+      g.fillStyle = `rgba(20,22,24,${0.02 + Math.random() * 0.04})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 6, 1);
     }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    if (kind !== 'lane') {
+      g.fillStyle = 'rgba(225,226,220,0.82)';
+      g.fillRect(4, 0, 2, h);
+      g.fillRect(w - 7, 0, 2, h);
+    }
+    if (kind === 'arterial') {
+      g.fillStyle = '#c5a04a';
+      g.fillRect(w / 2 - 5, 0, 2, h);
+      g.fillRect(w / 2 + 3, 0, 2, h);
+      g.fillStyle = 'rgba(228,231,228,0.82)';
+      for (let y = 0; y < h; y += 72) {
+        g.fillRect(w / 4 - 1, y, 2, 38);
+        g.fillRect(w * 3 / 4 - 1, y, 2, 38);
+      }
+    } else if (kind === 'street') {
+      g.fillStyle = 'rgba(214,186,110,0.85)';
+      for (let y = 0; y < h; y += 72) g.fillRect(w / 2 - 1, y, 2, 34);
+    }
+    const t = canvasTexture(c, true);
     return t;
   };
-  const roadMainMat = new THREE.MeshStandardMaterial({ map: makeAsphalt(true), roughness: 0.92, metalness: 0, side: THREE.DoubleSide });
-  const roadLocalMat = new THREE.MeshStandardMaterial({ map: makeAsphalt(false), roughness: 0.94, metalness: 0, side: THREE.DoubleSide });
-  const walkMat = new THREE.MeshStandardMaterial({ color: 0xb9bec1, roughness: 0.96 });
-  const mainR = { pos: [], uv: [], idx: [] }, localR = { pos: [], uv: [], idx: [] }, walkR = { pos: [], idx: [] };
+  const makeSidewalkTex = () => {
+    const w = 64, h = 128;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    g.fillStyle = '#9aa0a3'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 260; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.02 + Math.random() * 0.04})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 1, 1);
+    }
+    g.strokeStyle = 'rgba(92,98,101,0.20)';
+    g.lineWidth = 1;
+    for (let y = 0; y <= h; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    for (let x = 0; x <= w; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+    g.fillStyle = 'rgba(255,255,255,0.10)';
+    g.fillRect(0, 0, w, 3);
+    return canvasTexture(c, true);
+  };
+  const roadMats = {
+    arterial: new THREE.MeshStandardMaterial({ map: makeAsphalt('arterial'), roughness: 0.88, metalness: 0.02, side: THREE.DoubleSide, envMapIntensity: 0.28 }),
+    street: new THREE.MeshStandardMaterial({ map: makeAsphalt('street'), roughness: 0.9, metalness: 0.02, side: THREE.DoubleSide, envMapIntensity: 0.24 }),
+    lane: new THREE.MeshStandardMaterial({ map: makeAsphalt('lane'), roughness: 0.92, metalness: 0.01, side: THREE.DoubleSide, envMapIntensity: 0.2 }),
+  };
+  const walkMat = new THREE.MeshStandardMaterial({ map: makeSidewalkTex(), roughness: 0.94, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.2 });
+  const curbMat = new THREE.MeshStandardMaterial({ color: 0xaeb3b5, roughness: 0.9, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.12 });
+  const roadR = { arterial: { pos: [], uv: [], idx: [] }, street: { pos: [], uv: [], idx: [] }, lane: { pos: [], uv: [], idx: [] } };
+  const walkR = { pos: [], uv: [], idx: [] }, curbR = { pos: [], idx: [] };
   const addRoadQuad = (dst, ax, az, bx, bz, nx, nz, half, y, vLen) => {
     const base = dst.pos.length / 3;
     dst.pos.push(
@@ -2653,19 +3055,35 @@ function buildContext() {
     dst.uv.push(0, 0, 1, 0, 0, vLen, 1, vLen);
     dst.idx.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
   };
-  const addWalkQuad = (ax, az, bx, bz, nx, nz, inner, outer) => {
+  const addWalkQuad = (ax, az, bx, bz, nx, nz, inner, outer, vLen) => {
     const base = walkR.pos.length / 3;
     walkR.pos.push(
-      ax + nx * inner, 0.15, az + nz * inner,
-      ax + nx * outer, 0.15, az + nz * outer,
-      bx + nx * inner, 0.15, bz + nz * inner,
-      bx + nx * outer, 0.15, bz + nz * outer,
+      ax + nx * inner, 0.155, az + nz * inner,
+      ax + nx * outer, 0.155, az + nz * outer,
+      bx + nx * inner, 0.155, bz + nz * inner,
+      bx + nx * outer, 0.155, bz + nz * outer,
     );
+    walkR.uv.push(0, 0, 1, 0, 0, vLen, 1, vLen);
     walkR.idx.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
   };
+  const addCurbQuad = (ax, az, bx, bz, nx, nz, off) => {
+    const base = curbR.pos.length / 3;
+    curbR.pos.push(
+      ax + nx * off, 0.155, az + nz * off,
+      bx + nx * off, 0.155, bz + nz * off,
+      bx + nx * off, 0.0, bz + nz * off,
+      ax + nx * off, 0.0, az + nz * off,
+    );
+    curbR.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  const sidewalkWidth = (w) => w >= 10 ? 3.2 : w >= 4.5 ? 1.9 : 0.7;
   for (const road of CONTEXT.roads) {
-    const dst = road.fc === '30' ? mainR : localR;
-    const half = road.fc === '30' ? 7 : 3.25;
+    const wM = road.w || 5.5;
+    const kind = wM >= 10 ? 'arterial' : wM >= 4 ? 'street' : 'lane';
+    const half = wM / 2;
+    const sw = sidewalkWidth(wM);
+    const y = kind === 'arterial' ? 0.132 : kind === 'street' ? 0.126 : 0.12;
+    const dst = roadR[kind];
     for (const part of road.parts) {
       for (let i = 1; i < part.length; i++) {
         const a = part[i - 1], b = part[i];
@@ -2673,9 +3091,11 @@ function buildContext() {
         const len = Math.hypot(dx, dz);
         if (len < 0.8) continue;
         const nx = -dz / len, nz = dx / len;
-        addRoadQuad(dst, a[0], a[1], b[0], b[1], nx, nz, half, 0.12, len / 8);
+        addRoadQuad(dst, a[0], a[1], b[0], b[1], nx, nz, half, y, len / 8);
         for (const side of [-1, 1]) {
-          addWalkQuad(a[0], a[1], b[0], b[1], nx * side, nz * side, half + 0.15, half + 1.35);
+          const sx = nx * side, sz = nz * side;
+          addWalkQuad(a[0], a[1], b[0], b[1], sx, sz, half + 0.06, half + sw, len / 3);
+          addCurbQuad(a[0], a[1], b[0], b[1], sx, sz, half + 0.035);
         }
       }
     }
@@ -2684,16 +3104,89 @@ function buildContext() {
     if (!r.pos.length) return;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(r.pos, 3));
-    if (withUv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(r.uv, 2));
-    geo.setIndex(r.idx);
-    geo.computeVertexNormals();
+    if (withUv) {
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(r.uv, 2));
+      geo.setIndex(r.idx);
+      geo.computeVertexNormals();
+    } else {
+      geo.setIndex(r.idx);
+      geo.computeVertexNormals();
+    }
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     roadGroup.add(mesh);
   };
-  makeRoadMesh(mainR, roadMainMat, true);
-  makeRoadMesh(localR, roadLocalMat, true);
-  makeRoadMesh(walkR, walkMat, false);
+  makeRoadMesh(roadR.arterial, roadMats.arterial, true);
+  makeRoadMesh(roadR.street, roadMats.street, true);
+  makeRoadMesh(roadR.lane, roadMats.lane, true);
+  makeRoadMesh(walkR, walkMat, true);
+  makeRoadMesh(curbR, curbMat, false);
+
+  // 近处主路路灯：灯杆 + 灯头 + 夜间光点，增强智慧城市夜景层次
+  {
+    const lamps = [];
+    const CAMPUS_RECT = { x0: -175, x1: 160, z0: -130, z1: 110 };
+    let flip = 0;
+    for (const road of CONTEXT.roads) {
+      const wM = road.w || 5.5;
+      if (wM < 4) continue;
+      const sw = sidewalkWidth(wM);
+      const off = wM / 2 + sw + 0.75;
+      for (const part of road.parts) {
+        for (let i = 1; i < part.length; i++) {
+          const a = part[i - 1], b = part[i];
+          const dx = b[0] - a[0], dz = b[1] - a[1];
+          const len = Math.hypot(dx, dz);
+          if (len < 12) continue;
+          const nx = -dz / len, nz = dx / len;
+          for (let t = 10; t < len; t += 38) {
+            const x0 = a[0] + (dx * t) / len, z0 = a[1] + (dz * t) / len;
+            if (Math.hypot(x0, z0) > 850) continue;
+            if (x0 > CAMPUS_RECT.x0 && x0 < CAMPUS_RECT.x1 && z0 > CAMPUS_RECT.z0 && z0 < CAMPUS_RECT.z1) continue;
+            const side = flip++ % 2 ? 1 : -1;
+            lamps.push([x0 + nx * off * side, z0 + nz * off * side, Math.atan2(dx, dz), side]);
+            if (lamps.length >= 260) break;
+          }
+          if (lamps.length >= 260) break;
+        }
+        if (lamps.length >= 260) break;
+      }
+      if (lamps.length >= 260) break;
+    }
+    if (lamps.length) {
+      const poleGeo = new THREE.CylinderGeometry(0.09, 0.13, 8, 5);
+      poleGeo.translate(0, 4, 0);
+      const headGeo = new THREE.BoxGeometry(0.72, 0.16, 0.34);
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x3c4348, roughness: 0.55, metalness: 0.6, envMapIntensity: 0.5 });
+      lampMat = new THREE.MeshStandardMaterial({ color: 0xfff1d2, emissive: 0xffb45a, emissiveIntensity: 0.06, roughness: 0.35, metalness: 0.1, toneMapped: false });
+      const poles = new THREE.InstancedMesh(poleGeo, poleMat, lamps.length);
+      const heads = new THREE.InstancedMesh(headGeo, lampMat, lamps.length);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1);
+      const up = new THREE.Vector3(0, 1, 0);
+      lamps.forEach(([x, z, ang, side], i) => {
+        v.set(x, 0, z); q.identity();
+        m4.compose(v, q, sc); poles.setMatrixAt(i, m4);
+        v.set(x, 8.02, z); q.setFromAxisAngle(up, ang);
+        m4.compose(v, q, sc); heads.setMatrixAt(i, m4);
+      });
+      poles.instanceMatrix.needsUpdate = true;
+      heads.instanceMatrix.needsUpdate = true;
+      poles.frustumCulled = heads.frustumCulled = false;
+      poles.castShadow = heads.castShadow = false;
+      roadGroup.add(poles, heads);
+      const glowGeo = new THREE.BufferGeometry();
+      const gp = new Float32Array(lamps.length * 3);
+      lamps.forEach(([x, z], i) => { gp[i * 3] = x; gp[i * 3 + 1] = 7.9; gp[i * 3 + 2] = z; });
+      glowGeo.setAttribute('position', new THREE.BufferAttribute(gp, 3));
+      lampGlowMat = new THREE.PointsMaterial({
+        color: 0xffc478, map: makeGlowTexture(64), size: 5.5, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, toneMapped: false,
+      });
+      const glow = new THREE.Points(glowGeo, lampGlowMat);
+      glow.frustumCulled = false;
+      roadGroup.add(glow);
+    }
+  }
 
   // 路名 / POI：单独一组，按距离 LOD
   for (const l of [...CONTEXT.roadLabels, ...CONTEXT.poiLabels]) {
@@ -3395,7 +3888,29 @@ function fpFly(r) {
 }
 $('fp-close').onclick = () => { fpState.hidden = true; $('floor-plan').classList.remove('show'); };
 // 调试钩子：隐藏标签页 rAF 节流时可用 window.__dt.fpDraw(true) 手动刷新平面图
-window.__dt = { fpDraw, fpCollectRobots, fpState, get BEACONS() { return BEACONS; }, get holoMat() { return holoMat; }, get camera() { return camera; }, get flyTarget() { return flyTarget; }, get renderer() { return renderer; }, get scene() { return scene; }, get THREE() { return THREE; } };
+window.__dt = {
+  fpDraw, fpCollectRobots, fpState,
+  get BEACONS() { return BEACONS; },
+  get holoMat() { return holoMat; },
+  get camera() { return camera; },
+  get flyTarget() { return flyTarget; },
+  get renderer() { return renderer; },
+  get scene() { return scene; },
+  get THREE() { return THREE; },
+  setHour(h) {
+    timeState.hour = h;
+    timeState.playing = false;
+    syncTimeUI();
+    updateSun();
+    updateSkyFog();
+    updateCloudLook();
+    const night = THREE.MathUtils.clamp(-sunElvAt(timeState.hour) * 2.2, 0, 1);
+    for (const m of cityMats) m.emissiveIntensity = night * (m.userData.nightGain || 1);
+    if (aviationMat) aviationMat.opacity = night * 0.8;
+    if (lampMat) lampMat.emissiveIntensity = 0.06 + night * 3.2;
+    if (lampGlowMat) lampGlowMat.opacity = night * 0.78;
+  },
+};
 // 平面图交互：滚轮缩放（围绕中心）、拖动平移、点击定位机器人
 let fpDrag = null, fpDragMoved = false;
 $('fp-canvas').addEventListener('wheel', (e) => {
@@ -3507,9 +4022,12 @@ function animate() {
     syncTimeUI();
   }
   updateSun();
-  if (cityWallMat) {
-    const night = THREE.MathUtils.clamp(-sunDir.y * 2.2, 0, 1);
-    cityWallMat.emissive.setRGB(1.0 * night * 0.30, 0.80 * night * 0.30, 0.52 * night * 0.30);
+  {
+    const night = THREE.MathUtils.clamp(-sunElvAt(timeState.hour) * 2.2, 0, 1);
+    for (const m of cityMats) m.emissiveIntensity = night * (m.userData.nightGain || 1);
+    if (aviationMat) aviationMat.opacity = night * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(elapsed * 3.1)));
+    if (lampMat) lampMat.emissiveIntensity = 0.06 + night * 3.2;
+    if (lampGlowMat) lampGlowMat.opacity = night * 0.78;
   }
   updateCloudLook();
   // 雷雨闪电

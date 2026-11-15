@@ -24,15 +24,17 @@ function readDbf(file) {
   const b = fs.readFileSync(file);
   const nrec = b.readUInt32LE(4), hlen = b.readUInt16LE(8), rlen = b.readUInt16LE(10);
   const fields = [];
-  let p = 32;
+  let p = 32, dataOff = 1; // 记录首字节为删除标记，字段数据从 +1 开始
   while (b[p] !== 0x0d) {
-    fields.push({ name: b.slice(p, p + 11).toString('ascii').replace(/\0+$/, ''), off: p, len: b[p + 16] });
+    const len = b[p + 16];
+    fields.push({ name: b.slice(p, p + 11).toString('ascii').replace(/\0+$/, ''), off: dataOff, len });
+    dataOff += len;
     p += 32;
   }
   const get = (i, name) => {
     const f = fields.find((x) => x.name === name);
     if (!f) return '';
-    const q = hlen + i * rlen + 1 + f.off - 32;
+    const q = hlen + i * rlen + f.off;
     return dec.decode(b.slice(q, q + f.len)).trim();
   };
   return { nrec, get };
@@ -242,15 +244,19 @@ for (const g of green) {
 // ---------- 行道树（主路两侧，避开院区/水面/绿地/建筑） ----------
 const roadAllDbf = readDbf(path.join(SRC, '路网.dbf'));
 const roadAll = readShp(path.join(SRC, '路网.shp'));
-const HALF = { '55': 12, '30': 8 };
+// width 字段为“米×10”的道路宽度码（30/55/130 → 3.0/5.5/13.0m）
+const roadWidth = (i) => {
+  const v = parseFloat(roadAllDbf.get(i, 'width'));
+  return isFinite(v) && v > 0 ? v / 10 : 5.5;
+};
 const streetTrees = [];
 let streetTotal = 0;
 for (const r of roadAll) {
-  const fc = roadAllDbf.get(r.i, 'fclass');
-  if (!HALF[fc]) continue;
+  const wM = roadWidth(r.i);
+  if (wM < 2) continue;
   const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
   if (dist(mx, mz) > RADIUS) continue;
-  const offset = HALF[fc] + 2.4;
+  const offset = wM / 2 + 2.4;
   for (const p of r.parts) {
     const parts = clipLineCircle(p, RADIUS - 4);
     for (const part of parts) {
@@ -300,11 +306,12 @@ for (const r of readShp(path.join(SRC, '杭州 行人道路.shp'))) {
 }
 const bridges = [...bridgeMap.entries()].map(([name, parts]) => ({ name, parts }));
 
-// ---------- 地面路网（只取主干/支路，快速路已有高架层；避开院区与水面） ----------
+// ---------- 地面路网（快速路/省道/一级路；宽度码 30/55/130 → 3.0/5.5/13.0m） ----------
 const roads = [];
 for (const r of roadAll) {
-  const fc = roadAllDbf.get(r.i, 'fclass');
-  if (fc !== '30' && fc !== '130') continue;
+  const fc = roadAllDbf.get(r.i, 'fclass') || 'road';
+  const wM = roadWidth(r.i);
+  if (wM < 2) continue;
   const name = roadAllDbf.get(r.i, 'Name') || '';
   const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
   if (dist(mx, mz) > RADIUS) continue;
@@ -317,7 +324,39 @@ for (const r of roadAll) {
       parts.push(c);
     }
   }
-  if (parts.length) roads.push({ fc, name, parts });
+  if (parts.length) roads.push({ fc, w: +wM.toFixed(1), name, parts });
+}
+
+// ---------- 功能分区（给建筑立面/配色分类用） ----------
+const zones = [];
+{
+  const seenZone = new Map();
+  const sets = [
+    ['杭州 住宅区', 'residential', 800],
+    ['杭州 学校', 'school', 400],
+    ['杭州 医院区域', 'hospital', 200],
+    ['杭州 商业区', 'commercial', 500],
+    ['杭州 购物广场区域', 'commercial', 300],
+    ['杭州 体育场', 'sports', 500],
+  ];
+  for (const [file, cls, minArea] of sets) {
+    const dbf = readDbf(path.join(SRC, file + '.dbf'));
+    for (const r of readShp(path.join(SRC, file + '.shp'))) {
+      const ring = r.parts[0];
+      if (!ring || ring.length < 3) continue;
+      const area = ringArea(ring);
+      if (area < minArea) continue;
+      const [cx, cz] = ringCentroid(ring);
+      if (dist(cx, cz) > RADIUS) continue;
+      const name = dbf.get(r.i, 'Name') || '';
+      const key = cls + '|' + Math.round(cx / 25) + '|' + Math.round(cz / 25);
+      const prev = seenZone.get(key);
+      if (prev && prev.area >= area) continue;
+      const entry = { cls, name, ring: ring.map((p) => [+p[0].toFixed(1), +p[1].toFixed(1)]), area: +area.toFixed(0) };
+      seenZone.set(key, entry);
+    }
+  }
+  zones.push(...[...seenZone.values()].map(({ area, ...z }) => z));
 }
 
 // ---------- 标注 ----------
@@ -399,9 +438,10 @@ const poiLabels = [
 const out = `// 医院周边 3D 环境（WGS84 -> BASEMAP 地图米，x=东 z=南）
 // 由 tools/extract-context.js 生成：--radius=${RADIUS}
 // 水系/绿地：杭州 水系.shp / 杭州 绿地.shp；高架：杭州 城市快速路.shp(Name=上塘高架)；
-// 行道树/路名：路网.shp；桥：杭州 行人道路.shp；POI：住宅区/学校/医院/公交/体育场
+// 行道树/路名/地面路网：路网.shp（width 为米×10：30/55/130）；桥：杭州 行人道路.shp；
+// zones：住宅区/学校/医院/购物/体育场功能区，供建筑立面与配色分类
 export const CONTEXT = ${JSON.stringify({
-  radius: RADIUS, water, green, viaduct, trees, labels,
+  radius: RADIUS, water, green, viaduct, trees, labels, zones,
   roadLabels, poiLabels, streetTrees, bridges, roads,
 }, null, 0)};
 `;
@@ -409,5 +449,5 @@ const target = path.resolve(__dirname, '../data/context.js');
 fs.writeFileSync(target, out);
 console.log('water', water.length, 'green', green.length, 'viaduct parts', viaduct.reduce((s, v) => s + v.parts.length, 0),
   'parkTrees', trees.length, 'streetTrees', streetTrees.length, '(candidates', streetBefore + ')',
-  'bridges', bridges.length, 'roads', roads.length, 'labels', labels.length, 'roadLabels', roadLabels.length, 'poiLabels', poiLabels.length);
+  'bridges', bridges.length, 'roads', roads.length, 'zones', zones.length, 'labels', labels.length, 'roadLabels', roadLabels.length, 'poiLabels', poiLabels.length);
 console.log('→', target, (fs.statSync(target).size / 1024).toFixed(1) + 'KB');
