@@ -2348,8 +2348,8 @@ function stopDemo6() {
 }
 $('demo6-btn').onclick = () => (demo6State.active ? stopDemo6() : startDemo6());
 
-// ---------- 2号楼 透视 + 双机模拟（3层/4层，2号楼无整体模型节点，独立加载 GLB，整体不拆分） ----------
-const demo2State = { active: false, robots: [], group: null, bbox: null, hidden: [] };
+// ---------- 2号楼 透视 + 双机模拟（3层/4层，克隆整体模型中的 2号楼节点，整体不拆分） ----------
+const demo2State = { active: false, robots: [], group: null, bbox: null, source: null, signGroup: null };
 async function spawnDemo2Robots(bbox, baseY) {
   const defs = [
     { file: '/models/models/detail/medicine.glb', floor: 3 },
@@ -2509,19 +2509,11 @@ async function startDemo2() {
   }
   if (!bbox) { console.warn('[2号楼模拟] 无法定位 2号楼，退出'); stopDemo2(); return; }
   demo2State.bbox = bbox;
-  // 隐藏原本占据 2号楼 位置的模型（整体精模 + 白膜），避免与透视体叠加；薄片（地面/道路）不处理
-  const hideOverlap = (root) => root.traverse((o) => {
-    if ((!o.isMesh && !o.isLineSegments) || !o.geometry || !o.visible) return;
-    const ob = new THREE.Box3().setFromObject(o);
-    if (ob.max.y - ob.min.y < 3) return;
-    if (ob.min.y > bbox.max.y || ob.max.y < bbox.min.y) return;
-    if (ob.min.x > bbox.max.x + 2 || ob.max.x < bbox.min.x - 2) return;
-    if (ob.min.z > bbox.max.z + 2 || ob.max.z < bbox.min.z - 2) return;
-    o.visible = false;
-    demo2State.hidden.push(o);
-  });
-  hideOverlap(realGroup);
-  console.log('[2号楼模拟] 已隐藏原位置模型', demo2State.hidden.length, '个网格');
+  // 原 2 号楼整栋隐藏（含 <3m 的雨棚/门头薄板）；门头文字是独立节点，单独隐藏
+  const source = realBuildings.get('2号楼');
+  if (source) { demo2State.source = source; source.visible = false; }
+  const signGroup = scene.getObjectByName('4d_model_20231191236540838');
+  if (signGroup) { demo2State.signGroup = signGroup; signGroup.visible = false; }
   pendingDemoLoads++;
   syncCruiseButtons();
   try {
@@ -2539,7 +2531,7 @@ async function startDemo2() {
     const dist = Math.max(size.z, size.y) * 0.95 + 16;
     flyToPos(new THREE.Vector3(ctr.x, ctr.y, ctr.z + dist), ctr);
   }
-  console.log('[2号楼模拟] 透视白膜已应用（独立 GLB，整体不分层）bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
+  console.log('[2号楼模拟] 透视白膜已应用（整体模型节点，整体不分层）bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
 }
 function stopDemo2() {
   if (!demo2State.active) return;
@@ -2548,8 +2540,8 @@ function stopDemo2() {
   demo2State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
   demo2State.robots = [];
   demo2State.bbox = null;
-  demo2State.hidden.forEach((o) => { o.visible = true; });
-  demo2State.hidden = [];
+  if (demo2State.source) { demo2State.source.visible = true; demo2State.source = null; }
+  if (demo2State.signGroup) { demo2State.signGroup.visible = true; demo2State.signGroup = null; }
   if (demo2State.group) {
     scene.remove(demo2State.group);
     demo2State.group = null;
