@@ -22,11 +22,6 @@
   .toggles label:hover { background: rgba(0,229,255,.16); }
   .toggles input { accent-color: #00e5ff; }
   .tg-group { width: 100%; font-size: 10px; color: #5b7a95; letter-spacing: 1px; margin: 6px 0 -2px; }
-  #legend { position: fixed; left: 12px; bottom: 12px; z-index: 9; background: rgba(8,16,28,.78); border: 1px solid rgba(0,229,255,.22); border-radius: 8px; padding: 8px 10px; color: #bfd6e8; font-size: 11px; line-height: 1.65; pointer-events: none; }
-  #legend .lg-title { color: #7fd4ff; font-size: 10px; letter-spacing: 1px; margin-bottom: 3px; }
-  #legend .lg-row { display: flex; align-items: center; gap: 6px; }
-  #legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-  #legend .lg-src { margin-top: 4px; color: #5b7a95; font-size: 9px; }
   .timebox, .weatherbox { padding: 8px 16px 8px; border-bottom: 1px solid rgba(0,229,255,.15); }
   .timebox .row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }
   .timebox b, .weatherbox b { font-size: 12px; color: #7fd4ff; }
@@ -226,15 +221,6 @@
   </div>
 </div>
 <div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转</div>
-<div id="legend">
-  <div class="lg-title">图例 / 数据</div>
-  <div class="lg-row"><i class="sw" style="background:#6fa6b8"></i>水系</div>
-  <div class="lg-row"><i class="sw" style="background:#4f6f49"></i>公园 / 行道树</div>
-  <div class="lg-row"><i class="sw" style="background:#70757a"></i>上塘高架</div>
-  <div class="lg-row"><i class="sw" style="background:#8b9096"></i>桥梁</div>
-  <div class="lg-row"><i class="sw" style="background:#e6e9ec"></i>周边建筑</div>
-  <div class="lg-src">天地图影像 · 百度建筑 2020 · 杭州分块</div>
-</div>
 <button id="demo-back" style="display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:56; background:rgba(20,30,40,.85); color:#cfe0f2; border:1px solid rgba(0,229,255,.4); border-radius:18px; padding:7px 24px; font-size:13px; letter-spacing:2px; cursor:pointer;">← 返回总览</button>
 <div id="topbar">
   <div class="tb-left">
@@ -440,9 +426,9 @@ const skyDomeMat = new THREE.ShaderMaterial({
   side: THREE.BackSide,
   depthWrite: false,
   uniforms: {
-    topCol: { value: new THREE.Color(0x2f6fbf) },
-    midCol: { value: new THREE.Color(0x6fa3d8) },
-    botCol: { value: new THREE.Color(0xcfe4f2) },
+    topCol: { value: new THREE.Color(0x3a7ac4) },
+    midCol: { value: new THREE.Color(0x76aadd) },
+    botCol: { value: new THREE.Color(0xd6e9f5) },
     sunDir: { value: new THREE.Vector3(0, 1, 0.3) },
     sunGlow: { value: 0.4 },
     weatherCol: { value: new THREE.Color(0xffffff) },
@@ -471,6 +457,8 @@ const skyDomeMat = new THREE.ShaderMaterial({
       col += vec3(1.0, 0.93, 0.75) * pow(s, 300.0) * 1.8;
       col += vec3(1.0, 0.9, 0.72) * pow(s, 8.0) * sunGlow;
       col = mix(col, weatherCol, weatherBlend);
+      float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+      col += (dither - 0.5) / 255.0;
       gl_FragColor = vec4(col, 1.0);
     }
   `,
@@ -486,43 +474,80 @@ const sunHalo = new THREE.Sprite(
 sunHalo.scale.set(460, 460, 1);
 scene.add(sunHalo);
 
-// ---------- 白云（3D 球簇，受太阳光着色） ----------
+// ---------- 云层（柔和云团 Sprite，替代球簇） ----------
 const cloudGroup = new THREE.Group();
 scene.add(cloudGroup);
-const cloudPuffGeo = new THREE.SphereGeometry(1, 10, 8);
-const cloudPuffMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
 
-function makeCloud() {
-  const n = 6 + Math.floor(Math.random() * 4);
-  const inst = new THREE.InstancedMesh(cloudPuffGeo, cloudPuffMat, n);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3();
-  const spread = 26 + Math.random() * 26;   // 云团半宽
-  const thick = 9 + Math.random() * 7;      // 云团半厚
-  for (let i = 0; i < n; i++) {
-    const r = 14 + Math.random() * 16;
-    const cx = (Math.random() * 2 - 1) * spread;
-    const cz = (Math.random() * 2 - 1) * spread * 0.85;
-    // 积云轮廓：中心隆起，边缘收薄缩小
-    const edge = Math.min(1, Math.hypot(cx, cz) / spread);
-    const cy = (Math.random() * 2 - 1) * thick * (1 - edge * 0.8) - edge * 4;
-    const sr = r * (1 - edge * 0.25);
-    v.set(cx, cy, cz);
-    q.identity();
-    s.set(sr, sr * 0.62, sr);
-    m4.compose(v, q, s);
-    inst.setMatrixAt(i, m4);
+function makeCloudTexture() {
+  const w = 512, h = 256;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.globalCompositeOperation = 'lighter';
+  const blob = (x, y, r, a) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgba(255,255,255,${a})`);
+    gr.addColorStop(0.45, `rgba(255,255,255,${a * 0.42})`);
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  };
+  for (let i = 0; i < 22; i++) {
+    const t = i / 21;
+    const x = w * (0.10 + 0.80 * t) + (Math.random() - 0.5) * 22;
+    const y = h * (0.52 + Math.sin(t * Math.PI) * 0.10) + (Math.random() - 0.5) * 14;
+    const r = h * (0.10 + 0.13 * Math.sin(t * Math.PI)) * (0.8 + Math.random() * 0.5);
+    blob(x, y, r, 0.5);
   }
-  inst.instanceMatrix.needsUpdate = true;
-  return inst;
+  for (let i = 0; i < 12; i++) {
+    const t = Math.random();
+    const x = w * (0.16 + 0.68 * t);
+    const y = h * (0.30 + Math.random() * 0.16);
+    const r = h * (0.06 + Math.random() * 0.10);
+    blob(x, y, r, 0.42);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
 }
+
+const cloudMats = [0, 1, 2].map(() => new THREE.SpriteMaterial({
+  map: makeCloudTexture(),
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0.5,
+  depthWrite: false,
+  depthTest: true,
+  fog: false,
+}));
 const clouds = [];
-for (let i = 0; i < 14; i++) {
-  const c = makeCloud();
-  c.position.set((Math.random() * 2 - 1) * 1400, 400 + Math.random() * 260, (Math.random() * 2 - 1) * 1400);
-  c.userData.spd = 1.2 + Math.random() * 2.4;
-  c.userData.ph = Math.random() * Math.PI * 2;
-  cloudGroup.add(c);
-  clouds.push(c);
+for (let i = 0; i < 20; i++) {
+  const sp = new THREE.Sprite(cloudMats[i % 3]);
+  const sc = 320 + Math.random() * 420;
+  sp.scale.set(sc, sc * 0.52, 1);
+  sp.position.set((Math.random() * 2 - 1) * 1650, 560 + Math.random() * 330, (Math.random() * 2 - 1) * 1650);
+  sp.userData.spd = 0.7 + Math.random() * 1.6;
+  sp.userData.ph = Math.random() * Math.PI * 2;
+  sp.renderOrder = 2;
+  cloudGroup.add(sp);
+  clouds.push(sp);
+}
+// 低空远景云：让默认视角的天际线也有柔和的云，而不是只看天空时才有
+const lowCloudMat = new THREE.SpriteMaterial({
+  map: makeCloudTexture(), color: 0xffffff, transparent: true, opacity: 0.26,
+  depthWrite: false, depthTest: true, fog: false,
+});
+for (let i = 0; i < 8; i++) {
+  const sp = new THREE.Sprite(lowCloudMat);
+  const sc = 480 + Math.random() * 420;
+  sp.scale.set(sc, sc * 0.48, 1);
+  sp.position.set((Math.random() * 2 - 1) * 1900, 300 + Math.random() * 180, (Math.random() * 2 - 1) * 1900);
+  sp.userData.spd = 0.5 + Math.random() * 1.0;
+  sp.userData.ph = Math.random() * Math.PI * 2;
+  sp.renderOrder = 2;
+  cloudGroup.add(sp);
+  clouds.push(sp);
 }
 function updateClouds(dt, elapsed) {
   for (const c of clouds) {
@@ -532,6 +557,17 @@ function updateClouds(dt, elapsed) {
     c.position.z += Math.sin(elapsed * 0.15 + c.userData.ph) * dt * 0.6;
   }
   skyDome.position.copy(camera.position);
+}
+function updateCloudLook() {
+  const day = THREE.MathUtils.clamp(sunDir.y * 3.0 + 0.25, 0, 1);
+  for (const m of cloudMats) {
+    m.opacity = 0.24 + 0.42 * day;
+    const v = 0.72 + 0.28 * day;
+    m.color.setRGB(v, v * 1.02, v * 1.05);
+  }
+  lowCloudMat.opacity = 0.12 + 0.20 * day;
+  const lv = 0.72 + 0.28 * day;
+  lowCloudMat.color.setRGB(lv, lv * 1.02, lv * 1.05);
 }
 
 // ---------- 地面（总平图纹理） ----------
@@ -563,7 +599,7 @@ const HORIZON = new THREE.Color(0xb8c6d8);
 const DAY = new THREE.Color(0x8fb8dd);
 const SUN_LOW = new THREE.Color(0xff9a4d);
 // 天空穹顶分时配色：白天 / 地平线 / 日落 / 夜晚
-const D_TOP = new THREE.Color(0x2f6fbf), D_MID = new THREE.Color(0x5f9ad6), D_BOT = new THREE.Color(0xbfdcf2);
+const D_TOP = new THREE.Color(0x3a7ac4), D_MID = new THREE.Color(0x76aadd), D_BOT = new THREE.Color(0xd6e9f5);
 const H_TOP = new THREE.Color(0x35568f), H_MID = new THREE.Color(0x8fb8dd), H_BOT = new THREE.Color(0xd8e6f0);
 const S_TOP = new THREE.Color(0x27406a), S_MID = new THREE.Color(0xa8654f), S_BOT = new THREE.Color(0xf2a35f);
 const N_TOP = new THREE.Color(0x0a1226), N_MID = new THREE.Color(0x111a30), N_BOT = new THREE.Color(0x1c2740);
@@ -2140,6 +2176,20 @@ if (CAL_MODE) {
 
 // 真实建筑轮廓（百度建筑 2020，WGS84；已换算到地图坐标系），与底图共用变换
 const CITY_HEIGHT_SCALE = 1.0;
+let cityWallMat = null;
+// 高度分层配色：低层暖灰 -> 高层冷蓝灰，屋顶略深，形成城市高度层次
+function cityTierColor(h) {
+  const tiers = [
+    [12, 0xe7e4dd],
+    [24, 0xd9dedd],
+    [36, 0xc7d1d2],
+    [48, 0xb4c3c8],
+    [60, 0xa2b5be],
+    [Infinity, 0x93aab5],
+  ];
+  for (const [lim, hex] of tiers) if (h < lim) return new THREE.Color(hex);
+  return new THREE.Color(tiers[tiers.length - 1][1]);
+}
 function buildCity() {
   if (!CITY || !CITY.buildings.length) return;
   const cw = document.createElement('canvas');
@@ -2152,8 +2202,16 @@ function buildCity() {
   cityTex.colorSpace = THREE.SRGBColorSpace;
   cityTex.wrapS = cityTex.wrapT = THREE.RepeatWrapping;
   cityTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const SHADES = [0xffffff, 0xf2f4f6, 0xe9edf1, 0xf7f4ef];
-  const wallPos = [], wallNrm = [], wallUv = [], wallCol = [], roofPos = [];
+  // 夜景只让窗带发光，墙体不整体发亮
+  const ew = document.createElement('canvas');
+  ew.width = ew.height = 32;
+  const eg = ew.getContext('2d');
+  eg.fillStyle = '#000000'; eg.fillRect(0, 0, 32, 32);
+  eg.fillStyle = '#ffffff'; eg.fillRect(0, 21, 32, 5);
+  const cityEmissiveTex = new THREE.CanvasTexture(ew);
+  cityEmissiveTex.colorSpace = THREE.SRGBColorSpace;
+  cityEmissiveTex.wrapS = cityEmissiveTex.wrapT = THREE.RepeatWrapping;
+  const wallPos = [], wallNrm = [], wallUv = [], wallCol = [], roofPos = [], roofCol = [];
   const contour = [];
   let bi = 0;
   for (const item of CITY.buildings) {
@@ -2169,7 +2227,8 @@ function buildCity() {
     }
     const m = contour.length;
     if (m < 3) continue;
-    const baseCol = new THREE.Color(SHADES[bi % SHADES.length]);
+    const baseCol = cityTierColor(h);
+    baseCol.offsetHSL(0, 0, ((bi % 5) - 2) * 0.004);
     const vTop = h / 3.2;
     for (let i = 0; i < m; i++) {
       const a = contour[i], b = contour[(i + 1) % m];
@@ -2180,12 +2239,17 @@ function buildCity() {
       for (let k = 0; k < 6; k++) wallNrm.push(nx, 0, nz);
       const u = len / 4;
       wallUv.push(0, 0, u, 0, u, vTop, 0, 0, u, vTop, 0, vTop);
-      for (let k = 0; k < 6; k++) wallCol.push(baseCol.r, baseCol.g, baseCol.b);
+      const cb = baseCol.clone().multiplyScalar(0.9);
+      const ct = baseCol.clone().multiplyScalar(1.04);
+      wallCol.push(cb.r, cb.g, cb.b, cb.r, cb.g, cb.b, ct.r, ct.g, ct.b);
+      wallCol.push(cb.r, cb.g, cb.b, ct.r, ct.g, ct.b, ct.r, ct.g, ct.b);
     }
     const tris = THREE.ShapeUtils.triangulateShape(contour, []);
+    const roofC = baseCol.clone().multiplyScalar(0.8);
     for (const t of tris) {
       const a = contour[t[0]], b = contour[t[1]], c = contour[t[2]];
       roofPos.push(a.x, h, a.y, b.x, h, b.y, c.x, h, c.y);
+      for (let k = 0; k < 3; k++) roofCol.push(roofC.r, roofC.g, roofC.b);
     }
   }
   const wallGeo = new THREE.BufferGeometry();
@@ -2195,11 +2259,15 @@ function buildCity() {
   wallGeo.setAttribute('color', new THREE.Float32BufferAttribute(wallCol, 3));
   const roofGeo = new THREE.BufferGeometry();
   roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(roofPos, 3));
+  roofGeo.setAttribute('color', new THREE.Float32BufferAttribute(roofCol, 3));
   roofGeo.computeVertexNormals();
-  const wallMat = new THREE.MeshStandardMaterial({ map: cityTex, vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0x7a7f85, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+  const wallMat = new THREE.MeshStandardMaterial({ map: cityTex, vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide, emissive: 0x000000, emissiveMap: cityEmissiveTex });
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+  cityWallMat = wallMat;
   const walls = new THREE.Mesh(wallGeo, wallMat);
   const roofs = new THREE.Mesh(roofGeo, roofMat);
+  walls.castShadow = true;
+  roofs.castShadow = true;
   walls.receiveShadow = true;
   roofs.receiveShadow = true;
   surroundGroup.add(walls, roofs);
@@ -2274,7 +2342,7 @@ function buildContext() {
   if (CONTEXT.trees.length) {
     const n = CONTEXT.trees.length;
     const trunkGeo = new THREE.CylinderGeometry(0.18, 0.26, 2.8, 5);
-    const crownGeo = new THREE.IcosahedronGeometry(1, 0);
+    const crownGeo = new THREE.IcosahedronGeometry(1, 1);
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4b3c, roughness: 1 });
     const crownMat = new THREE.MeshStandardMaterial({ color: 0x4f6f49, roughness: 0.92, flatShading: true });
     const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
@@ -2356,7 +2424,7 @@ function buildContext() {
   if (CONTEXT.streetTrees.length) {
     const n = CONTEXT.streetTrees.length;
     const trunkGeo = new THREE.CylinderGeometry(0.16, 0.22, 2.4, 5);
-    const crownGeo = new THREE.IcosahedronGeometry(1, 0);
+    const crownGeo = new THREE.IcosahedronGeometry(1, 1);
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x584a3c, roughness: 1 });
     const crownMat = new THREE.MeshStandardMaterial({ color: 0x4d7046, roughness: 0.94, flatShading: true });
     const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
@@ -3202,6 +3270,11 @@ function animate() {
     syncTimeUI();
   }
   updateSun();
+  if (cityWallMat) {
+    const night = THREE.MathUtils.clamp(-sunDir.y * 2.2, 0, 1);
+    cityWallMat.emissive.setRGB(1.0 * night * 0.30, 0.80 * night * 0.30, 0.52 * night * 0.30);
+  }
+  updateCloudLook();
   // 雷雨闪电
   if (weatherState.mode === 'storm') {
     weatherState.flashTimer -= dt;
