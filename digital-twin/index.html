@@ -195,7 +195,6 @@
     <label><input type="checkbox" id="tg-road" checked> 路网</label>
     <label><input type="checkbox" id="tg-water" checked> 水系</label>
     <label><input type="checkbox" id="tg-green" checked> 绿地/公园</label>
-    <label><input type="checkbox" id="tg-street" checked> 行道树</label>
     <label><input type="checkbox" id="tg-viaduct" checked> 上塘高架</label>
     <label><input type="checkbox" id="tg-bridge" checked> 桥梁</label>
     <div class="tg-group">标注</div>
@@ -361,7 +360,7 @@ const W = 5898 / 10.5, H = 3035 / 10.5;              // 场地尺寸(米) 561.7 
 // ---------- 场景 ----------
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 app.appendChild(renderer.domElement);
 
@@ -401,7 +400,7 @@ const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c6d4, 0.88);
 scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xfff6e8, 2.0);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(4096, 4096);
+sunLight.shadow.mapSize.set(2048, 2048);
 sunLight.shadow.camera.near = 120;
 sunLight.shadow.camera.far = 1800;
 sunLight.shadow.camera.left = -300;
@@ -1920,14 +1919,13 @@ const contextRoot = new THREE.Group();
 const waterGroup = new THREE.Group(); waterGroup.name = 'waterGroup';
 const viaductGroup = new THREE.Group(); viaductGroup.name = 'viaductGroup';
 const greenGroup = new THREE.Group(); greenGroup.name = 'greenGroup';
-const streetTreeGroup = new THREE.Group(); streetTreeGroup.name = 'streetTreeGroup';
 const bridgeGroup = new THREE.Group(); bridgeGroup.name = 'bridgeGroup';
 const roadGroup = new THREE.Group(); roadGroup.name = 'roadGroup';
 const transitGroup = new THREE.Group(); transitGroup.name = 'transitGroup';
 roadGroup.add(transitGroup);
 const contextLabelGroup = new THREE.Group(); contextLabelGroup.name = 'contextLabels';
 const poiLabelGroup = new THREE.Group(); poiLabelGroup.name = 'poiLabels';
-contextRoot.add(waterGroup, viaductGroup, greenGroup, streetTreeGroup, bridgeGroup, roadGroup, contextLabelGroup, poiLabelGroup);
+contextRoot.add(waterGroup, viaductGroup, greenGroup, bridgeGroup, roadGroup, contextLabelGroup, poiLabelGroup);
 scene.add(contextRoot);
 let mapReady = false;
 const MAP_TILE = 256, MAP_R = 6378137;
@@ -2764,12 +2762,12 @@ function applyQuality(q) {
   if (cityShellGroup) cityShellGroup.visible = q !== 'low';
   if (roofPropsGroup) roofPropsGroup.visible = q === 'high';
   if (aviationMat) aviationMat.size = q === 'high' ? 6 : 4.2;
-  const px = q === 'high' ? 2 : q === 'medium' ? 1.5 : 1;
+  const px = q === 'high' ? 1.5 : q === 'medium' ? 1.25 : 1;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, px));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = q !== 'low';
   renderer.shadowMap.needsUpdate = true;
-  const size = q === 'high' ? 4096 : q === 'medium' ? 2048 : 1024;
+  const size = q === 'high' ? 2048 : q === 'medium' ? 1024 : 512;
   sunLight.shadow.mapSize.set(size, size);
   if (sunLight.shadow.map) { sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
   console.log('[画质]', q, 'shadow', size, 'pixelRatio', px);
@@ -2854,61 +2852,6 @@ function contextRingGeometry(ring, uvScale) {
   g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   g.setIndex(idx);
   return g;
-}
-
-function addTreeInstances(list, group, opts) {
-  if (!list || !list.length) return;
-  const { trunkH = 2.8, trunkR = 0.23, crownY = 3.9, spread = 2.1, crownH = 2.5, castShadow = true } = opts || {};
-  const broadList = list.filter((t) => (t[3] || 0) !== 2);
-  const coniferList = list.filter((t) => (t[3] || 0) === 2);
-  const trunkGeo = new THREE.CylinderGeometry(trunkR * 0.72, trunkR, trunkH, 5);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4b3c, roughness: 1 });
-  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, list.length);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-  list.forEach(([x, z, s], i) => {
-    v.set(x, (trunkH / 2) * s, z); sc.set(s, s, s);
-    m4.compose(v, q, sc); trunks.setMatrixAt(i, m4);
-  });
-  trunks.instanceMatrix.needsUpdate = true;
-  trunks.castShadow = castShadow;
-  trunks.receiveShadow = true;
-  trunks.frustumCulled = false;
-  group.add(trunks);
-
-  if (broadList.length) {
-    const geo = new THREE.IcosahedronGeometry(1, 1);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, flatShading: true });
-    const mesh = new THREE.InstancedMesh(geo, mat, broadList.length);
-    const col = new THREE.Color();
-    broadList.forEach(([x, z, s], i) => {
-      v.set(x, crownY * s, z); sc.set(spread * s, crownH * s, spread * s);
-      m4.compose(v, q, sc); mesh.setMatrixAt(i, m4);
-      mesh.setColorAt(i, col.setHSL(0.26 + (i % 5) * 0.004, 0.55, 0.082 + (i % 4) * 0.006));
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.castShadow = castShadow;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
-    group.add(mesh);
-  }
-  if (coniferList.length) {
-    const geo = new THREE.ConeGeometry(1.25, 4.2, 7);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.94, flatShading: true });
-    const mesh = new THREE.InstancedMesh(geo, mat, coniferList.length);
-    const col = new THREE.Color();
-    coniferList.forEach(([x, z, s], i) => {
-      v.set(x, 3.25 * s, z); sc.set(1.05 * s, 1.05 * s, 1.05 * s);
-      m4.compose(v, q, sc); mesh.setMatrixAt(i, m4);
-      mesh.setColorAt(i, col.setHSL(0.30, 0.60, 0.052 + (i % 3) * 0.006));
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.castShadow = castShadow;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
-    group.add(mesh);
-  }
 }
 
 function buildContext() {
@@ -3051,11 +2994,6 @@ function buildContext() {
     }
   }
 
-  addTreeInstances(CONTEXT.trees, greenGroup, {});
-  addTreeInstances(CONTEXT.campusTrees, greenGroup, {
-    trunkH: 2.6, trunkR: 0.19, crownY: 3.4, spread: 1.6, crownH: 2.05, castShadow: false,
-  });
-
   // 公交场站：沥青地面、停车线、两辆低模公交
   if (CONTEXT.busDepots && CONTEXT.busDepots.length) {
     const asphaltMat = new THREE.MeshStandardMaterial({
@@ -3185,12 +3123,6 @@ function buildContext() {
   addMerged(deckGeos, deckMat);
   addMerged(railGeos, railMat);
   addMerged(pierGeos, concreteMat);
-
-  // 行道树：主路两侧，实例化
-  streetTreeGroup.position.y = 0.02;
-  addTreeInstances(CONTEXT.streetTrees, streetTreeGroup, {
-    trunkH: 2.4, trunkR: 0.20, crownY: 3.25, spread: 1.65, crownH: 1.95,
-  });
 
   // 桥：4 座，低模桥面 + 栏杆
   const bridgeDeckMat = new THREE.MeshStandardMaterial({ color: 0x8b9096, roughness: 0.94 });
@@ -3477,7 +3409,6 @@ function buildContext() {
     ['tg-road', roadGroup],
     ['tg-viaduct', viaductGroup],
     ['tg-green', greenGroup],
-    ['tg-street', streetTreeGroup],
     ['tg-bridge', bridgeGroup],
     ['tg-landmark', contextLabelGroup],
     ['tg-poi', poiLabelGroup],
@@ -3489,7 +3420,6 @@ function buildContext() {
     el.onchange = () => { g.visible = el.checked; };
   }
   console.log('[环境] 水系', CONTEXT.water.length, '公园/绿地', CONTEXT.green.length, '高架段', CONTEXT.viaduct.reduce((s, v) => s + v.parts.length, 0),
-    '园树', CONTEXT.trees.length, '行道树', CONTEXT.streetTrees.length, '总平树', (CONTEXT.campusTrees || []).length,
     '步道', (CONTEXT.footpaths || []).length, '运动场', (CONTEXT.sports || []).length,
     '公交场站', (CONTEXT.busDepots || []).length, '桥', CONTEXT.bridges.length,
     '地标', CONTEXT.labels.length, '路名', CONTEXT.roadLabels.length, 'POI', CONTEXT.poiLabels.length);
@@ -4226,8 +4156,8 @@ $('fp-canvas').onclick = (e) => {
 };
 
 // 记住左侧视图开关：刷新后保持上次的选择（整体/设备/机器人/周边/底图）
-const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-road', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map'];
-const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-road', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map', 'tg-real'];
+const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-road', 'tg-viaduct', 'tg-green', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map'];
+const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-road', 'tg-viaduct', 'tg-green', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map', 'tg-real'];
 document.querySelector('.toggles')?.addEventListener('change', (e) => {
   if (!e.target.id || !VIEW_KEYS.includes(e.target.id)) return;
   const state = {};
