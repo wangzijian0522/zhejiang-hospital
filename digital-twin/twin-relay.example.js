@@ -1,18 +1,30 @@
 // 中控 openTwin 数据中继：凭证只在服务端，浏览器通过本服务 /twin 的 WebSocket 获取实时数据
-// 使用方式：复制本文件为 twin-relay.js，把 YOUR_* 替换为中控提供的四项凭证，重启服务即可。
+// 使用方式（三选一）：
+//   1. 把同事私下发来的 twin-relay.credentials.json 放到本目录（已 gitignore，不入库）；
+//   2. 设置环境变量 TWIN_CLIENT_ID / TWIN_CLIENT_SECRET / TWIN_ACCESS_KEY_ID / TWIN_ACCESS_KEY_SECRET（可选 TWIN_WORKSPACE_ID）；
+//   3. 复制本文件为 twin-relay.js 并直接把 YOUR_* 替换为中控提供的凭证。
+// 完成后重启服务即可。
 const { WebSocket } = require('ws');
+const fs = require('fs');
+const path = require('path');
 
+let localCred = null;
+try {
+  localCred = JSON.parse(fs.readFileSync(path.join(__dirname, 'twin-relay.credentials.json'), 'utf8'));
+} catch (_) {}
+
+const env = process.env;
 const CFG = {
-  base: 'https://yjrobot.rxwysystem.com/api',
-  wsUrl: 'wss://yjrobot.rxwysystem.com/api/openTwin/v1/stream',
+  base: env.TWIN_BASE || (localCred && localCred.base) || 'https://yjrobot.rxwysystem.com/api',
+  wsUrl: env.TWIN_WS_URL || (localCred && localCred.wsUrl) || 'wss://yjrobot.rxwysystem.com/api/openTwin/v1/stream',
   oauth: {
     grant_type: 'urn:robot:params:oauth:grant-type:open-access-token',
-    client_id: 'YOUR_CLIENT_ID',
-    client_secret: 'YOUR_CLIENT_SECRET',
-    access_key_id: 'YOUR_ACCESS_KEY_ID',
-    access_key_secret: 'YOUR_ACCESS_KEY_SECRET',
+    client_id: env.TWIN_CLIENT_ID || (localCred && localCred.client_id) || 'YOUR_CLIENT_ID',
+    client_secret: env.TWIN_CLIENT_SECRET || (localCred && localCred.client_secret) || 'YOUR_CLIENT_SECRET',
+    access_key_id: env.TWIN_ACCESS_KEY_ID || (localCred && localCred.access_key_id) || 'YOUR_ACCESS_KEY_ID',
+    access_key_secret: env.TWIN_ACCESS_KEY_SECRET || (localCred && localCred.access_key_secret) || 'YOUR_ACCESS_KEY_SECRET',
   },
-  workspaceId: '4',
+  workspaceId: env.TWIN_WORKSPACE_ID || (localCred && localCred.workspaceId) || '4',
 };
 
 function isConfigured() {

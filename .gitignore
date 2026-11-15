@@ -12,3 +12,6 @@ digital-twin/assets/trees-debug.png
 __MACOSX/
 .DS_Store
 digital-twin/twin-relay.js
+
+# 中控凭证（私下分发，勿提交）
+digital-twin/twin-relay.credentials.json
