@@ -1923,6 +1923,8 @@ const greenGroup = new THREE.Group(); greenGroup.name = 'greenGroup';
 const streetTreeGroup = new THREE.Group(); streetTreeGroup.name = 'streetTreeGroup';
 const bridgeGroup = new THREE.Group(); bridgeGroup.name = 'bridgeGroup';
 const roadGroup = new THREE.Group(); roadGroup.name = 'roadGroup';
+const transitGroup = new THREE.Group(); transitGroup.name = 'transitGroup';
+roadGroup.add(transitGroup);
 const contextLabelGroup = new THREE.Group(); contextLabelGroup.name = 'contextLabels';
 const poiLabelGroup = new THREE.Group(); poiLabelGroup.name = 'poiLabels';
 contextRoot.add(waterGroup, viaductGroup, greenGroup, streetTreeGroup, bridgeGroup, roadGroup, contextLabelGroup, poiLabelGroup);
@@ -2856,7 +2858,7 @@ function contextRingGeometry(ring, uvScale) {
 
 function addTreeInstances(list, group, opts) {
   if (!list || !list.length) return;
-  const { trunkH = 2.8, trunkR = 0.23, crownY = 3.9, spread = 2.1, crownH = 2.5 } = opts || {};
+  const { trunkH = 2.8, trunkR = 0.23, crownY = 3.9, spread = 2.1, crownH = 2.5, castShadow = true } = opts || {};
   const broadList = list.filter((t) => (t[3] || 0) !== 2);
   const coniferList = list.filter((t) => (t[3] || 0) === 2);
   const trunkGeo = new THREE.CylinderGeometry(trunkR * 0.72, trunkR, trunkH, 5);
@@ -2868,7 +2870,8 @@ function addTreeInstances(list, group, opts) {
     m4.compose(v, q, sc); trunks.setMatrixAt(i, m4);
   });
   trunks.instanceMatrix.needsUpdate = true;
-  trunks.castShadow = trunks.receiveShadow = true;
+  trunks.castShadow = castShadow;
+  trunks.receiveShadow = true;
   trunks.frustumCulled = false;
   group.add(trunks);
 
@@ -2884,7 +2887,8 @@ function addTreeInstances(list, group, opts) {
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = true;
     mesh.frustumCulled = false;
     group.add(mesh);
   }
@@ -2900,7 +2904,8 @@ function addTreeInstances(list, group, opts) {
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = true;
     mesh.frustumCulled = false;
     group.add(mesh);
   }
@@ -3047,6 +3052,79 @@ function buildContext() {
   }
 
   addTreeInstances(CONTEXT.trees, greenGroup, {});
+  addTreeInstances(CONTEXT.campusTrees, greenGroup, {
+    trunkH: 2.6, trunkR: 0.19, crownY: 3.4, spread: 1.6, crownH: 2.05, castShadow: false,
+  });
+
+  // 公交场站：沥青地面、停车线、两辆低模公交
+  if (CONTEXT.busDepots && CONTEXT.busDepots.length) {
+    const asphaltMat = new THREE.MeshStandardMaterial({
+      color: 0x6a7074, emissive: 0x25292b, emissiveIntensity: 0.8,
+      roughness: 0.94, metalness: 0.01, side: THREE.DoubleSide,
+    });
+    const bayLineMat = new THREE.LineBasicMaterial({ color: 0xe4e8e5, transparent: true, opacity: 0.38 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe7edef, roughness: 0.62, metalness: 0.03 });
+    const greenMat = new THREE.MeshStandardMaterial({ color: 0x2f8a64, roughness: 0.64, metalness: 0.03 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x1b3038, roughness: 0.28, metalness: 0.25 });
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x15191b, roughness: 0.9 });
+    const wheelGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.34, 12);
+    wheelGeo.rotateZ(Math.PI / 2);
+    const makeBus = () => {
+      const bus = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(9.8, 2.4, 2.5), bodyMat);
+      body.position.y = 1.45; body.castShadow = true;
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(9.7, 0.38, 2.53), greenMat);
+      stripe.position.y = 1.05;
+      const windows = new THREE.Mesh(new THREE.BoxGeometry(8.7, 0.78, 2.53), glassMat);
+      windows.position.y = 2.06;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.16, 2.25), bodyMat);
+      roof.position.y = 2.72;
+      const front = new THREE.Mesh(new THREE.BoxGeometry(0.10, 1.15, 2.28), glassMat);
+      front.position.set(4.92, 1.85, 0);
+      bus.add(body, stripe, windows, roof, front);
+      for (const x of [-3.2, 3.2]) for (const z of [-1.26, 1.26]) {
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.position.set(x, 0.56, z); bus.add(wheel);
+      }
+      return bus;
+    };
+    for (const d of CONTEXT.busDepots) {
+      const g = contextRingGeometry(d.ring, 22);
+      if (g) {
+        const ground = new THREE.Mesh(g, asphaltMat);
+        ground.position.y = 0.075; ground.receiveShadow = false;
+        transitGroup.add(ground);
+        const pts = d.ring.map((p) => new THREE.Vector3(p[0], 0.09, p[1]));
+        pts.push(pts[0].clone());
+        transitGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), bayLineMat));
+      }
+      let cx = 0, cz = 0;
+      for (const p of d.ring) { cx += p[0]; cz += p[1]; }
+      cx /= d.ring.length; cz /= d.ring.length;
+      let best = { len: 0, ang: 0 };
+      for (let i = 0; i < d.ring.length; i++) {
+        const a = d.ring[i], b = d.ring[(i + 1) % d.ring.length];
+        const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz);
+        if (len > best.len) best = { len, ang: Math.atan2(-dz, dx) };
+      }
+      const dx = Math.cos(best.ang), dz = -Math.sin(best.ang);
+      const nx = -dz, nz = dx;
+      const bayPts = [];
+      for (const off of [-7, -2.4, 2.4, 7]) {
+        bayPts.push(
+          new THREE.Vector3(cx - dx * 17 + nx * off, 0.09, cz - dz * 17 + nz * off),
+          new THREE.Vector3(cx + dx * 17 + nx * off, 0.09, cz + dz * 17 + nz * off),
+        );
+      }
+      transitGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(bayPts), bayLineMat));
+      for (const off of [-10.5, 10.5]) {
+        const bus = makeBus();
+        bus.position.set(cx + dx * off, 0.075, cz + dz * off);
+        bus.rotation.y = best.ang;
+        transitGroup.add(bus);
+      }
+    }
+  }
 
   // 上塘高架：桥面 + 护栏 + 桥墩（无高度字段，按 11.5m 桥面/24m 宽近似）
   const deckMat = new THREE.MeshStandardMaterial({ color: 0x70757a, roughness: 0.92 });
@@ -3411,8 +3489,9 @@ function buildContext() {
     el.onchange = () => { g.visible = el.checked; };
   }
   console.log('[环境] 水系', CONTEXT.water.length, '公园/绿地', CONTEXT.green.length, '高架段', CONTEXT.viaduct.reduce((s, v) => s + v.parts.length, 0),
-    '园树', CONTEXT.trees.length, '行道树', CONTEXT.streetTrees.length, '步道', (CONTEXT.footpaths || []).length,
-    '运动场', (CONTEXT.sports || []).length, '桥', CONTEXT.bridges.length,
+    '园树', CONTEXT.trees.length, '行道树', CONTEXT.streetTrees.length, '总平树', (CONTEXT.campusTrees || []).length,
+    '步道', (CONTEXT.footpaths || []).length, '运动场', (CONTEXT.sports || []).length,
+    '公交场站', (CONTEXT.busDepots || []).length, '桥', CONTEXT.bridges.length,
     '地标', CONTEXT.labels.length, '路名', CONTEXT.roadLabels.length, 'POI', CONTEXT.poiLabels.length);
 }
 buildContext();

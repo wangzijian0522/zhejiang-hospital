@@ -346,6 +346,43 @@ for (const r of roadAll) {
   if (parts.length) roads.push({ fc, w: +wM.toFixed(1), name, parts });
 }
 
+// ---------- 重点建筑 / 公交场站（只取近院区） ----------
+function collectAreas(file, minArea) {
+  const dbf = readDbf(path.join(SRC, file + '.dbf'));
+  const out = [];
+  const seenArea = new Set();
+  for (const r of readShp(path.join(SRC, file + '.shp'))) {
+    const ring = r.parts[0];
+    if (!ring || ring.length < 3) continue;
+    const area = ringArea(ring);
+    if (area < minArea) continue;
+    const [cx, cz] = ringCentroid(ring);
+    if (dist(cx, cz) > RADIUS) continue;
+    const name = dbf.get(r.i, 'Name') || '';
+    const key = name + '|' + Math.round(cx / 20) + '|' + Math.round(cz / 20);
+    if (seenArea.has(key)) continue;
+    seenArea.add(key);
+    out.push({
+      name, area: +area.toFixed(0),
+      ring: ring.map((p) => [+p[0].toFixed(1), +p[1].toFixed(1)]),
+    });
+  }
+  return out;
+}
+const complexes = collectAreas('杭州 综合建筑物', 300);
+const busDepots = collectAreas('杭州 公交站场区域', 300);
+
+// ---------- 总平图树木（医院周边真实树位） ----------
+let campusTrees = [];
+try {
+  const rawTrees = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../data/trees.json'), 'utf8'));
+  campusTrees = rawTrees
+    .filter((t, i) => i % 3 === 0 && Number.isFinite(t.x) && Number.isFinite(t.z) && dist(t.x, t.z) <= RADIUS)
+    .map((t, i) => [+t.x.toFixed(1), +t.z.toFixed(1), +Math.min(1.30, t.s).toFixed(2), i % 9 === 0 ? 2 : (i % 4 === 0 ? 1 : 0)]);
+} catch (e) {
+  console.warn('总平图树木读取失败:', e.message);
+}
+
 // ---------- 功能分区（给建筑立面/配色分类用） ----------
 const zones = [];
 {
@@ -458,11 +495,14 @@ const out = `// 医院周边 3D 环境（WGS84 -> BASEMAP 地图米，x=东 z=�
 // 由 tools/extract-context.js 生成：--radius=${RADIUS}
 // 水系/绿地：杭州 水系.shp / 杭州 绿地.shp；高架：杭州 城市快速路.shp(Name=上塘高架)；
 // 行道树/路名/地面路网：路网.shp（width 为米×10：30/55/130）；桥/公园步道：杭州 行人道路.shp；
+// 公交场站/重点建筑：杭州 公交站场区域.shp / 杭州 综合建筑物.shp；
+// 总平树：data/trees.json（每 3 棵取 1 棵，避免院区树木过密遮住院区）；
 // zones：住宅区/学校/医院/购物/体育场功能区，供建筑立面与配色分类
 export const CONTEXT = ${JSON.stringify({
   radius: RADIUS, water, green, viaduct, trees, labels, zones,
   roadLabels, poiLabels, streetTrees, bridges, footpaths, roads,
   sports: zones.filter((z) => z.cls === 'sports'),
+  complexes, busDepots, campusTrees,
 }, null, 0)};
 `;
 const target = path.resolve(__dirname, '../data/context.js');
@@ -470,5 +510,6 @@ fs.writeFileSync(target, out);
 console.log('water', water.length, 'green', green.length, 'viaduct parts', viaduct.reduce((s, v) => s + v.parts.length, 0),
   'parkTrees', trees.length, 'streetTrees', streetTrees.length, '(candidates', streetBefore + ')',
   'footpaths', footpaths.length, 'sports', zones.filter((z) => z.cls === 'sports').length,
+  'complexes', complexes.length, 'busDepots', busDepots.length, 'campusTrees', campusTrees.length,
   'bridges', bridges.length, 'roads', roads.length, 'zones', zones.length, 'labels', labels.length, 'roadLabels', roadLabels.length, 'poiLabels', poiLabels.length);
 console.log('→', target, (fs.statSync(target).size / 1024).toFixed(1) + 'KB');
