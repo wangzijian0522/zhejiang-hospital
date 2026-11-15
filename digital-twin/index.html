@@ -194,7 +194,7 @@
     <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
     <label><input type="checkbox" id="tg-road" checked> 路网</label>
     <label><input type="checkbox" id="tg-water" checked> 水系</label>
-    <label><input type="checkbox" id="tg-green" checked> 公园树木</label>
+    <label><input type="checkbox" id="tg-green" checked> 绿地/公园</label>
     <label><input type="checkbox" id="tg-street" checked> 行道树</label>
     <label><input type="checkbox" id="tg-viaduct" checked> 上塘高架</label>
     <label><input type="checkbox" id="tg-bridge" checked> 桥梁</label>
@@ -2796,6 +2796,42 @@ function applyQuality(q) {
 
 // ---------- 3D 环境：水系 / 上塘高架 / 公园树木 / 地标 ----------
 let waterTex = null;
+let waterNormal = null;
+
+function waterBankGeometry(ring, topY, bottomY, width) {
+  const n = ring.length;
+  if (n < 3) return null;
+  let cx = 0, cz = 0;
+  for (const p of ring) { cx += p[0]; cz += p[1]; }
+  cx /= n; cz /= n;
+  const pos = [], idx = [];
+  const addQuad = (ax, az, bx, bz, cx1, cz1, dx, dz, y0, y1) => {
+    const base = pos.length / 3;
+    pos.push(ax, y0, az, bx, y0, bz, cx1, y1, cz1, dx, y1, dz);
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  for (let i = 0; i < n; i++) {
+    const a = ring[i], b = ring[(i + 1) % n];
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const len = Math.hypot(dx, dz);
+    if (len < 0.2) continue;
+    let nx = dz / len, nz = -dx / len;
+    const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+    if ((mx - cx) * nx + (mz - cz) * nz < 0) { nx = -nx; nz = -nz; }
+    // 河岸立面
+    addQuad(a[0], a[1], b[0], b[1], b[0], b[1], a[0], a[1], bottomY, topY);
+    // 压顶石带（向陆侧外扩）
+    addQuad(a[0], a[1], b[0], b[1], b[0] + nx * width, b[1] + nz * width,
+      a[0] + nx * width, a[1] + nz * width, topY, topY);
+  }
+  if (!idx.length) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 function contextRingGeometry(ring, uvScale) {
   const contour = ring.map((p) => new THREE.Vector2(p[0], p[1]));
   const faces = THREE.ShapeUtils.triangulateShape(contour, []);
@@ -2818,6 +2854,58 @@ function contextRingGeometry(ring, uvScale) {
   return g;
 }
 
+function addTreeInstances(list, group, opts) {
+  if (!list || !list.length) return;
+  const { trunkH = 2.8, trunkR = 0.23, crownY = 3.9, spread = 2.1, crownH = 2.5 } = opts || {};
+  const broadList = list.filter((t) => (t[3] || 0) !== 2);
+  const coniferList = list.filter((t) => (t[3] || 0) === 2);
+  const trunkGeo = new THREE.CylinderGeometry(trunkR * 0.72, trunkR, trunkH, 5);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4b3c, roughness: 1 });
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, list.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+  list.forEach(([x, z, s], i) => {
+    v.set(x, (trunkH / 2) * s, z); sc.set(s, s, s);
+    m4.compose(v, q, sc); trunks.setMatrixAt(i, m4);
+  });
+  trunks.instanceMatrix.needsUpdate = true;
+  trunks.castShadow = trunks.receiveShadow = true;
+  trunks.frustumCulled = false;
+  group.add(trunks);
+
+  if (broadList.length) {
+    const geo = new THREE.IcosahedronGeometry(1, 1);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, flatShading: true });
+    const mesh = new THREE.InstancedMesh(geo, mat, broadList.length);
+    const col = new THREE.Color();
+    broadList.forEach(([x, z, s], i) => {
+      v.set(x, crownY * s, z); sc.set(spread * s, crownH * s, spread * s);
+      m4.compose(v, q, sc); mesh.setMatrixAt(i, m4);
+      mesh.setColorAt(i, col.setHSL(0.26 + (i % 5) * 0.004, 0.55, 0.082 + (i % 4) * 0.006));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    group.add(mesh);
+  }
+  if (coniferList.length) {
+    const geo = new THREE.ConeGeometry(1.25, 4.2, 7);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.94, flatShading: true });
+    const mesh = new THREE.InstancedMesh(geo, mat, coniferList.length);
+    const col = new THREE.Color();
+    coniferList.forEach(([x, z, s], i) => {
+      v.set(x, 3.25 * s, z); sc.set(1.05 * s, 1.05 * s, 1.05 * s);
+      m4.compose(v, q, sc); mesh.setMatrixAt(i, m4);
+      mesh.setColorAt(i, col.setHSL(0.30, 0.60, 0.052 + (i % 3) * 0.006));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    group.add(mesh);
+  }
+}
+
 function buildContext() {
   greenGroup.position.y = 0.06;
   // 水面：贴图缓慢流动，颜色与天空/雾一致，不抢主体
@@ -2837,7 +2925,36 @@ function buildContext() {
   waterTex.wrapS = waterTex.wrapT = THREE.RepeatWrapping;
   waterTex.colorSpace = THREE.SRGBColorSpace;
   waterTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const waterMat = new THREE.MeshBasicMaterial({ map: waterTex, color: 0xffffff, side: THREE.DoubleSide });
+  // 程序化法线贴图：给水面增加细碎高光，不再是一块静态蓝布
+  const nc = document.createElement('canvas');
+  nc.width = nc.height = 128;
+  const ng = nc.getContext('2d');
+  const nimg = ng.createImageData(128, 128);
+  for (let y = 0; y < 128; y++) {
+    for (let x = 0; x < 128; x++) {
+      const nx = Math.sin(x * 0.21 + y * 0.04) * 0.6 + Math.sin(x * 0.07 - y * 0.15) * 0.4;
+      const ny = Math.cos(y * 0.17 + x * 0.03) * 0.6 + Math.cos(y * 0.08 + x * 0.11) * 0.4;
+      const o = (y * 128 + x) * 4;
+      nimg.data[o] = 128 + nx * 34;
+      nimg.data[o + 1] = 128 + ny * 34;
+      nimg.data[o + 2] = 255;
+      nimg.data[o + 3] = 255;
+    }
+  }
+  ng.putImageData(nimg, 0, 0);
+  waterNormal = new THREE.CanvasTexture(nc);
+  waterNormal.wrapS = waterNormal.wrapT = THREE.RepeatWrapping;
+  waterNormal.colorSpace = THREE.NoColorSpace;
+  waterNormal.repeat.set(1.6, 1.6);
+  waterNormal.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const waterMat = new THREE.MeshStandardMaterial({
+    map: waterTex, normalMap: waterNormal,
+    color: 0x7fc4d4, roughness: 0.42, metalness: 0.0,
+    emissive: 0x1c4652, emissiveIntensity: 0.55,
+    envMapIntensity: 0.22, transparent: true, opacity: 0.97,
+    normalScale: new THREE.Vector2(0.12, 0.12), side: THREE.DoubleSide,
+  });
+  const bankMat = new THREE.MeshStandardMaterial({ color: 0x9a9b93, roughness: 0.94, metalness: 0.01, side: THREE.DoubleSide });
   for (const w of CONTEXT.water) {
     const g = contextRingGeometry(w.ring, 70);
     if (!g) continue;
@@ -2845,37 +2962,91 @@ function buildContext() {
     m.position.y = 0.18;
     m.receiveShadow = true;
     waterGroup.add(m);
+    const bank = waterBankGeometry(w.ring, 0.58, 0.16, 0.45);
+    if (bank) {
+      const bm = new THREE.Mesh(bank, bankMat);
+      bm.castShadow = bm.receiveShadow = true;
+      waterGroup.add(bm);
+    }
   }
 
-  // 公园草地 + 实例化树
-  const grassMat = new THREE.MeshStandardMaterial({ color: 0x5b7350, roughness: 0.96 });
-  for (const gr of CONTEXT.green) {
-    const g = contextRingGeometry(gr.ring, 40);
-    if (!g) continue;
-    const m = new THREE.Mesh(g, grassMat);
+  // 绿地：草地细纹 + 逐块色差 + 公园步道 + 运动场
+  const gc = document.createElement('canvas');
+  gc.width = gc.height = 256;
+  const gctx = gc.getContext('2d');
+  gctx.fillStyle = '#536b46'; gctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1500; i++) {
+    const x = Math.random() * 256, y = Math.random() * 256;
+    gctx.fillStyle = Math.random() < 0.5
+      ? `rgba(34,52,30,${0.05 + Math.random() * 0.10})`
+      : `rgba(126,150,98,${0.04 + Math.random() * 0.08})`;
+    gctx.fillRect(x, y, 1 + Math.random() * 1.6, 1 + Math.random() * 1.4);
+  }
+  const grassTex = new THREE.CanvasTexture(gc);
+  grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.colorSpace = THREE.SRGBColorSpace;
+  grassTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const grassMat = new THREE.MeshStandardMaterial({ map: grassTex, color: 0xffffff, roughness: 0.98, envMapIntensity: 0.10 });
+  CONTEXT.green.forEach((gr, i) => {
+    const g = contextRingGeometry(gr.ring, 34);
+    if (!g) return;
+    const mat = grassMat.clone();
+    mat.color.setHSL(0.25, 0.10, 0.80 + (i % 4) * 0.025);
+    const m = new THREE.Mesh(g, mat);
     m.receiveShadow = true;
     greenGroup.add(m);
+  });
+
+  if (CONTEXT.footpaths && CONTEXT.footpaths.length) {
+    const pos = [], idx = [];
+    for (const part of CONTEXT.footpaths) {
+      for (let i = 1; i < part.length; i++) {
+        const a = part[i - 1], b = part[i];
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const len = Math.hypot(dx, dz);
+        if (len < 0.4) continue;
+        const nx = -dz / len, nz = dx / len, half = 0.82, y = 0.035;
+        const base = pos.length / 3;
+        pos.push(a[0] + nx * half, y, a[1] + nz * half,
+          a[0] - nx * half, y, a[1] - nz * half,
+          b[0] + nx * half, y, b[1] + nz * half,
+          b[0] - nx * half, y, b[1] - nz * half);
+        idx.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
+      }
+    }
+    if (idx.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+        color: 0x8c8577, roughness: 0.98, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.06,
+      }));
+      m.receiveShadow = false;
+      greenGroup.add(m);
+    }
   }
-  if (CONTEXT.trees.length) {
-    const n = CONTEXT.trees.length;
-    const trunkGeo = new THREE.CylinderGeometry(0.18, 0.26, 2.8, 5);
-    const crownGeo = new THREE.IcosahedronGeometry(1, 1);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4b3c, roughness: 1 });
-    const crownMat = new THREE.MeshStandardMaterial({ color: 0x4f6f49, roughness: 0.92, flatShading: true });
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
-    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, n);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-    CONTEXT.trees.forEach(([x, z, s], i) => {
-      v.set(x, 1.4 * s, z); sc.set(s, s, s);
-      m4.compose(v, q, sc); trunks.setMatrixAt(i, m4);
-      v.set(x, 3.9 * s, z); sc.set(2.1 * s, 2.5 * s, 2.1 * s);
-      m4.compose(v, q, sc); crowns.setMatrixAt(i, m4);
-    });
-    trunks.instanceMatrix.needsUpdate = true;
-    crowns.instanceMatrix.needsUpdate = true;
-    trunks.frustumCulled = crowns.frustumCulled = false;
-    greenGroup.add(trunks, crowns);
+
+  if (CONTEXT.sports && CONTEXT.sports.length) {
+    const fieldMat = new THREE.MeshStandardMaterial({ color: 0x547a52, roughness: 0.95, envMapIntensity: 0.10 });
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xe9efe4, transparent: true, opacity: 0.52 });
+    for (const s of CONTEXT.sports) {
+      const g = contextRingGeometry(s.ring, 40);
+      if (!g) continue;
+      const m = new THREE.Mesh(g, fieldMat);
+      m.position.y = 0.012;
+      m.receiveShadow = true;
+      greenGroup.add(m);
+      const pts = s.ring.map((p) => new THREE.Vector3(p[0], 0.045, p[1]));
+      if (pts.length > 2) {
+        pts.push(pts[0].clone());
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat);
+        greenGroup.add(line);
+      }
+    }
   }
+
+  addTreeInstances(CONTEXT.trees, greenGroup, {});
 
   // 上塘高架：桥面 + 护栏 + 桥墩（无高度字段，按 11.5m 桥面/24m 宽近似）
   const deckMat = new THREE.MeshStandardMaterial({ color: 0x70757a, roughness: 0.92 });
@@ -2938,27 +3109,10 @@ function buildContext() {
   addMerged(pierGeos, concreteMat);
 
   // 行道树：主路两侧，实例化
-  if (CONTEXT.streetTrees.length) {
-    const n = CONTEXT.streetTrees.length;
-    const trunkGeo = new THREE.CylinderGeometry(0.16, 0.22, 2.4, 5);
-    const crownGeo = new THREE.IcosahedronGeometry(1, 1);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x584a3c, roughness: 1 });
-    const crownMat = new THREE.MeshStandardMaterial({ color: 0x4d7046, roughness: 0.94, flatShading: true });
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
-    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, n);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
-    CONTEXT.streetTrees.forEach(([x, z, s], i) => {
-      v.set(x, 1.2 * s, z); sc.set(s, s, s);
-      m4.compose(v, q, sc); trunks.setMatrixAt(i, m4);
-      v.set(x, 3.25 * s, z); sc.set(1.65 * s, 1.95 * s, 1.65 * s);
-      m4.compose(v, q, sc); crowns.setMatrixAt(i, m4);
-    });
-    trunks.instanceMatrix.needsUpdate = true;
-    crowns.instanceMatrix.needsUpdate = true;
-    trunks.frustumCulled = crowns.frustumCulled = false;
-    streetTreeGroup.position.y = 0.02;
-    streetTreeGroup.add(trunks, crowns);
-  }
+  streetTreeGroup.position.y = 0.02;
+  addTreeInstances(CONTEXT.streetTrees, streetTreeGroup, {
+    trunkH: 2.4, trunkR: 0.20, crownY: 3.25, spread: 1.65, crownH: 1.95,
+  });
 
   // 桥：4 座，低模桥面 + 栏杆
   const bridgeDeckMat = new THREE.MeshStandardMaterial({ color: 0x8b9096, roughness: 0.94 });
@@ -3210,6 +3364,28 @@ function buildContext() {
     poiLabelGroup.add(sp);
   }
 
+  // 功能区/社区名：补足住宅区、学校、医院等面数据，避免只有零散 POI
+  const labelTexts = new Set([...CONTEXT.roadLabels, ...CONTEXT.poiLabels].map((l) => l.text));
+  const zoneStyle = {
+    residential: ['rgba(10,20,34,0.74)', '#d7e6f4', 0.6, 14],
+    school: ['rgba(35,28,8,0.78)', '#ffe2a4', 0.68, 17],
+    hospital: ['rgba(8,30,20,0.78)', '#b8f0d0', 0.68, 17],
+    commercial: ['rgba(34,18,10,0.78)', '#ffd0b0', 0.66, 16],
+  };
+  for (const z of CONTEXT.zones || []) {
+    const st = zoneStyle[z.cls];
+    if (!st || !z.name || labelTexts.has(z.name)) continue;
+    const [bg, fg, scale, y] = st;
+    let cx = 0, cz = 0;
+    for (const p of z.ring) { cx += p[0]; cz += p[1]; }
+    cx /= z.ring.length; cz /= z.ring.length;
+    const sp = makeLabel(z.name, bg, fg, scale);
+    sp.position.set(cx, y, cz);
+    sp.userData.kind = 'poi';
+    poiLabelGroup.add(sp);
+    labelTexts.add(z.name);
+  }
+
   // 地标
   for (const l of CONTEXT.labels) {
     const sp = makeLabel(l.text, 'rgba(10,20,34,0.82)', '#dff2ff', 1.1);
@@ -3234,8 +3410,9 @@ function buildContext() {
     g.visible = el.checked;
     el.onchange = () => { g.visible = el.checked; };
   }
-  console.log('[环境] 水系', CONTEXT.water.length, '公园', CONTEXT.green.length, '高架段', CONTEXT.viaduct.reduce((s, v) => s + v.parts.length, 0),
-    '园树', CONTEXT.trees.length, '行道树', CONTEXT.streetTrees.length, '桥', CONTEXT.bridges.length,
+  console.log('[环境] 水系', CONTEXT.water.length, '公园/绿地', CONTEXT.green.length, '高架段', CONTEXT.viaduct.reduce((s, v) => s + v.parts.length, 0),
+    '园树', CONTEXT.trees.length, '行道树', CONTEXT.streetTrees.length, '步道', (CONTEXT.footpaths || []).length,
+    '运动场', (CONTEXT.sports || []).length, '桥', CONTEXT.bridges.length,
     '地标', CONTEXT.labels.length, '路名', CONTEXT.roadLabels.length, 'POI', CONTEXT.poiLabels.length);
 }
 buildContext();
@@ -4063,6 +4240,10 @@ function animate() {
   if (waterTex) {
     waterTex.offset.x = (waterTex.offset.x + dt * 0.012) % 1;
     waterTex.offset.y = (waterTex.offset.y + dt * 0.007) % 1;
+  }
+  if (waterNormal) {
+    waterNormal.offset.x = (waterNormal.offset.x - dt * 0.006) % 1;
+    waterNormal.offset.y = (waterNormal.offset.y + dt * 0.004) % 1;
   }
   updateDemo6(dt);
   updateDemo2(dt);

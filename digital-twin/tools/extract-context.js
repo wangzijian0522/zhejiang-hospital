@@ -187,17 +187,16 @@ const green = [];
 const seen = new Map();
 for (const r of readShp(path.join(SRC, '杭州 绿地.shp'))) {
   const name = greenDbf.get(r.i, 'Name') || '';
-  if (!(name.includes('公园') || name === '古艮山门')) continue;
   if (name.includes('医院')) continue;
   const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
   if (dist(mx, mz) > RADIUS) continue;
   const ring = r.parts[0];
   if (!ring || ring.length < 3) continue;
   const area = ringArea(ring);
-  if (area < 300) continue;
+  if (area < 350) continue;
   const xs = ring.map((p) => p[0]), zs = ring.map((p) => p[1]);
   const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...zs) - Math.min(...zs);
-  if (bw > 400 || bh > 400) continue;
+  if (bw > 650 || bh > 650) continue;
   const key = name + '|' + Math.round((Math.min(...xs) + Math.max(...xs)) / 2 / 20) + '|' + Math.round((Math.min(...zs) + Math.max(...zs)) / 2 / 20);
   const prev = seen.get(key);
   if (prev) { if (ring.length > prev.ring.length) prev.ring = ring; continue; }
@@ -228,17 +227,23 @@ const trees = [];
 for (const g of green) {
   const xs = g.ring.map((p) => p[0]), zs = g.ring.map((p) => p[1]);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
-  const spacing = 13;
+  const spacing = 12;
   for (let x = x0 + 8; x <= x1 - 8; x += spacing) {
     for (let z = z0 + 8; z <= z1 - 8; z += spacing) {
-      const px = x + (rng() * 2 - 1) * 4, pz = z + (rng() * 2 - 1) * 4;
+      const px = x + (rng() * 2 - 1) * 3.5, pz = z + (rng() * 2 - 1) * 3.5;
       if (!inRing(px, pz, g.ring)) continue;
-      trees.push([+px.toFixed(1), +pz.toFixed(1), +(0.85 + rng() * 0.45).toFixed(2)]);
-      if (trees.length >= 600) break;
+      if (inBoxes(px, pz, WATER_BOXES)) continue;
+      const species = rng() < 0.62 ? 0 : rng() < 0.72 ? 1 : 2;
+      trees.push([+px.toFixed(1), +pz.toFixed(1), +(0.85 + rng() * 0.45).toFixed(2), species]);
     }
-    if (trees.length >= 600) break;
   }
-  if (trees.length >= 600) break;
+}
+if (trees.length > 900) {
+  const step = trees.length / 900;
+  const sampled = [];
+  for (let i = 0; i < 900; i++) sampled.push(trees[Math.floor(i * step)]);
+  trees.length = 0;
+  trees.push(...sampled);
 }
 
 // ---------- 行道树（主路两侧，避开院区/水面/绿地/建筑） ----------
@@ -275,7 +280,8 @@ for (const r of roadAll) {
             if (px > CAMPUS.x0 && px < CAMPUS.x1 && pz > CAMPUS.z0 && pz < CAMPUS.z1) continue;
             if (inBoxes(px, pz, WATER_BOXES) || inBoxes(px, pz, GREEN_BOXES)) continue;
             if (inBoxes(px, pz, CITY_BOXES)) continue;
-            streetTrees.push([+px.toFixed(1), +pz.toFixed(1), +(0.68 + rng() * 0.28).toFixed(2)]);
+            const species = rng() < 0.8 ? 0 : 1;
+            streetTrees.push([+px.toFixed(1), +pz.toFixed(1), +(0.68 + rng() * 0.28).toFixed(2), species]);
           }
         }
       }
@@ -291,11 +297,12 @@ if (streetTrees.length > 800) {
   streetTrees.push(...sampled);
 }
 
-// ---------- 桥梁 ----------
+// ---------- 桥梁 / 公园步道 ----------
 const pedDbf = readDbf(path.join(SRC, '杭州 行人道路.dbf'));
+const pedAll = readShp(path.join(SRC, '杭州 行人道路.shp'));
 const BRIDGE_NAMES = new Set(['朝晖桥', '青园桥', '德胜路桥', '映月桥']);
 const bridgeMap = new Map();
-for (const r of readShp(path.join(SRC, '杭州 行人道路.shp'))) {
+for (const r of pedAll) {
   const name = pedDbf.get(r.i, 'Name') || '';
   if (!BRIDGE_NAMES.has(name)) continue;
   const parts = [];
@@ -305,6 +312,18 @@ for (const r of readShp(path.join(SRC, '杭州 行人道路.shp'))) {
   bridgeMap.get(name).push(...parts);
 }
 const bridges = [...bridgeMap.entries()].map(([name, parts]) => ({ name, parts }));
+
+const footpaths = [];
+for (const r of pedAll) {
+  for (const p of r.parts) {
+    for (const c of clipLineCircle(p, RADIUS)) {
+      if (c.length < 2) continue;
+      const mid = c[Math.floor(c.length / 2)];
+      if (!inBoxes(mid[0], mid[1], GREEN_BOXES)) continue;
+      footpaths.push(c.map((q) => [+q[0].toFixed(1), +q[1].toFixed(1)]));
+    }
+  }
+}
 
 // ---------- 地面路网（快速路/省道/一级路；宽度码 30/55/130 → 3.0/5.5/13.0m） ----------
 const roads = [];
@@ -438,16 +457,18 @@ const poiLabels = [
 const out = `// 医院周边 3D 环境（WGS84 -> BASEMAP 地图米，x=东 z=南）
 // 由 tools/extract-context.js 生成：--radius=${RADIUS}
 // 水系/绿地：杭州 水系.shp / 杭州 绿地.shp；高架：杭州 城市快速路.shp(Name=上塘高架)；
-// 行道树/路名/地面路网：路网.shp（width 为米×10：30/55/130）；桥：杭州 行人道路.shp；
+// 行道树/路名/地面路网：路网.shp（width 为米×10：30/55/130）；桥/公园步道：杭州 行人道路.shp；
 // zones：住宅区/学校/医院/购物/体育场功能区，供建筑立面与配色分类
 export const CONTEXT = ${JSON.stringify({
   radius: RADIUS, water, green, viaduct, trees, labels, zones,
-  roadLabels, poiLabels, streetTrees, bridges, roads,
+  roadLabels, poiLabels, streetTrees, bridges, footpaths, roads,
+  sports: zones.filter((z) => z.cls === 'sports'),
 }, null, 0)};
 `;
 const target = path.resolve(__dirname, '../data/context.js');
 fs.writeFileSync(target, out);
 console.log('water', water.length, 'green', green.length, 'viaduct parts', viaduct.reduce((s, v) => s + v.parts.length, 0),
   'parkTrees', trees.length, 'streetTrees', streetTrees.length, '(candidates', streetBefore + ')',
+  'footpaths', footpaths.length, 'sports', zones.filter((z) => z.cls === 'sports').length,
   'bridges', bridges.length, 'roads', roads.length, 'zones', zones.length, 'labels', labels.length, 'roadLabels', roadLabels.length, 'poiLabels', poiLabels.length);
 console.log('→', target, (fs.statSync(target).size / 1024).toFixed(1) + 'KB');
