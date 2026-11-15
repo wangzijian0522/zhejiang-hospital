@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>浙江医院 数字孪生白膜</title>
+<title>浙江省人民医院 数字孪生</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
   #app { position: fixed; inset: 0; }
@@ -33,26 +33,6 @@
   .simbox button { width: 100%; font-size: 13px; border: 1px solid #2b7fd4; background: rgba(43,127,212,.85); color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; }
   .simbox button:hover { background: #3a8fe6; }
   .simbox button.on { background: #b4552f; border-color: #b4552f; }
-  .simbox .sub { font-size: 11px; color: #5b7a95; padding-top: 6px; }
-  #bld-list { padding: 6px 0; border-bottom: 1px solid rgba(0,229,255,.15); }
-  .bld-item { display: flex; align-items: center; gap: 8px; padding: 5px 16px; cursor: pointer; color: #cfe0f2; }
-  .bld-item:hover { background: rgba(0,229,255,.1); }
-  .bld-item.sel { background: rgba(0,229,255,.18); border-left: 3px solid #00e5ff; }
-  .bld-item .nm { flex: 1; }
-  .bld-item .meta { font-size: 11px; color: #5b7a95; }
-  .badge { font-size: 10px; background: #00bcd4; color: #06283a; border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
-  .badge.no { background: rgba(127,212,255,.15); color: #5b7a95; }
-  #detail { padding: 10px 16px; border-bottom: 1px solid rgba(0,229,255,.15); }
-  #detail h2 { font-size: 14px; margin: 0 0 4px; color: #fff; }
-  #detail .info { font-size: 12px; color: #a9c8e0; margin-bottom: 4px; }
-  #detail .src { font-size: 11px; color: #5b7a95; margin-bottom: 6px; }
-  #detail table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  #detail td, #detail th { border: 1px solid rgba(0,229,255,.18); padding: 2px 5px; text-align: left; }
-  #detail .elev { margin-top: 6px; font-size: 12px; background: rgba(0,229,255,.1); border-left: 3px solid #00bcd4; padding: 5px 8px; border-radius: 0 6px 6px 0; }
-  #detail .elev b { color: #7fd4ff; }
-  #sec { padding: 8px 16px 12px; }
-  #sec h3 { font-size: 12px; color: #7fd4ff; margin: 8px 0 4px; }
-  #sec ul { margin: 0; padding-left: 18px; font-size: 11px; color: #8fb8d8; line-height: 1.6; }
 
   /* 顶部标题栏 */
   #topbar { position: fixed; top: 0; left: 0; right: 0; height: 58px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, rgba(8,14,28,.95), rgba(10,18,34,.82)); border-bottom: 1px solid rgba(0,229,255,.22); box-shadow: 0 2px 16px rgba(0,0,0,.4); }
@@ -200,16 +180,10 @@
 <div id="panel">
   <button id="panel-close" title="关闭设置">✕</button>
   <h1>浙江省人民医院数字孪生项目</h1>
-  <div class="sub">数据：医院总平1.jpg（1:500，约10.5px/m）+ 建筑DWG标高/层数标注</div>
+  <div class="sub">数据：整体/2号/6号 GLB + 百度建筑轮廓 + 天地图卫星</div>
   <div class="toggles">
     <label><input type="checkbox" id="tg-real" checked> 整体模型</label>
-    <label><input type="checkbox" id="tg-white"> 白膜</label>
-    <label><input type="checkbox" id="tg-holo" checked> 全息白膜</label>
     <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
-    <label><input type="checkbox" id="tg-line" checked> 楼层线</label>
-    <label><input type="checkbox" id="tg-label" checked> 名称标注</label>
-    <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
-    <label><input type="checkbox" id="tg-alpha"> 半透明</label>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
     <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
     <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
@@ -229,21 +203,9 @@
     <button data-w="fog">雾</button>
   </div>
   <div class="simbox">
-    <button id="xray-btn">🔍 透视 1号楼（内部模拟）</button>
     <button id="cruise-btn" style="margin-top:6px">自动巡航（360°逆时针）</button>
     <button id="demo6-btn" style="margin-top:6px">透视 6号楼（双机模拟）</button>
     <button id="demo2-btn" style="margin-top:6px">透视 2号楼（双机模拟）</button>
-    <div class="sub" id="sim-hint" style="display:none">模拟数据：8台机器人（4种设备外观）在各楼层移动并乘梯 · 2部电梯上下运行/开关门</div>
-  </div>
-  <div id="bld-list"></div>
-  <div id="detail"><div class="info" style="color:#8a94a0">点击左侧列表或场景中的建筑查看详情</div></div>
-  <div id="sec">
-    <h3>电梯信息汇总</h3>
-    <ul id="elev-sum"></ul>
-    <h3>未能定位的建筑/设施</h3>
-    <ul id="unloc"></ul>
-    <h3>备注</h3>
-    <ul id="notes"></ul>
   </div>
 </div>
 <div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转</div>
@@ -363,7 +325,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { BUILDINGS, IMG, UNLOCATED, NOTES } from './data/buildings.js';
 import { CITY } from './data/city.js';
 
 // GLB 模型使用 Draco 压缩，统一注入解码器
@@ -375,10 +336,7 @@ function makeGLTFLoader() {
   return loader;
 }
 
-const M = IMG.pxPerM;
-const W = IMG.w / M, H = IMG.h / M;                 // 场地尺寸(米) 561.7 x 289
-const toX = (px) => (px - IMG.w / 2) / M;
-const toZ = (py) => (py - IMG.h / 2) / M;
+const W = 5898 / 10.5, H = 3035 / 10.5;              // 场地尺寸(米) 561.7 x 289
 
 // ---------- 场景 ----------
 const app = document.getElementById('app');
@@ -793,43 +751,6 @@ function updateSnow(dt, cam, t) {
   snowGeo.attributes.position.needsUpdate = true;
 }
 
-// ---------- 材质工具 ----------
-const texCache = new Map();
-function floorTex(floors) {
-  if (texCache.has(floors)) return texCache.get(floors);
-  const c = document.createElement('canvas');
-  c.width = 8; c.height = Math.max(8, floors * 8);
-  const g = c.getContext('2d');
-  g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = 'rgba(90,105,120,0.5)';
-  for (let i = 0; i <= floors; i++) g.fillRect(0, i * 8, c.width, 2);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  texCache.set(floors, t);
-  return t;
-}
-function makeMats(part) {
-  const sided = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.92, metalness: 0, map: floorTex(part.floors) });
-  const top = new THREE.MeshStandardMaterial({ color: 0xf6f8fa, roughness: 0.86, metalness: 0 });
-  const lined = [sided, sided, top, top, sided, sided];
-  const plainS = new THREE.MeshStandardMaterial({ color: 0xeef1f5, roughness: 0.92, metalness: 0 });
-  const plain = [plainS, plainS, top, top, plainS, plainS];
-  return { lined, plain, all: [sided, top, plainS] };
-}
-
-// ---------- 建筑 ----------
-const buildingsGroup = new THREE.Group();
-scene.add(buildingsGroup);
-const labelsGroup = new THREE.Group();
-scene.add(labelsGroup);
-const elevGroup = new THREE.Group();
-buildingsGroup.add(elevGroup); // 电梯标记属于白模标注，跟随白模显隐
-const pickables = [];
-const partMeshes = new Map(); // building -> parts[]
-const bldEdges = new Map(); // building id -> 描边线（全息模式下加亮）
-const allMats = [];
-
 function makeLabel(text, bg = 'rgba(255,255,255,0.94)', fg = '#2b3a4a', scale = 1) {
   const fs = Math.round(42 * scale);
   const padX = Math.round(28 * scale);
@@ -952,61 +873,6 @@ function setBeaconTag(b, text) {
   b.tag = ns;
 }
 
-for (const b of BUILDINGS) {
-  const parts = [];
-  let maxH = 0, minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
-  for (const part of b.parts) {
-    const [x1, y1, x2, y2] = part.px;
-    const w = (x2 - x1) / M, d = (y2 - y1) / M;
-    const cx = toX((x1 + x2) / 2), cz = toZ((y1 + y2) / 2);
-    const geo = new THREE.BoxGeometry(w, part.height, d);
-    const mats = makeMats(part);
-    allMats.push(...mats.all);
-    const mesh = new THREE.Mesh(geo, mats.lined);
-    mesh.position.set(cx, part.height / 2, cz);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.userData = { building: b, part, mats };
-    buildingsGroup.add(mesh);
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(geo),
-      new THREE.LineBasicMaterial({ color: 0x8b96a2, transparent: true, opacity: 0.55 })
-    );
-    edges.position.copy(mesh.position);
-    edges.renderOrder = 5;
-    edges.userData = { building: b };
-    buildingsGroup.add(edges);
-    if (!bldEdges.has(b.id)) bldEdges.set(b.id, []);
-    bldEdges.get(b.id).push(edges);
-    pickables.push(mesh, edges);
-    parts.push(mesh);
-    maxH = Math.max(maxH, part.height);
-    minX = Math.min(minX, cx - w / 2); maxX = Math.max(maxX, cx + w / 2);
-    minZ = Math.min(minZ, cz - d / 2); maxZ = Math.max(maxZ, cz + d / 2);
-  }
-  partMeshes.set(b.id, parts);
-
-  const label = makeLabel(b.short, undefined, undefined, 0.62);
-  label.position.set((minX + maxX) / 2, maxH + 8, (minZ + maxZ) / 2);
-  labelsGroup.add(label);
-
-  if (b.elevator && b.elevator.count > 0) {
-    const mk = new THREE.Mesh(
-      new THREE.BoxGeometry(1.6, Math.min(7, maxH + 2), 1.6),
-      new THREE.MeshBasicMaterial({ color: 0x00bcd4 })
-    );
-    const [x1, y1, x2, y2] = b.parts[0].px;
-    mk.position.set(toX(x2) - 1, Math.min(7, maxH + 2) / 2, toZ(y2) - 1);
-    mk.userData = { building: b };
-    elevGroup.add(mk);
-    pickables.push(mk);
-  }
-}
-
-// 默认以白膜为主视图（可在左侧切回整体模型）
-buildingsGroup.visible = document.getElementById('tg-white').checked;
-labelsGroup.visible = document.getElementById('tg-white').checked && document.getElementById('tg-label').checked;
-
 // ---------- 加载过渡 ----------
 // 注意：此处位于 $ 助手定义之前，直接用 document.getElementById
 const loaderEl = document.getElementById('loader'), loaderText = document.getElementById('loader-text'), loaderPct = document.getElementById('loader-pct');
@@ -1067,27 +933,6 @@ let realLoaded = false;
 let realLoading = false;
 let overviewCam = null;
 
-// 白膜视图 = 精模/实时机器人隐藏。选中建筑/透视是临时模式，退出时恢复之前的开关状态
-let viewSnapshot = null;
-function showWhiteModel() {
-  if (!viewSnapshot) viewSnapshot = { real: $('tg-real').checked, white: $('tg-white').checked };
-  realGroup.visible = false;
-  liveGroup.visible = false;
-  buildingsGroup.visible = true;
-  labelsGroup.visible = $('tg-label').checked;
-}
-// 从白膜/透视模式回到「按左侧开关显示」
-function restoreView() {
-  if (viewSnapshot) {
-    $('tg-real').checked = viewSnapshot.real;
-    $('tg-white').checked = viewSnapshot.white;
-    viewSnapshot = null;
-  }
-  realGroup.visible = $('tg-real').checked && realLoaded;
-  liveGroup.visible = $('tg-live').checked;
-  buildingsGroup.visible = $('tg-white').checked;
-  labelsGroup.visible = $('tg-white').checked && $('tg-label').checked;
-}
 let campusFocus = null; // 医院主体中心（楼群面积加权）
 let campusRadius = 120;
 
@@ -1163,12 +1008,8 @@ function loadRealModel() {
   }, (ev) => {
     if (ev.total) setLoaderPct((ev.loaded / ev.total) * 100);
   }, (e) => {
-    console.warn('整体模型加载失败，回退显示白膜', e);
+    console.warn('整体模型加载失败', e);
     realLoading = false;
-    $('tg-real').checked = false;
-    $('tg-white').checked = true;
-    buildingsGroup.visible = true;
-    labelsGroup.visible = $('tg-label').checked;
     hideLoader();
   });
 }
@@ -1178,222 +1019,7 @@ loadRealModel();
 const gltfCache = new Map();
 
 
-// ---------- 透视模式：1号楼内部模拟（模拟数据） ----------
-const xrayState = { on: false };
-const interiorGroup = new THREE.Group();
-interiorGroup.visible = false;
-scene.add(interiorGroup);
 
-const b1 = BUILDINGS.find((b) => b.id === 'b1');
-const towerPart = b1.parts.find((p) => p.floors === 25);
-const TW = (towerPart.px[2] - towerPart.px[0]) / M;
-const TD = (towerPart.px[3] - towerPart.px[1]) / M;
-const TCX = toX((towerPart.px[0] + towerPart.px[2]) / 2);
-const TCZ = toZ((towerPart.px[1] + towerPart.px[3]) / 2);
-const FLOOR_H = 3.8;
-const TOWER_FLOORS = 25;
-const floorTopY = (f) => f * FLOOR_H + 0.12;
-const carCenterY = (f) => floorTopY(f) + 1.15;
-
-// 楼层板（半透明，透视时可见）
-(function buildFloors() {
-  const mat = new THREE.MeshLambertMaterial({ color: 0xa8c8e8, transparent: true, opacity: 0.3, depthWrite: false });
-  for (let f = 0; f < TOWER_FLOORS; f++) {
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(TW - 2, 0.12, TD - 2), mat);
-    slab.position.set(TCX, f * FLOOR_H + 0.06, TCZ);
-    interiorGroup.add(slab);
-  }
-})();
-
-// 电梯（2部：井道+轿厢+双开门，模拟数据）
-const ELEVS = [];
-(function buildElevators() {
-  const shaftMat = new THREE.MeshLambertMaterial({ color: 0x7fb2d9, transparent: true, opacity: 0.18, depthWrite: false });
-  const carMat = new THREE.MeshLambertMaterial({ color: 0xe9eff5 });
-  const doorMat = new THREE.MeshLambertMaterial({ color: 0x93a7bc });
-  const SW = 3, SD = 3.2, SH = TOWER_FLOORS * FLOOR_H;
-  const CW = SW - 0.5, CD = SD - 0.5;
-  for (let i = 0; i < 2; i++) {
-    const shaftX = TCX - 5.5 + i * 11, shaftZ = TCZ - 4;
-    const wallG = new THREE.Group();
-    const mk = (w, h, d, x, y, z) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), shaftMat);
-      m.position.set(x, y, z);
-      wallG.add(m);
-    };
-    mk(SW, SH, 0.1, 0, SH / 2, -SD / 2);
-    mk(SW, SH, 0.1, 0, SH / 2, SD / 2);
-    mk(0.1, SH, SD, -SW / 2, SH / 2, 0);
-    mk(0.1, SH, SD, SW / 2, SH / 2, 0);
-    wallG.position.set(shaftX, 0, shaftZ);
-    interiorGroup.add(wallG);
-    const car = new THREE.Mesh(new THREE.BoxGeometry(CW, 2.3, CD), carMat);
-    car.position.set(shaftX, carCenterY(0), shaftZ);
-    interiorGroup.add(car);
-    const doorL = new THREE.Mesh(new THREE.BoxGeometry(CW / 2, 2.0, 0.07), doorMat);
-    const doorR = doorL.clone();
-    doorL.position.set(-CW / 4, 0, CD / 2 + 0.03);
-    doorR.position.set(CW / 4, 0, CD / 2 + 0.03);
-    car.add(doorL, doorR);
-    ELEVS.push({ shaftX, shaftZ, floor: 0, targetFloor: 0, doors: 0, state: 'idle', hold: 0, car, doorL, doorR, riders: [] });
-  }
-})();
-
-function pickNextFloor(ev) {
-  for (const r of ev.riders) return r.targetFloor;
-  const w = ROBOTS.find((r) => r.state === 'waitElev' && r.elev === ev && r.floor !== ev.floor);
-  return w ? w.floor : null;
-}
-function updateElevators(dt) {
-  for (const ev of ELEVS) {
-    if (ev.state === 'moving') {
-      const ty = carCenterY(ev.targetFloor);
-      const dy = ty - ev.car.position.y;
-      const step = 4.2 * dt;
-      if (Math.abs(dy) <= step) {
-        ev.car.position.y = ty;
-        ev.floor = ev.targetFloor;
-        ev.state = 'open';
-        ev.hold = 1.7;
-      } else {
-        ev.car.position.y += Math.sign(dy) * step;
-      }
-    } else if (ev.state === 'open') {
-      ev.doors = Math.min(1, ev.doors + dt * 1.7);
-      ev.hold -= dt;
-      if (ev.hold <= 0) ev.state = 'close';
-    } else if (ev.state === 'close') {
-      ev.doors = Math.max(0, ev.doors - dt * 1.7);
-      if (ev.doors <= 0) {
-        ev.state = 'idle';
-        const nxt = pickNextFloor(ev);
-        if (nxt !== null) { ev.targetFloor = nxt; ev.state = 'moving'; }
-      }
-    } else {
-      const nxt = pickNextFloor(ev);
-      if (nxt !== null) { ev.targetFloor = nxt; ev.state = 'moving'; }
-    }
-    const cw = ev.car.geometry.parameters.width;
-    ev.doorL.position.x = -cw / 4 - ev.doors * (cw / 2);
-    ev.doorR.position.x = cw / 4 + ev.doors * (cw / 2);
-  }
-}
-
-// 机器人（8台：4种设备外观各2台，模拟数据）
-const ROBOTS = [];
-const ROBOT_DEFS = [
-  { file: '/models/models/detail/meal.glb', count: 2 },
-  { file: '/models/models/detail/medicine.glb', count: 2 },
-  { file: '/models/models/detail/waste.glb', count: 2 },
-  { file: '/models/models/detail/platform.glb', count: 2 },
-];
-let robotsReady = false;
-async function loadRobots() {
-  if (robotsReady) return;
-  robotsReady = true;
-  const loader = makeGLTFLoader();
-  for (const def of ROBOT_DEFS) {
-    try {
-      const gltf = await loader.loadAsync(def.file);
-      for (let k = 0; k < def.count; k++) spawnRobot(gltf.scene);
-    } catch (e) {
-      console.warn('机器人模型加载失败', def.file, e);
-    }
-  }
-}
-function randWP() {
-  return {
-    x: TCX + (Math.random() * 2 - 1) * (TW / 2 - 5),
-    z: TCZ + (Math.random() * 2 - 1) * (TD / 2 - 5),
-  };
-}
-function lobbyOf(ev) { return { x: ev.shaftX, z: ev.shaftZ + 4.6 }; }
-function spawnRobot(src) {
-  const model = src.clone(true);
-  const box = new THREE.Box3().setFromObject(model);
-  const size = box.getSize(new THREE.Vector3());
-  const s = 1.5 / Math.max(size.y, 0.01);
-  const g = new THREE.Group();
-  model.scale.setScalar(s);
-  model.position.set(0, -box.min.y * s, 0);
-  g.add(model);
-  interiorGroup.add(g);
-  const f = 1 + Math.floor(Math.random() * (TOWER_FLOORS - 2));
-  const r = {
-    obj: g, floor: f, state: 'wander', wp: randWP(),
-    speed: 1.1 + Math.random() * 0.7, elev: null, targetFloor: null, rideIdx: 0,
-  };
-  r.obj.position.set(r.wp.x, floorTopY(f) + 0.75, r.wp.z);
-  r.beacon = addBeacon(g, f + 'F');
-  ROBOTS.push(r);
-}
-function stepRobot(r, dx, dz, dist, dt) {
-  const st = Math.min(r.speed * dt, dist);
-  r.obj.position.x += (dx / dist) * st;
-  r.obj.position.z += (dz / dist) * st;
-  r.obj.rotation.y = Math.atan2(dx, dz);
-}
-function updateRobots(dt) {
-  for (const r of ROBOTS) {
-    if (r.state === 'ride') {
-      const ev = r.elev;
-      r.obj.position.set(
-        ev.shaftX + (r.rideIdx === 0 ? -0.7 : 0.7),
-        ev.car.position.y - 0.4,
-        ev.shaftZ + 0.3
-      );
-      r.obj.rotation.y = 0;
-      if (ev.floor === r.targetFloor && ev.doors > 0.7) {
-        ev.riders = ev.riders.filter((x) => x !== r);
-        r.state = 'wander';
-        r.elev = null;
-        r.floor = ev.floor;
-        setBeaconTag(r.beacon, r.floor + 'F');
-        const l = lobbyOf(ev);
-        r.obj.position.set(l.x, floorTopY(r.floor) + 0.75, l.z);
-        r.wp = randWP();
-      }
-      continue;
-    }
-    if (r.state === 'waitElev') {
-      if (!r.elev) { r.state = 'wander'; r.wp = randWP(); continue; }
-      const ev = r.elev;
-      if (ev.floor === r.floor && ev.state === 'open' && ev.doors > 0.7 && ev.riders.length < 2) {
-        r.state = 'ride';
-        r.rideIdx = ev.riders.length;
-        ev.riders.push(r);
-      }
-      continue;
-    }
-    if (r.state === 'toLobby') {
-      const l = lobbyOf(r.elev);
-      const dx = l.x - r.obj.position.x, dz = l.z - r.obj.position.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < 0.6) { r.state = 'waitElev'; continue; }
-      stepRobot(r, dx, dz, dist, dt);
-      continue;
-    }
-    const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist < 0.5) {
-      if (Math.random() < 0.4 && ELEVS.length) {
-        const ev = ELEVS[Math.floor(Math.random() * ELEVS.length)];
-        let tf = 1 + Math.floor(Math.random() * (TOWER_FLOORS - 1));
-        if (tf === r.floor) tf = (tf % (TOWER_FLOORS - 1)) + 1;
-        r.elev = ev;
-        r.targetFloor = tf;
-        r.state = 'toLobby';
-      } else {
-        r.wp = randWP();
-      }
-      continue;
-    }
-    stepRobot(r, dx, dz, dist, dt);
-  }
-}
-
-// ---------- 全息白膜材质：菲涅尔透明壳 + 边缘加深 + 上升扫描光 ----------
-const holoState = { on: false };
 const holoMat = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
@@ -1445,55 +1071,7 @@ const holoMat = new THREE.ShaderMaterial({
     }
   `,
 });
-function syncEdgesGlow() {
-  for (const [bid, list] of bldEdges) {
-    const on = holoState.on || (xrayState.on && bid === 'b1');
-    for (const e of list) {
-      e.material.opacity = on ? 0.9 : 0.55;
-      e.material.color.set(on ? 0x59c8ff : 0x8b96a2);
-    }
-  }
-}
-
-// 材质刷新（选中 / 透视 / 全息 / 楼层线 多态）
-function refreshMeshMaterial(m) {
-  if (selected === m.userData.building) { m.material = hlPlain; return; }
-  if (xrayState.on && m.userData.building.id === 'b1') { m.material = holoMat; return; }
-  if (holoState.on) { m.material = holoMat; return; }
-  m.material = $('tg-line').checked ? m.userData.mats.lined : m.userData.mats.plain;
-}
-
-function applyXray(on) {
-  xrayState.on = on;
-  interiorGroup.visible = on;
-  if (on) {
-    setHighlight(null);
-    syncList();
-    showWhiteModel(); // 透视需要白膜楼体，且必须隐藏精模，否则精模墙体挡住内部
-    openFloorPlan('1号楼');
-  } else {
-    restoreView();
-    closeFloorPlan();
-  }
-  for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
-  syncEdgesGlow();
-  const btn = $('xray-btn');
-  btn.textContent = on ? '退出透视（1号楼）' : '🔍 透视 1号楼（内部模拟）';
-  btn.classList.toggle('on', on);
-  $('sim-hint').style.display = on ? 'block' : 'none';
-}
 function flyToPos(pos, look) { if (cruiseState.on) stopCruise(); flyTarget = { pos, look }; }
-// 透视入口的相机定位：建筑正前方（沿当前视角方位，避开遮挡）、平视、整栋入画
-function flyFrontOf(bbox) {
-  const ctr = bbox.getCenter(new THREE.Vector3());
-  const size = bbox.getSize(new THREE.Vector3());
-  const dist = Math.max(size.x, size.z, size.y) * 1.15 + 24;
-  const midY = ctr.y;
-  const dir = new THREE.Vector3().subVectors(camera.position, ctr).setY(0);
-  if (dir.lengthSq() < 1) dir.set(0, 0, 1);
-  dir.normalize();
-  flyToPos(new THREE.Vector3(ctr.x + dir.x * dist, midY, ctr.z + dir.z * dist), new THREE.Vector3(ctr.x, midY, ctr.z));
-}
 
 // ---------- 物流设备模型 ----------
 const DEVICES = [
@@ -1551,149 +1129,20 @@ async function loadDevices() {
   setTimeout(() => { devStatus.style.display = 'none'; }, 1500);
 }
 
-// ---------- 交互 ----------
-const raycaster = new THREE.Raycaster();
-const pointer = new THREE.Vector2();
-let downPos = null, selected = null;
-
-// 只在当前可见的那套模型上做拾取：隐藏的白膜/精模仍在场景里，
-// 不判断可见性会让隐藏模型挡住对可见模型的点击。
-function pickWhiteBuilding() {
-  if (!buildingsGroup.visible) return null;
-  return raycaster.intersectObjects(pickables, false)[0] || null;
-}
-
-const hlMat = new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffc107, emissiveIntensity: 0.35 });
-const hlPlain = [hlMat, hlMat, hlMat, hlMat, hlMat, hlMat];
-
-function setHighlight(building) {
-  const prev = selected;
-  selected = building; // 先切换，refreshMeshMaterial 才能正确判断高亮归属
-  if (prev) for (const m of partMeshes.get(prev.id) || []) refreshMeshMaterial(m);
-  if (selected) {
-    showWhiteModel(); // 选中建筑时显示白膜并隐藏精模，避免两套模型重叠
-    for (const m of partMeshes.get(selected.id) || []) refreshMeshMaterial(m);
-  } else if (!xrayState.on) {
-    restoreView();
-  }
-}
-
-function flyTo(building) {
-  let cx = 0, cz = 0, top = 0;
-  const ms = partMeshes.get(building.id) || [];
-  for (const m of ms) { cx += m.position.x; cz += m.position.z; top = Math.max(top, m.position.y); }
-  cx /= ms.length; cz /= ms.length;
-  const dist = Math.max(80, top * 2.4 + 60);
-  flyTarget = { pos: new THREE.Vector3(cx + dist * 0.55, dist * 0.72, cz + dist * 0.75), look: new THREE.Vector3(cx, top * 0.4, cz) };
-}
-let flyTarget = null;
-
-renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('pointermove', (e) => {
-  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  renderer.domElement.style.cursor = pickWhiteBuilding() ? 'pointer' : '';
-});
-renderer.domElement.addEventListener('pointerup', (e) => {
-  if (!downPos || Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) > 5) return;
-  pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  const hit = pickWhiteBuilding();
-  if (hit) {
-    const b = hit.object.userData.building;
-    if (b) { setHighlight(b); flyTo(b); showDetail(b); syncList(); }
-  } else { setHighlight(null); showDetail(null); syncList(); }
-});
-
 // ---------- 面板 ----------
 const $ = (id) => document.getElementById(id);
-const listEl = $('bld-list'), detailEl = $('detail');
-
-function syncList() {
-  listEl.innerHTML = '';
-  for (const b of BUILDINGS) {
-    const item = document.createElement('div');
-    item.className = 'bld-item' + (selected === b ? ' sel' : '');
-    const nm = document.createElement('div'); nm.className = 'nm';
-    nm.textContent = b.short;
-    const meta = document.createElement('div'); meta.className = 'meta';
-    const top = Math.max(...b.parts.map((p) => p.floors));
-    meta.textContent = `${top}F / ${Math.max(...b.parts.map((p) => p.height))}m`;
-    item.appendChild(nm); item.appendChild(meta);
-    if (b.elevator && b.elevator.count > 0) {
-      const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = `梯×${b.elevator.count}`;
-      item.appendChild(bd);
-    }
-    item.onclick = () => { setHighlight(b); flyTo(b); showDetail(b); syncList(); };
-    listEl.appendChild(item);
-  }
-}
-
-function showDetail(b) {
-  if (!b) { detailEl.innerHTML = '<div class="info" style="color:#8a94a0">点击左侧列表或场景中的建筑查看详情</div>'; return; }
-  const rows = b.parts.map((p) => `<tr><td>${p.floors}F</td><td>${p.height}m</td><td>${p.note || '—'}</td></tr>`).join('');
-  detailEl.innerHTML = `
-    <h2>${b.name}</h2>
-    <div class="info">${b.info}</div>
-    <div class="src">来源：${b.source}（可信度 ${Math.round(b.certainty * 100)}%）</div>
-    <table><tr><th>层数</th><th>高度</th><th>备注</th></tr>${rows}</table>
-    ${b.elevator && b.elevator.count > 0
-      ? `<div class="elev"><b>电梯：</b>${b.elevator.detail}</div>`
-      : '<div class="elev" style="background:#f3f5f7;border-color:#c3ccd6"><b>电梯：</b>未见标注</div>'}
-  `;
-}
-
-$('elev-sum').innerHTML = BUILDINGS
-  .filter((b) => b.elevator && b.elevator.count > 0)
-  .map((b) => `<li><b>${b.short}</b>：${b.elevator.detail}</li>`).join('');
-$('unloc').innerHTML = UNLOCATED.map((u) => `<li>${u}</li>`).join('');
-$('notes').innerHTML = NOTES.map((n) => `<li>${n}</li>`).join('');
-syncList();
+let flyTarget = null;
 
 // ---------- 开关 ----------
 $('tg-tex').onchange = (e) => { ground.material = e.target.checked ? groundMapMat : groundPlainMat; };
-$('tg-line').onchange = (e) => {
-  for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
-};
-$('tg-label').onchange = (e) => { labelsGroup.visible = e.target.checked && $('tg-white').checked; };
-$('tg-white').onchange = (e) => {
-  viewSnapshot = null; // 用户手动切换后不再恢复临时视图
-  if (e.target.checked) {
-    $('tg-real').checked = false;
-    realGroup.visible = false;
-  }
-  buildingsGroup.visible = e.target.checked;
-  labelsGroup.visible = e.target.checked && $('tg-label').checked;
-};
 $('tg-real').onchange = (e) => {
-  viewSnapshot = null; // 用户手动切换后不再恢复临时视图
   if (e.target.checked) {
-    $('tg-white').checked = false;
-    buildingsGroup.visible = false;
-    labelsGroup.visible = false;
     if (!realLoaded) { loadRealModel(); return; }
     realGroup.visible = true;
   } else {
     realGroup.visible = false;
-    if (!$('tg-white').checked) {
-      $('tg-white').checked = true;
-      buildingsGroup.visible = true;
-      labelsGroup.visible = $('tg-label').checked;
-    }
   }
 };
-$('tg-alpha').onchange = (e) => {
-  for (const mt of allMats) { mt.transparent = e.target.checked; mt.opacity = e.target.checked ? 0.55 : 1; mt.depthWrite = !e.target.checked; }
-};
-$('tg-holo').onchange = (e) => {
-  holoState.on = e.target.checked;
-  for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
-  syncEdgesGlow();
-};
-// 初始应用全息状态（默认开启，需在 selected/$ 等声明之后执行）
-holoState.on = $('tg-holo').checked;
-for (const b of BUILDINGS) for (const m of partMeshes.get(b.id) || []) refreshMeshMaterial(m);
-syncEdgesGlow();
 $('tg-dev').onchange = (e) => {
   devicesGroup.visible = e.target.checked;
   if (e.target.checked) loadDevices();
@@ -1745,10 +1194,6 @@ function startCruise(automatic = false) {
   if (cruiseState.on || !realLoaded || pendingDemoLoads > 0) return;
   if (demo6State.active) stopDemo6();
   if (demo2State.active) stopDemo2();
-  if (xrayState.on) {
-    applyXray(false);
-    liveGroup.visible = $('tg-live').checked;
-  }
   setDemoBack(false);
   document.body.classList.remove('panel-open');
   $('settings-btn').classList.remove('on');
@@ -1824,34 +1269,11 @@ function checkCruiseIdle() {
 }
 setInterval(checkCruiseIdle, 1000);
 
-$('xray-btn').onclick = () => {
-  if (demo6State.active) stopDemo6();
-  if (demo2State.active) stopDemo2();
-  if (!xrayState.on) {
-    loadRobots();
-    applyXray(true);
-    liveGroup.visible = false;
-    setDemoBack(true);
-    flyFrontOf(new THREE.Box3(
-      new THREE.Vector3(TCX - TW / 2, 0, TCZ - TD / 2),
-      new THREE.Vector3(TCX + TW / 2, TOWER_FLOORS * FLOOR_H, TCZ + TD / 2)
-    ));
-  } else {
-    applyXray(false);
-    liveGroup.visible = $('tg-live').checked;
-    setDemoBack(false);
-  }
-};
 // 透视模式悬浮返回按钮
 function setDemoBack(on) { $('demo-back').style.display = on ? 'block' : 'none'; }
 $('demo-back').onclick = () => {
   if (demo6State.active) stopDemo6();
   if (demo2State.active) stopDemo2();
-  if (xrayState.on) {
-    applyXray(false);
-    liveGroup.visible = $('tg-live').checked;
-    if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
-  }
   setDemoBack(false);
 };
 setWeather('sunny');
@@ -2860,7 +2282,6 @@ function updateDemo6(dt) {
 async function startDemo6() {
   if (demo6State.active) { stopDemo6(); return; }
   if (demo2State.active) stopDemo2();
-  if (xrayState.on) applyXray(false);
   stopCruise();
   const grp = realBuildings.get('6号楼');
   if (!grp) { console.warn('[6号楼模拟] 精模中未找到 6号楼'); return; }
@@ -3064,7 +2485,6 @@ function updateDemo2(dt) {
 async function startDemo2() {
   if (demo2State.active) { stopDemo2(); return; }
   if (demo6State.active) stopDemo6();
-  if (xrayState.on) applyXray(false);
   stopCruise();
   const btn = $('demo2-btn');
   btn.classList.add('on');
@@ -3101,7 +2521,6 @@ async function startDemo2() {
     demo2State.hidden.push(o);
   });
   hideOverlap(realGroup);
-  hideOverlap(buildingsGroup);
   console.log('[2号楼模拟] 已隐藏原位置模型', demo2State.hidden.length, '个网格');
   pendingDemoLoads++;
   syncCruiseButtons();
@@ -3192,27 +2611,6 @@ function fpOpen(building) {
   $('fp-title').textContent = building;
   $('floor-plan').classList.add('show');
   fpHideCharts();
-  if (building === '1号楼') {
-    fpState.center = { x: TCX, z: TCZ };
-    fpState.bounds = { minX: TCX - TW / 2, maxX: TCX + TW / 2, minZ: TCZ - TD / 2, maxZ: TCZ + TD / 2 };
-    const outline = [];
-    const b = fpState.bounds;
-    outline.push([b.minX, b.minZ, b.maxX, b.minZ], [b.maxX, b.minZ, b.maxX, b.maxZ], [b.maxX, b.maxZ, b.minX, b.maxZ], [b.minX, b.maxZ, b.minX, b.minZ]);
-    const shafts = ELEVS.map((ev) => ({
-      x: ev.shaftX, z: ev.shaftZ,
-      rect: [
-        [ev.shaftX - 1.5, ev.shaftZ - 1.6, ev.shaftX + 1.5, ev.shaftZ - 1.6],
-        [ev.shaftX + 1.5, ev.shaftZ - 1.6, ev.shaftX + 1.5, ev.shaftZ + 1.6],
-        [ev.shaftX + 1.5, ev.shaftZ + 1.6, ev.shaftX - 1.5, ev.shaftZ + 1.6],
-        [ev.shaftX - 1.5, ev.shaftZ + 1.6, ev.shaftX - 1.5, ev.shaftZ - 1.6],
-      ],
-    }));
-    for (let f = 1; f <= TOWER_FLOORS; f++) {
-      fpState.floors.push({ n: f, lines: outline.slice(), shafts: shafts.map((s) => ({ x: s.x, z: s.z })), shaftRects: shafts.flatMap((s) => s.rect) });
-    }
-    fpPickFloor(3);
-    buildFloorChips();
-  }
   fpDraw(true);
 }
 function fpClose() {
@@ -3275,9 +2673,7 @@ function buildFloorChips() {
 function fpCollectRobots() {
   const out = [];
   const bname = fpState.building;
-  if (bname === '1号楼') {
-    ROBOTS.forEach((r, i) => out.push({ x: r.obj.position.x, z: r.obj.position.z, y: r.obj.position.y, floor: r.floor, label: '机器人 ' + (i + 1), kind: 'sim' }));
-  } else if (bname === '6号楼') {
+  if (bname === '6号楼') {
     demo6State.robots.forEach((r, i) => out.push({ x: r.obj.position.x, z: r.obj.position.z, y: r.obj.position.y, floor: r.floor, label: '机器人 ' + (i + 1), kind: 'sim' }));
   } else if (bname === '2号楼') {
     demo2State.robots.forEach((r, i) => out.push({ x: r.obj.position.x, z: r.obj.position.z, y: r.obj.position.y, floor: r.floor, label: '机器人 ' + (i + 1), kind: 'sim' }));
@@ -3410,7 +2806,7 @@ function fpFly(r) {
 }
 $('fp-close').onclick = () => { fpState.hidden = true; $('floor-plan').classList.remove('show'); };
 // 调试钩子：隐藏标签页 rAF 节流时可用 window.__dt.fpDraw(true) 手动刷新平面图
-window.__dt = { fpDraw, fpCollectRobots, fpState, get ROBOTS() { return ROBOTS; }, get BEACONS() { return BEACONS; }, get holoState() { return holoState; }, get xrayState() { return xrayState; }, get partMeshes() { return partMeshes; }, get holoMat() { return holoMat; }, get camera() { return camera; }, get flyTarget() { return flyTarget; }, get renderer() { return renderer; }, get scene() { return scene; }, get THREE() { return THREE; } };
+window.__dt = { fpDraw, fpCollectRobots, fpState, get BEACONS() { return BEACONS; }, get holoMat() { return holoMat; }, get camera() { return camera; }, get flyTarget() { return flyTarget; }, get renderer() { return renderer; }, get scene() { return scene; }, get THREE() { return THREE; } };
 // 平面图交互：滚轮缩放（围绕中心）、拖动平移、点击定位机器人
 let fpDrag = null, fpDragMoved = false;
 $('fp-canvas').addEventListener('wheel', (e) => {
@@ -3457,9 +2853,9 @@ $('fp-canvas').onclick = (e) => {
   if (best) fpFly(best);
 };
 
-// 记住左侧视图开关：刷新后保持上次的选择（白膜/周边白膜/卫星底图等）
-const VIEW_KEYS = ['tg-real', 'tg-white', 'tg-holo', 'tg-label', 'tg-line', 'tg-tex', 'tg-alpha', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map'];
-const VIEW_ORDER = ['tg-label', 'tg-line', 'tg-tex', 'tg-alpha', 'tg-holo', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map', 'tg-white', 'tg-real'];
+// 记住左侧视图开关：刷新后保持上次的选择（整体/设备/机器人/周边/底图）
+const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map'];
+const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-surround', 'tg-map', 'tg-real'];
 document.querySelector('.toggles')?.addEventListener('change', (e) => {
   if (!e.target.id || !VIEW_KEYS.includes(e.target.id)) return;
   const state = {};
@@ -3511,8 +2907,6 @@ function animate() {
   updateClouds(dt, elapsed);
   updateRain(dt, camera.position);
   updateSnow(dt, camera.position, elapsed);
-  updateElevators(dt);
-  updateRobots(dt);
   updateDemo6(dt);
   updateDemo2(dt);
   holoMat.uniforms.uTime.value = elapsed;
