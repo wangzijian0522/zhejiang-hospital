@@ -1,4 +1,5 @@
 // 中控 openTwin 数据中继：凭证只在服务端，浏览器通过本服务 /twin 的 WebSocket 获取实时数据
+// 使用方式：复制本文件为 twin-relay.js，把 YOUR_* 替换为中控提供的四项凭证，重启服务即可。
 const { WebSocket } = require('ws');
 
 const CFG = {
@@ -13,6 +14,12 @@ const CFG = {
   },
   workspaceId: '4',
 };
+
+function isConfigured() {
+  const o = CFG.oauth;
+  return o.client_id !== 'YOUR_CLIENT_ID' && o.client_secret !== 'YOUR_CLIENT_SECRET'
+    && o.access_key_id !== 'YOUR_ACCESS_KEY_ID' && o.access_key_secret !== 'YOUR_ACCESS_KEY_SECRET';
+}
 
 const COLLECTIONS = ['scenes', 'floors', 'mapRegistrations', 'robots', 'tasks', 'paths', 'elevators'];
 const KEY_FIELD = {
@@ -128,6 +135,17 @@ class TwinRelay {
     return this.token.value;
   }
 
+  // 下载版本化 CAD 几何（lines/texts）
+  async getResource(resourceId) {
+    if (!isConfigured()) throw new Error('中控凭证未配置');
+    const token = await this.getAccessToken();
+    const res = await fetch(`${CFG.base}/openTwin/v1/workspaces/${CFG.workspaceId}/resources/${resourceId}`, {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!res.ok) throw new Error('resource http ' + res.status);
+    return res.json();
+  }
+
   async connectUpstream() {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.viewers.size === 0) return;
@@ -212,6 +230,10 @@ class TwinRelay {
 }
 
 function attachTwinRelay(server) {
+  if (!isConfigured()) {
+    console.warn('[twin-relay] 中控凭证未配置：复制 digital-twin/twin-relay.example.js 为 twin-relay.js 并填入凭证后重启服务。');
+    return { configured: false, getResource: async () => { throw new Error('中控凭证未配置'); } };
+  }
   const { WebSocketServer } = require('ws');
   const wss = new WebSocketServer({ server, path: '/twin' });
   const relay = new TwinRelay(wss);

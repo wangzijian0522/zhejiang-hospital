@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = process.env.PORT || 8080;
@@ -22,13 +23,20 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
+const RELAY_HINT = '中控凭证未配置：复制 digital-twin/twin-relay.example.js 为 digital-twin/twin-relay.js 并填入凭证后重启服务。';
+
 function handleTwinResource(req, res, twinRelay) {
   if (req.url.split('?')[0] !== '/twin-resource') return false;
+  if (!twinRelay || twinRelay.configured === false || typeof twinRelay.getResource !== 'function') {
+    res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(RELAY_HINT);
+    return true;
+  }
   const q = req.url.split('?')[1] || '';
   const rid = new URLSearchParams(q).get('rid');
-  if (!twinRelay || !rid) {
+  if (!rid) {
     res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('missing rid or relay');
+    res.end('missing rid');
     return true;
   }
   twinRelay.getResource(rid)
@@ -48,8 +56,6 @@ const BITMAP_URL = /^\/tdt\/([a-z_]+)\/(\d+)\/(\d+)\/(\d+)$/;
 const TDT_TK = process.env.TDT_TK || '4cdaaf6bd0bf76f314152dc58d2db861';
 // 天地图会按 UA 判定“浏览器端 Key”，非浏览器 UA 直接 403（301012）
 const TDT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-
-let twinRelay = null;
 
 const server = http.createServer((req, res) => {
   if (handleTwinResource(req, res, twinRelay)) return;
@@ -78,7 +84,6 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (urlPath === '/') urlPath = '/digital-twin/index.html';
-  if (urlPath === '/') urlPath = '/digital-twin/index.html';
   if (urlPath.endsWith('/')) urlPath += 'index.html';
   const file = path.normalize(path.join(ROOT, urlPath));
   if (!file.startsWith(ROOT)) {
@@ -98,12 +103,58 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// 中控 openTwin 实时数据中继（WebSocket /twin）
+// 中控 openTwin 实时数据中继（WebSocket /twin + CAD 资源 /twin-resource）
+// 优先加载含真实凭证的 twin-relay.js（gitignore 排除，不入库）；
+// 仓库协作无该文件时退回示例模板，未填凭证则给出明确提示而不是崩溃。
+function attachTwinFallback() {
+  server.on('upgrade', (req, socket) => {
+    let pathname = '/';
+    try { pathname = decodeURIComponent(req.url.split('?')[0]); } catch (_) {}
+    if (pathname !== '/twin') { socket.destroy(); return; }
+    const key = req.headers['sec-websocket-key'];
+    if (!key) { socket.write('HTTP/1.1 400 Bad Request\r\n\r\n'); socket.destroy(); return; }
+    const accept = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    socket.write(
+      'HTTP/1.1 101 Switching Protocols\r\n' +
+      'Upgrade: websocket\r\n' +
+      'Connection: Upgrade\r\n' +
+      'Sec-WebSocket-Accept: ' + accept + '\r\n\r\n'
+    );
+    const payload = JSON.stringify({
+      schemaVersion: '1.0', type: 'error', connectionId: null, workspaceId: null, seq: null, sentAt: new Date().toISOString(),
+      data: { code: 'RELAY_UNCONFIGURED', message: RELAY_HINT },
+    });
+    const len = Buffer.byteLength(payload);
+    let frame;
+    if (len < 126) {
+      frame = Buffer.alloc(2 + len);
+      frame[0] = 0x81; frame[1] = len;
+      frame.write(payload, 2);
+    } else {
+      frame = Buffer.alloc(4 + len);
+      frame[0] = 0x81; frame[1] = 126;
+      frame.writeUInt16BE(len, 2);
+      frame.write(payload, 4);
+    }
+    socket.write(frame, () => socket.end());
+  });
+}
+let twinRelay = null;
 try {
-  const { attachTwinRelay } = require('./twin-relay.js');
-  twinRelay = attachTwinRelay(server);
+  let attach = null;
+  try {
+    attach = require('./twin-relay.js').attachTwinRelay;
+  } catch (e) {
+    if (e.code !== 'MODULE_NOT_FOUND') throw e;
+    attach = require('./twin-relay.example.js').attachTwinRelay;
+  }
+  twinRelay = attach(server);
 } catch (e) {
   console.warn('[twin-relay] 中继不可用（缺少 ws 依赖？）:', e.message);
+}
+if (!twinRelay || twinRelay.configured === false) {
+  console.warn('[twin-relay] ' + RELAY_HINT);
+  attachTwinFallback();
 }
 
 server.listen(PORT, () => {
