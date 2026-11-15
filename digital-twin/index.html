@@ -22,6 +22,9 @@
   .toggles label:hover { background: rgba(0,229,255,.16); }
   .toggles input { accent-color: #00e5ff; }
   .tg-group { width: 100%; font-size: 10px; color: #5b7a95; letter-spacing: 1px; margin: 6px 0 -2px; }
+  .qualitybox { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid rgba(0,229,255,.15); font-size: 12px; color: #a9c8e0; }
+  .qualitybox select { background: #0e1c30; color: #cfe0f2; border: 1px solid rgba(0,229,255,.3); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .qualitybox .qnote { color: #5b7a95; font-size: 10px; }
   .timebox, .weatherbox { padding: 8px 16px 8px; border-bottom: 1px solid rgba(0,229,255,.15); }
   .timebox .row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }
   .timebox b, .weatherbox b { font-size: 12px; color: #7fd4ff; }
@@ -189,6 +192,7 @@
     <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
     <div class="tg-group">城市环境</div>
     <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
+    <label><input type="checkbox" id="tg-road" checked> 路网</label>
     <label><input type="checkbox" id="tg-water" checked> 水系</label>
     <label><input type="checkbox" id="tg-green" checked> 公园树木</label>
     <label><input type="checkbox" id="tg-street" checked> 行道树</label>
@@ -201,6 +205,7 @@
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
     <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
   </div>
+  <div class="qualitybox"><b>画质</b><select id="quality-select"><option value="auto">自动</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select><span class="qnote">按帧率自动选择</span></div>
   <div class="timebox">
     <div class="row"><b>时间 / 太阳</b><span id="time-val">12:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime"> 实时</label></div>
     <input type="range" id="time-slider" min="0" max="24" step="0.05" value="12">
@@ -1889,9 +1894,10 @@ const viaductGroup = new THREE.Group(); viaductGroup.name = 'viaductGroup';
 const greenGroup = new THREE.Group(); greenGroup.name = 'greenGroup';
 const streetTreeGroup = new THREE.Group(); streetTreeGroup.name = 'streetTreeGroup';
 const bridgeGroup = new THREE.Group(); bridgeGroup.name = 'bridgeGroup';
+const roadGroup = new THREE.Group(); roadGroup.name = 'roadGroup';
 const contextLabelGroup = new THREE.Group(); contextLabelGroup.name = 'contextLabels';
 const poiLabelGroup = new THREE.Group(); poiLabelGroup.name = 'poiLabels';
-contextRoot.add(waterGroup, viaductGroup, greenGroup, streetTreeGroup, bridgeGroup, contextLabelGroup, poiLabelGroup);
+contextRoot.add(waterGroup, viaductGroup, greenGroup, streetTreeGroup, bridgeGroup, roadGroup, contextLabelGroup, poiLabelGroup);
 scene.add(contextRoot);
 let mapReady = false;
 const MAP_TILE = 256, MAP_R = 6378137;
@@ -2177,6 +2183,7 @@ if (CAL_MODE) {
 // 真实建筑轮廓（百度建筑 2020，WGS84；已换算到地图坐标系），与底图共用变换
 const CITY_HEIGHT_SCALE = 1.0;
 let cityWallMat = null;
+let roofPropsGroup = null;
 // 高度分层配色：低层暖灰 -> 高层冷蓝灰，屋顶略深，形成城市高度层次
 function cityTierColor(h) {
   const tiers = [
@@ -2189,6 +2196,55 @@ function cityTierColor(h) {
   ];
   for (const [lim, hex] of tiers) if (h < lim) return new THREE.Color(hex);
   return new THREE.Color(tiers[tiers.length - 1][1]);
+}
+function buildRoofProps() {
+  roofPropsGroup = new THREE.Group();
+  roofPropsGroup.name = 'roofProps';
+  surroundGroup.add(roofPropsGroup);
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0x9aa1a5, roughness: 0.94 });
+  const tankMat = new THREE.MeshStandardMaterial({ color: 0xb4babd, roughness: 0.9 });
+  const boxes = [], tanks = [];
+  let seed = 1234567;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+  for (const item of CITY.buildings) {
+    const h = Math.min(200, Math.max(3, item[0] * CITY_HEIGHT_SCALE));
+    if (h < 12) continue;
+    const n = (item.length - 1) / 2;
+    if (n < 3) continue;
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (let i = 0; i < n; i++) {
+      const x = item[1 + i * 2], z = item[2 + i * 2];
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+    }
+    const w = x1 - x0, d = z1 - z0;
+    if (w < 5 || d < 5 || w * d < 90) continue;
+    const count = w * d > 520 ? 2 : 1;
+    for (let k = 0; k < count; k++) {
+      const sx = 1.3 + rnd() * 2.8;
+      const sy = 0.8 + rnd() * 1.6;
+      const sz = 1.3 + rnd() * 2.8;
+      const x = x0 + w * (0.18 + rnd() * 0.64);
+      const z = z0 + d * (0.18 + rnd() * 0.64);
+      v.set(x, h + sy / 2 + 0.02, z);
+      sc.set(sx, sy, sz);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI);
+      m4.compose(v, q, sc);
+      if (rnd() < 0.78) boxes.push(m4.clone());
+      else tanks.push(m4.clone());
+    }
+  }
+  const addInst = (geo, mat, list) => {
+    if (!list.length) return;
+    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    list.forEach((m, i) => mesh.setMatrixAt(i, m));
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.castShadow = true;
+    roofPropsGroup.add(mesh);
+  };
+  addInst(new THREE.BoxGeometry(1, 1, 1), boxMat, boxes);
+  addInst(new THREE.CylinderGeometry(0.55, 0.55, 1, 8), tankMat, tanks);
+  console.log('[屋顶] 设备', boxes.length + tanks.length, '个');
 }
 function buildCity() {
   if (!CITY || !CITY.buildings.length) return;
@@ -2211,6 +2267,43 @@ function buildCity() {
   const cityEmissiveTex = new THREE.CanvasTexture(ew);
   cityEmissiveTex.colorSpace = THREE.SRGBColorSpace;
   cityEmissiveTex.wrapS = cityEmissiveTex.wrapT = THREE.RepeatWrapping;
+
+  // 高画质立面：每 4m 一个开间、每 3.2m 一层；窗格 + 窗台 + 楼层线
+  const makeFacadeTex = (emissive) => {
+    const size = 128;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = c.getContext('2d');
+    if (emissive) {
+      g.fillStyle = '#000000'; g.fillRect(0, 0, size, size);
+      g.fillStyle = '#ffd8a2';
+      g.fillRect(22, 24, 42, 80);
+      g.fillStyle = 'rgba(255,220,170,0.28)';
+      g.fillRect(66, 24, 40, 80);
+    } else {
+      g.fillStyle = '#f4f5f5'; g.fillRect(0, 0, size, size);
+      g.fillStyle = '#dde2e4'; g.fillRect(0, 0, size, 8);
+      g.fillStyle = '#dfe4e6';
+      g.fillRect(20, 22, 88, 84);
+      const gr = g.createLinearGradient(0, 24, 0, 104);
+      gr.addColorStop(0, '#aebec5');
+      gr.addColorStop(0.5, '#8fa3ad');
+      gr.addColorStop(1, '#9fb0b8');
+      g.fillStyle = gr;
+      g.fillRect(22, 24, 84, 80);
+      g.fillStyle = '#dfe4e6';
+      g.fillRect(63, 24, 2, 80);
+      g.fillStyle = '#d8dee1';
+      g.fillRect(20, 104, 88, 4);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  };
+  const cityTexHigh = makeFacadeTex(false);
+  const cityEmissiveHigh = makeFacadeTex(true);
   const wallPos = [], wallNrm = [], wallUv = [], wallCol = [], roofPos = [], roofCol = [];
   const contour = [];
   let bi = 0;
@@ -2261,7 +2354,8 @@ function buildCity() {
   roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(roofPos, 3));
   roofGeo.setAttribute('color', new THREE.Float32BufferAttribute(roofCol, 3));
   roofGeo.computeVertexNormals();
-  const wallMat = new THREE.MeshStandardMaterial({ map: cityTex, vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide, emissive: 0x000000, emissiveMap: cityEmissiveTex });
+  const wallMat = new THREE.MeshStandardMaterial({ map: cityTexHigh, vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide, emissive: 0x000000, emissiveMap: cityEmissiveHigh });
+  wallMat.userData.facade = { lowMap: cityTex, highMap: cityTexHigh, lowEmissive: cityEmissiveTex, highEmissive: cityEmissiveHigh };
   const roofMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
   cityWallMat = wallMat;
   const walls = new THREE.Mesh(wallGeo, wallMat);
@@ -2273,9 +2367,53 @@ function buildCity() {
   surroundGroup.add(walls, roofs);
   console.log('[城市体量] 真实轮廓', CITY.buildings.length, '栋（半径 ' + CITY.radius + 'm）');
 }
+buildRoofProps();
 buildCity();
 surroundGroup.visible = $('tg-surround').checked;
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
+
+// ---------- 画质档位：自动按帧率，手动可切高/中/低 ----------
+const QUALITY = { mode: 'auto', value: 'high', done: false, started: false, frames: 0, t0: 0 };
+function applyQuality(q) {
+  QUALITY.value = q;
+  if (cityWallMat && cityWallMat.userData.facade) {
+    const f = cityWallMat.userData.facade;
+    cityWallMat.map = q === 'low' ? f.lowMap : f.highMap;
+    cityWallMat.emissiveMap = q === 'low' ? f.lowEmissive : f.highEmissive;
+    cityWallMat.needsUpdate = true;
+  }
+  if (roofPropsGroup) roofPropsGroup.visible = q === 'high';
+  const px = q === 'high' ? 2 : q === 'medium' ? 1.5 : 1;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, px));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = q !== 'low';
+  renderer.shadowMap.needsUpdate = true;
+  const size = q === 'high' ? 4096 : q === 'medium' ? 2048 : 1024;
+  sunLight.shadow.mapSize.set(size, size);
+  if (sunLight.shadow.map) { sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
+  console.log('[画质]', q, 'shadow', size, 'pixelRatio', px);
+}
+(function initQuality() {
+  const qs = $('quality-select');
+  const saved = localStorage.getItem('dt.quality');
+  if (saved && saved !== 'auto' && ['high', 'medium', 'low'].includes(saved)) {
+    QUALITY.mode = saved; QUALITY.done = true; if (qs) qs.value = saved; applyQuality(saved);
+  } else {
+    if (qs) qs.value = 'auto';
+    QUALITY.mode = 'auto'; applyQuality('high');
+  }
+  if (qs) qs.onchange = () => {
+    const v = qs.value;
+    localStorage.setItem('dt.quality', v);
+    QUALITY.mode = v; QUALITY.done = true;
+    if (v === 'auto') {
+      QUALITY.done = false; QUALITY.started = false; QUALITY.frames = 0;
+      applyQuality('high');
+    } else {
+      applyQuality(v);
+    }
+  };
+})();
 
 // ---------- 3D 环境：水系 / 上塘高架 / 公园树木 / 地标 ----------
 let waterTex = null;
@@ -2475,6 +2613,86 @@ function buildContext() {
   mergeTo(bridgeGroup, bDeck, bridgeDeckMat);
   mergeTo(bridgeGroup, bRail, bridgeRailMat);
 
+  // 地面路网：主干道带虚线，支路沥青面，两侧人行道
+  const makeAsphalt = (lane) => {
+    const w = 64, h = 256;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    g.fillStyle = '#5b6063'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 260; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.015 + Math.random() * 0.025})`;
+      g.fillRect(Math.random() * w, Math.random() * h, 1, 1);
+    }
+    if (lane) {
+      g.fillStyle = 'rgba(230,232,230,0.85)';
+      g.fillRect(2, 0, 2, h); g.fillRect(w - 4, 0, 2, h);
+      g.fillStyle = 'rgba(240,240,235,0.9)';
+      for (let y = 0; y < h; y += 64) g.fillRect(w / 2 - 1, y, 2, 34);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  };
+  const roadMainMat = new THREE.MeshStandardMaterial({ map: makeAsphalt(true), roughness: 0.92, metalness: 0, side: THREE.DoubleSide });
+  const roadLocalMat = new THREE.MeshStandardMaterial({ map: makeAsphalt(false), roughness: 0.94, metalness: 0, side: THREE.DoubleSide });
+  const walkMat = new THREE.MeshStandardMaterial({ color: 0xb9bec1, roughness: 0.96 });
+  const mainR = { pos: [], uv: [], idx: [] }, localR = { pos: [], uv: [], idx: [] }, walkR = { pos: [], idx: [] };
+  const addRoadQuad = (dst, ax, az, bx, bz, nx, nz, half, y, vLen) => {
+    const base = dst.pos.length / 3;
+    dst.pos.push(
+      ax + nx * half, y, az + nz * half,
+      ax - nx * half, y, az - nz * half,
+      bx + nx * half, y, bz + nz * half,
+      bx - nx * half, y, bz - nz * half,
+    );
+    dst.uv.push(0, 0, 1, 0, 0, vLen, 1, vLen);
+    dst.idx.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
+  };
+  const addWalkQuad = (ax, az, bx, bz, nx, nz, inner, outer) => {
+    const base = walkR.pos.length / 3;
+    walkR.pos.push(
+      ax + nx * inner, 0.15, az + nz * inner,
+      ax + nx * outer, 0.15, az + nz * outer,
+      bx + nx * inner, 0.15, bz + nz * inner,
+      bx + nx * outer, 0.15, bz + nz * outer,
+    );
+    walkR.idx.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
+  };
+  for (const road of CONTEXT.roads) {
+    const dst = road.fc === '30' ? mainR : localR;
+    const half = road.fc === '30' ? 7 : 3.25;
+    for (const part of road.parts) {
+      for (let i = 1; i < part.length; i++) {
+        const a = part[i - 1], b = part[i];
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const len = Math.hypot(dx, dz);
+        if (len < 0.8) continue;
+        const nx = -dz / len, nz = dx / len;
+        addRoadQuad(dst, a[0], a[1], b[0], b[1], nx, nz, half, 0.12, len / 8);
+        for (const side of [-1, 1]) {
+          addWalkQuad(a[0], a[1], b[0], b[1], nx * side, nz * side, half + 0.15, half + 1.35);
+        }
+      }
+    }
+  }
+  const makeRoadMesh = (r, mat, withUv) => {
+    if (!r.pos.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(r.pos, 3));
+    if (withUv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(r.uv, 2));
+    geo.setIndex(r.idx);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    roadGroup.add(mesh);
+  };
+  makeRoadMesh(mainR, roadMainMat, true);
+  makeRoadMesh(localR, roadLocalMat, true);
+  makeRoadMesh(walkR, walkMat, false);
+
   // 路名 / POI：单独一组，按距离 LOD
   for (const l of [...CONTEXT.roadLabels, ...CONTEXT.poiLabels]) {
     const isRoad = l.kind === 'road';
@@ -2495,6 +2713,7 @@ function buildContext() {
 
   const toggles = [
     ['tg-water', waterGroup],
+    ['tg-road', roadGroup],
     ['tg-viaduct', viaductGroup],
     ['tg-green', greenGroup],
     ['tg-street', streetTreeGroup],
@@ -3222,8 +3441,8 @@ $('fp-canvas').onclick = (e) => {
 };
 
 // 记住左侧视图开关：刷新后保持上次的选择（整体/设备/机器人/周边/底图）
-const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map'];
-const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map', 'tg-real'];
+const VIEW_KEYS = ['tg-real', 'tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-road', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map'];
+const VIEW_ORDER = ['tg-tex', 'tg-dev', 'tg-live', 'tg-water', 'tg-road', 'tg-viaduct', 'tg-green', 'tg-street', 'tg-bridge', 'tg-landmark', 'tg-poi', 'tg-surround', 'tg-map', 'tg-real'];
 document.querySelector('.toggles')?.addEventListener('change', (e) => {
   if (!e.target.id || !VIEW_KEYS.includes(e.target.id)) return;
   const state = {};
@@ -3265,6 +3484,22 @@ function animate() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
   const elapsed = timer.getElapsed();
+  if (QUALITY.mode === 'auto' && !QUALITY.done) {
+    if (realLoaded) {
+      if (!QUALITY.started) { QUALITY.started = true; QUALITY.t0 = performance.now(); QUALITY.frames = 0; }
+      else {
+        QUALITY.frames++;
+        const t = performance.now() - QUALITY.t0;
+        if (t > 6000) {
+          const fps = QUALITY.frames / (t / 1000);
+          const q = fps >= 45 ? 'high' : fps >= 28 ? 'medium' : 'low';
+          applyQuality(q);
+          QUALITY.done = true;
+          console.log('[画质] 自动', fps.toFixed(1), 'fps ->', q);
+        }
+      }
+    }
+  }
   if (timeState.playing) {
     timeState.hour = (timeState.hour + timeState.speed * dt) % 24;
     syncTimeUI();

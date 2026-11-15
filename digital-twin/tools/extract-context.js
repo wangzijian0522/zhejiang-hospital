@@ -300,6 +300,26 @@ for (const r of readShp(path.join(SRC, '杭州 行人道路.shp'))) {
 }
 const bridges = [...bridgeMap.entries()].map(([name, parts]) => ({ name, parts }));
 
+// ---------- 地面路网（只取主干/支路，快速路已有高架层；避开院区与水面） ----------
+const roads = [];
+for (const r of roadAll) {
+  const fc = roadAllDbf.get(r.i, 'fclass');
+  if (fc !== '30' && fc !== '130') continue;
+  const name = roadAllDbf.get(r.i, 'Name') || '';
+  const [mx, mz] = toMap((r.bbox[0] + r.bbox[2]) / 2, (r.bbox[1] + r.bbox[3]) / 2);
+  if (dist(mx, mz) > RADIUS) continue;
+  const parts = [];
+  for (const p of r.parts) {
+    for (const c of clipLineCircle(p, RADIUS)) {
+      const mid = c[Math.floor(c.length / 2)];
+      if (mid[0] > CAMPUS.x0 && mid[0] < CAMPUS.x1 && mid[1] > CAMPUS.z0 && mid[1] < CAMPUS.z1) continue;
+      if (inBoxes(mid[0], mid[1], WATER_BOXES)) continue;
+      parts.push(c);
+    }
+  }
+  if (parts.length) roads.push({ fc, name, parts });
+}
+
 // ---------- 标注 ----------
 const labels = [];
 for (const w of water) {
@@ -382,12 +402,12 @@ const out = `// 医院周边 3D 环境（WGS84 -> BASEMAP 地图米，x=东 z=�
 // 行道树/路名：路网.shp；桥：杭州 行人道路.shp；POI：住宅区/学校/医院/公交/体育场
 export const CONTEXT = ${JSON.stringify({
   radius: RADIUS, water, green, viaduct, trees, labels,
-  roadLabels, poiLabels, streetTrees, bridges,
+  roadLabels, poiLabels, streetTrees, bridges, roads,
 }, null, 0)};
 `;
 const target = path.resolve(__dirname, '../data/context.js');
 fs.writeFileSync(target, out);
 console.log('water', water.length, 'green', green.length, 'viaduct parts', viaduct.reduce((s, v) => s + v.parts.length, 0),
   'parkTrees', trees.length, 'streetTrees', streetTrees.length, '(candidates', streetBefore + ')',
-  'bridges', bridges.length, 'labels', labels.length, 'roadLabels', roadLabels.length, 'poiLabels', poiLabels.length);
+  'bridges', bridges.length, 'roads', roads.length, 'labels', labels.length, 'roadLabels', roadLabels.length, 'poiLabels', poiLabels.length);
 console.log('→', target, (fs.statSync(target).size / 1024).toFixed(1) + 'KB');
