@@ -1142,9 +1142,9 @@ const holoMat = new THREE.ShaderMaterial({
   uniforms: {
     uColor: { value: new THREE.Color(0xcfe4f4) },
     uRim: { value: new THREE.Color(0x2e6fa8) },
-    uMinO: { value: 0.10 },
-    uMaxO: { value: 0.40 },
-    uPow: { value: 1.7 },
+    uMinO: { value: 0.24 },
+    uMaxO: { value: 0.62 },
+    uPow: { value: 1.55 },
     uTime: { value: 0 },
     fogColor: { value: new THREE.Color(0xffffff) },
     fogNear: { value: 900 },
@@ -3636,8 +3636,197 @@ function stopDemo6() {
 }
 $('demo6-btn').onclick = () => (demo6State.active ? stopDemo6() : startDemo6());
 
-// ---------- 2号楼 透视 + 双机模拟（3层/4层，克隆整体模型中的 2号楼节点，整体不拆分） ----------
-const demo2State = { active: false, robots: [], group: null, bbox: null, source: null, signGroup: null };
+// ---------- 2号楼 透视 + 双机模拟（整栋壳体 + CAD 楼层板 + 机器人轨迹） ----------
+const demo2State = {
+  active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
+  plates: new Map(), selectedFloor: 3,
+};
+function demo2LargestLoop(segs) {
+  if (!segs.length) return null;
+  const adj = new Map();
+  segs.forEach((s, id) => {
+    if (!adj.has(s.ka)) adj.set(s.ka, []);
+    if (!adj.has(s.kb)) adj.set(s.kb, []);
+    adj.get(s.ka).push({ id, other: s.kb });
+    adj.get(s.kb).push({ id, other: s.ka });
+  });
+  const used = new Uint8Array(segs.length);
+  let best = null, bestArea = 0;
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    let id = i, start = segs[i].ka, cur = start, closed = false;
+    const pts = [];
+    while (id != null && !used[id]) {
+      used[id] = 1;
+      const s = segs[id];
+      const forward = s.ka === cur;
+      pts.push((forward ? s.a : s.b).clone());
+      const next = forward ? s.kb : s.ka;
+      if (next === start) { closed = true; break; }
+      cur = next;
+      const list = adj.get(cur) || [];
+      let nx = null;
+      for (const e of list) if (!used[e.id]) { nx = e; break; }
+      id = nx ? nx.id : null;
+    }
+    if (!closed || pts.length < 4) continue;
+    let area = 0;
+    for (let k = 0, j = pts.length - 1; k < pts.length; j = k++) {
+      area += pts[j].x * pts[k].z - pts[k].x * pts[j].z;
+    }
+    area = Math.abs(area) / 2;
+    if (area > bestArea) { bestArea = area; best = pts; }
+  }
+  return best;
+}
+
+// CAD 墙线 → 闭合外轮廓；取面积最大的闭环作为楼板边界
+function demo2CadLoop(segs2D, y) {
+  const segs = [];
+  const seen = new Set();
+  for (const [x1, z1, x2, z2] of segs2D) {
+    const a = new THREE.Vector3(x1, y, z1);
+    const b = new THREE.Vector3(x2, y, z2);
+    if (a.distanceToSquared(b) < 1e-4) continue;
+    const ka = `${Math.round(x1 * 50)},${Math.round(z1 * 50)}`;
+    const kb = `${Math.round(x2 * 50)},${Math.round(z2 * 50)}`;
+    if (ka === kb) continue;
+    const key = ka < kb ? ka + '|' + kb : kb + '|' + ka;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    segs.push({ a, b, ka, kb });
+  }
+  return demo2LargestLoop(segs);
+}
+
+function demo2AddFloorPlate(n, baseY, loop, bbox, replace = false) {
+  if (demo2State.plates.has(n)) {
+    if (!replace) return;
+    const old = demo2State.plates.get(n);
+    demo2State.group.remove(old.mesh, old.edge, old.label);
+    old.mesh.geometry.dispose(); old.mesh.material.dispose();
+    old.edge.geometry.dispose(); old.edge.material.dispose();
+    if (old.label.material.map) old.label.material.map.dispose();
+    old.label.material.dispose();
+    demo2State.plates.delete(n);
+  }
+  const y = baseY + (n - 1) * 3.8;
+  const boxMinX = bbox.min?.x ?? bbox.minX;
+  const boxMaxX = bbox.max?.x ?? bbox.maxX;
+  const boxMinZ = bbox.min?.z ?? bbox.minZ;
+  const boxMaxZ = bbox.max?.z ?? bbox.maxZ;
+  let shape;
+  if (loop && loop.length >= 4) {
+    shape = new THREE.Shape(loop.map((p) => new THREE.Vector2(p.x, -p.z)));
+  } else {
+    shape = new THREE.Shape([
+      new THREE.Vector2(boxMinX, -boxMinZ),
+      new THREE.Vector2(boxMaxX, -boxMinZ),
+      new THREE.Vector2(boxMaxX, -boxMaxZ),
+      new THREE.Vector2(boxMinX, -boxMaxZ),
+    ]);
+  }
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.28, bevelEnabled: false, steps: 1 });
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x68c7e8, emissive: 0x0b3446, emissiveIntensity: 0.45,
+    transparent: true, opacity: 0.09, depthWrite: false, side: THREE.DoubleSide,
+    roughness: 0.35, metalness: 0.0,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = y - 0.30;
+  mesh.renderOrder = 20;
+  demo2State.group.add(mesh);
+
+  const edge = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo, 25),
+    new THREE.LineBasicMaterial({ color: 0x9fe9ff, transparent: true, opacity: 0.48, depthWrite: false })
+  );
+  edge.position.copy(mesh.position);
+  edge.renderOrder = 21;
+  demo2State.group.add(edge);
+
+  let minX = boxMinX, maxX = boxMaxX, minZ = boxMinZ, maxZ = boxMaxZ;
+  if (loop) {
+    minX = Math.min(...loop.map((p) => p.x)); maxX = Math.max(...loop.map((p) => p.x));
+    minZ = Math.min(...loop.map((p) => p.z)); maxZ = Math.max(...loop.map((p) => p.z));
+  }
+  const label = makeLabel(`${n}F`, 'rgba(5,20,30,0.88)', '#9fe8ff', 0.5);
+  label.position.set(maxX + 2.8, y + 0.8, (minZ + maxZ) / 2);
+  label.material.depthTest = false;
+  label.renderOrder = 300;
+  label.visible = false;
+  demo2State.group.add(label);
+  demo2State.plates.set(n, { mesh, edge, label, y });
+  demo2SelectFloor(demo2State.selectedFloor || 3);
+}
+
+function demo2BuildFloorPlates(baseY, bbox) {
+  for (let n = 1; n <= 6; n++) demo2AddFloorPlate(n, baseY, null, bbox);
+  demo2SelectFloor(demo2State.selectedFloor || 3);
+}
+
+function demo2LoopArea(loop) {
+  if (!loop || loop.length < 3) return 0;
+  let a = 0;
+  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+    a += loop[j].x * loop[i].z - loop[i].x * loop[j].z;
+  }
+  return Math.abs(a) / 2;
+}
+
+function demo2SelectFloor(n) {
+  if (!demo2State.plates.size) return;
+  demo2State.selectedFloor = n;
+  for (const [num, p] of demo2State.plates) {
+    const on = num === n;
+    p.mesh.material.opacity = on ? 0.26 : 0.10;
+    p.mesh.material.emissiveIntensity = on ? 1.0 : 0.42;
+    p.edge.material.opacity = on ? 0.98 : 0.58;
+    p.label.visible = on;
+  }
+}
+
+function demo2MakeTrail(color) {
+  const max = 90;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 3), 3));
+  geom.setDrawRange(0, 0);
+  const mat = new THREE.LineBasicMaterial({
+    color, transparent: true, opacity: 0.86, depthTest: false, depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const line = new THREE.Line(geom, mat);
+  line.renderOrder = 260;
+  line.frustumCulled = false;
+  const dots = new THREE.Points(geom, new THREE.PointsMaterial({
+    color, size: 0.42, sizeAttenuation: true, transparent: true, opacity: 0.82,
+    depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  dots.renderOrder = 261;
+  dots.frustumCulled = false;
+  return { line, dots, positions: geom.attributes.position.array, count: 0, max, lastX: NaN, lastZ: NaN };
+}
+
+function demo2PushTrail(r) {
+  const t = r.trail;
+  if (!t) return;
+  const x = r.obj.position.x, z = r.obj.position.z;
+  if (Math.abs(x - t.lastX) + Math.abs(z - t.lastZ) < 0.12) return;
+  t.lastX = x; t.lastZ = z;
+  if (t.count >= t.max) {
+    t.positions.copyWithin(0, 3);
+    t.count = t.max - 1;
+  }
+  const o = t.count * 3;
+  t.positions[o] = x;
+  t.positions[o + 1] = r.floorY + 0.18;
+  t.positions[o + 2] = z;
+  t.count++;
+  t.line.geometry.setDrawRange(0, t.count);
+  t.line.geometry.attributes.position.needsUpdate = true;
+}
+
 async function spawnDemo2Robots(bbox, baseY) {
   const defs = [
     { file: '/models/models/detail/medicine.glb', floor: 3 },
@@ -3653,24 +3842,47 @@ async function spawnDemo2Robots(bbox, baseY) {
       const s = 1.1 / Math.max(ms.y, 0.01);
       model.scale.setScalar(s);
       model.position.set(0, -mb.min.y * s, 0);
-      model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      model.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = false;
+        if (o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          const cloned = mats.map((m) => {
+            const c = m.clone();
+            c.depthTest = false;
+            c.depthWrite = false;
+            return c;
+          });
+          o.material = Array.isArray(o.material) ? cloned : cloned[0];
+          o.renderOrder = 270;
+        }
+      });
       const g = new THREE.Group();
       g.add(model);
-      const y = baseY + (def.floor - 1) * 3.8 + 0.8;
-      g.position.set((bbox.min.x + bbox.max.x) / 2, y, (bbox.min.z + bbox.max.z) / 2);
+      const floorY = baseY + (def.floor - 1) * 3.8;
+      const y = floorY + 0.8;
+      const startX = (bbox.min.x + bbox.max.x) / 2 + (def.floor === 3 ? -9 : 9);
+      const startZ = (bbox.min.z + bbox.max.z) / 2 + (def.floor === 3 ? -5 : 5);
+      g.position.set(startX, y, startZ);
       demo2State.group.add(g);
       const bc = addBeacon(g, def.floor + 'F');
+      for (const o of [bc.beam, bc.ring, bc.glow, bc.tag]) {
+        if (o?.material) { o.material.depthTest = false; o.renderOrder = 280; }
+      }
+      const trail = demo2MakeTrail(def.floor === 3 ? 0x54f0d0 : 0xffb35c);
+      demo2State.group.add(trail.line, trail.dots);
       const margin = Math.min(2, Math.max(0.5, (bbox.max.x - bbox.min.x) / 4));
       const marginZ = Math.min(2, Math.max(0.5, (bbox.max.z - bbox.min.z) / 4));
       demo2State.robots.push({
-        obj: g, y, floor: def.floor, beacon: bc,
+        obj: g, y, floorY, floor: def.floor, beacon: bc, trail,
         minX: bbox.min.x + margin, maxX: bbox.max.x - margin,
         minZ: bbox.min.z + marginZ, maxZ: bbox.max.z - marginZ,
         wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
       });
+      demo2PushTrail(demo2State.robots[demo2State.robots.length - 1]);
       console.log('[2号楼模拟] 机器人已就位', def.file.split('/').pop(), '楼层', def.floor);
     } catch (e) {
-      console.warn('[2号楼模拟] 机器人模型加载失败', def.file, e);
+      console.warn('[2号楼模拟] 机器人模型加载失败', def.file, e?.message || e, (e?.stack || '').split('\n').slice(0, 3).join(' | '));
     }
   }
 }
@@ -3723,17 +3935,20 @@ async function loadDemo2Cad(baseY) {
       );
       demo2State.group.add(lg);
       const b = geo.bounds || f.bounds;
-      if (b) {
-        const w = (b.maxX - b.minX) * xf.s, h = (b.maxY - b.minY) * xf.s;
-        const slab = new THREE.Mesh(
-          new THREE.PlaneGeometry(Math.max(w, 0.1), Math.max(h, 0.1)),
-          new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide })
-        );
-        slab.rotation.x = -Math.PI / 2;
-        slab.position.set(xf.cx, yBase + 0.02, xf.cz);
-        demo2State.group.add(slab);
+      const n = f.floorNumber || 1;
+      const fb = b ? {
+        minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
+        maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
+        minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
+        maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
+      } : demo2State.bbox;
+      if (n >= 1) {
+        const loop = demo2CadLoop(segs, yBase);
+        const bboxArea = Math.max(1, (fb.maxX - fb.minX) * (fb.maxZ - fb.minZ));
+        const useLoop = loop && demo2LoopArea(loop) >= bboxArea * 0.12;
+        demo2AddFloorPlate(n, baseY, useLoop ? loop : null, fb, true);
       }
-      fpAddCadFloor('2号楼', f.floorNumber || 1, segs,
+      fpAddCadFloor('2号楼', n, segs,
         b ? {
           minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
           maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
@@ -3742,7 +3957,7 @@ async function loadDemo2Cad(baseY) {
         } : null);
       drawn++;
     } catch (e) {
-      console.warn('[2号楼模拟] CAD 楼层加载失败', f.floorKey, e.message);
+      console.warn('[2号楼模拟] CAD 楼层加载失败', f.floorKey, e.message, (e.stack || '').split('\n').slice(0, 4).join(' | '));
     }
   }
   console.log('[2号楼模拟] CAD 墙体/地面已绘制', drawn, '层');
@@ -3750,6 +3965,7 @@ async function loadDemo2Cad(baseY) {
 function updateDemo2(dt) {
   if (!demo2State.active) return;
   for (const r of demo2State.robots) {
+    demo2PushTrail(r);
     if (!r.wp) r.wp = { x: r.obj.position.x, z: r.obj.position.z };
     const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
     const dist = Math.hypot(dx, dz);
@@ -3789,7 +4005,21 @@ async function startDemo2() {
     source.updateWorldMatrix(true, false);
     const bld = source.clone(true);
     source.matrixWorld.decompose(bld.position, bld.quaternion, bld.scale);
-    bld.traverse((o) => { if (o.isMesh) { o.material = holoMat; o.castShadow = true; } });
+    const holoEdgeMat = new THREE.LineBasicMaterial({
+      color: 0x9fe9ff, transparent: true, opacity: 0.68, depthWrite: false,
+    });
+    bld.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = holoMat;
+      o.castShadow = true;
+      const edgeGeo = new THREE.EdgesGeometry(o.geometry, 38);
+      if (edgeGeo.attributes.position.count) {
+        const edge = new THREE.LineSegments(edgeGeo, holoEdgeMat);
+        edge.renderOrder = 6;
+        edge.frustumCulled = false;
+        o.add(edge);
+      }
+    });
     demo2State.group.add(bld);
     bbox = new THREE.Box3().setFromObject(bld);
   } catch (e) {
@@ -3797,6 +4027,8 @@ async function startDemo2() {
   }
   if (!bbox) { console.warn('[2号楼模拟] 无法定位 2号楼，退出'); stopDemo2(); return; }
   demo2State.bbox = bbox;
+  demo2State.plates.clear();
+  demo2BuildFloorPlates(bbox.min.y, bbox);
   // 原 2 号楼整栋隐藏（含 <3m 的雨棚/门头薄板）；门头文字是独立节点，单独隐藏
   const source = realBuildings.get('2号楼');
   if (source) { demo2State.source = source; source.visible = false; }
@@ -3817,9 +4049,9 @@ async function startDemo2() {
     const ctr = bbox.getCenter(new THREE.Vector3());
     const size = bbox.getSize(new THREE.Vector3());
     const dist = Math.max(size.z, size.y) * 0.95 + 16;
-    flyToPos(new THREE.Vector3(ctr.x, ctr.y, ctr.z + dist), ctr);
+    flyToPos(new THREE.Vector3(ctr.x, ctr.y + size.y * 0.45, ctr.z + dist), ctr);
   }
-  console.log('[2号楼模拟] 透视白膜已应用（整体模型节点，整体不分层）bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
+  console.log('[2号楼模拟] 透视白膜 + 楼层板已应用，bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
 }
 function stopDemo2() {
   if (!demo2State.active) return;
@@ -3834,6 +4066,8 @@ function stopDemo2() {
     scene.remove(demo2State.group);
     demo2State.group = null;
   }
+  demo2State.plates.clear();
+  demo2State.selectedFloor = 3;
   liveGroup.visible = $('tg-live').checked;
   closeFloorPlan();
   const btn = $('demo2-btn');
@@ -3908,6 +4142,7 @@ function fpPickFloor(n) {
   const i = fpState.floors.findIndex((f) => f.n === n);
   fpState.cur = i >= 0 ? i : 0;
   buildFloorChips();
+  if (demo2State.active) demo2SelectFloor(n);
 }
 function fpAddCadFloor(building, n, segs, b) {
   if (fpState.building !== building) return;
@@ -3946,7 +4181,11 @@ function buildFloorChips() {
     el.className = 'fp-flr' + (i === fpState.cur ? ' on' : '');
     el.dataset.n = f.n;
     el.innerHTML = f.n + 'F<span class="rd"></span>';
-    el.onclick = () => { fpState.cur = i; fpState.userPicked = true; fpState.zoom = 1; fpState.panX = 0; fpState.panY = 0; buildFloorChips(); fpDraw(true); };
+    el.onclick = () => {
+      fpState.cur = i; fpState.userPicked = true; fpState.zoom = 1; fpState.panX = 0; fpState.panY = 0;
+      buildFloorChips(); fpDraw(true);
+      if (demo2State.active) demo2SelectFloor(f.n);
+    };
     wrap.appendChild(el);
   });
 }
