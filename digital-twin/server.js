@@ -23,7 +23,7 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
-const RELAY_HINT = '中控凭证未配置：复制 digital-twin/twin-relay.example.js 为 digital-twin/twin-relay.js 并填入凭证后重启服务。';
+const RELAY_HINT = '中控凭证未配置：把 twin-relay.credentials.json 放到 digital-twin/ 目录，或设置环境变量 TWIN_CLIENT_ID/TWIN_CLIENT_SECRET/TWIN_ACCESS_KEY_ID/TWIN_ACCESS_KEY_SECRET，重启服务。';
 
 function handleTwinResource(req, res, twinRelay) {
   if (req.url.split('?')[0] !== '/twin-resource') return false;
