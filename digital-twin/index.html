@@ -956,11 +956,40 @@ function computeCampusFocus() {
   return campusFocus;
 }
 
+// 用独立导出的 6号楼.glb 替换整体模型里的旧 6 号楼（坐标同源，加载后直接对齐）
+async function replaceSixModel() {
+  const oldSix = realBuildings.get('6号楼');
+  if (!oldSix) return;
+  try {
+    const gltf = await makeGLTFLoader().loadAsync('/models/models/6号楼.glb');
+    const obj = gltf.scene;
+    const newSix = obj.getObjectByName('6号楼');
+    if (!newSix) throw new Error('6号楼节点缺失');
+    obj.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        o.userData.buildingName = '6号楼';
+      }
+    });
+    oldSix.parent.parent.add(obj); // 与整体同处模型根节点，继承配准变换
+    obj.updateMatrixWorld(true);
+    oldSix.visible = false;
+    oldSix.name = '6号楼_old';
+    newSix.name = '6号楼';
+    realBuildings.set('6号楼', newSix);
+    liveBuildingXf.clear(); // 实时机器人按新节点重算落位
+    console.log('[模型] 6号楼已替换为独立 GLB');
+  } catch (e) {
+    console.warn('[模型] 6号楼替换失败，保留整体模型节点', e);
+  }
+}
+
 function loadRealModel() {
   if (realLoaded || realLoading) return;
   realLoading = true;
   showLoader('正在加载整体模型…');
-  makeGLTFLoader().load('/models/models/整体.glb', (gltf) => {
+  makeGLTFLoader().load('/models/models/整体.glb', async (gltf) => {
     const obj = gltf.scene;
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
@@ -987,6 +1016,7 @@ function loadRealModel() {
       }
     });
     realGroup.add(obj);
+    await replaceSixModel();
     realLoaded = true;
     realLoading = false;
     realGroup.visible = document.getElementById('tg-real').checked;
