@@ -857,11 +857,11 @@ function updateSnow(dt, cam, t) {
 }
 
 function makeLabel(text, bg = 'rgba(255,255,255,0.94)', fg = '#2b3a4a', scale = 1) {
-  const fs = Math.round(42 * scale);
-  const padX = Math.round(28 * scale);
-  const ch = Math.round(62 * scale);
+  const fs = Math.round(38 * scale);
+  const padX = Math.round(22 * scale);
+  const ch = Math.round(56 * scale);
   const probe = document.createElement('canvas').getContext('2d');
-  probe.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
+  probe.font = `600 ${fs}px "Microsoft YaHei", sans-serif`;
   const w = Math.ceil(probe.measureText(text).width) + padX;
   const c = document.createElement('canvas');
   c.width = w; c.height = ch;
@@ -876,10 +876,10 @@ function makeLabel(text, bg = 'rgba(255,255,255,0.94)', fg = '#2b3a4a', scale = 
   g.closePath();
   g.fillStyle = bg;
   g.fill();
-  g.strokeStyle = 'rgba(90,110,130,0.45)';
-  g.lineWidth = 1.5;
+  g.strokeStyle = 'rgba(90,120,140,0.28)';
+  g.lineWidth = 1;
   g.stroke();
-  g.font = `bold ${fs}px "Microsoft YaHei", sans-serif`;
+  g.font = `600 ${fs}px "Microsoft YaHei", sans-serif`;
   g.fillStyle = fg;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
@@ -3390,20 +3390,26 @@ function buildContext() {
   // 路名 / POI：单独一组，按距离 LOD
   for (const l of [...CONTEXT.roadLabels, ...CONTEXT.poiLabels]) {
     const isRoad = l.kind === 'road';
-    const sp = makeLabel(l.text, 'rgba(10,20,34,0.82)', isRoad ? '#cfe8ff' : '#e8f4ff', isRoad ? 0.68 : 0.8);
-    sp.position.set(l.x, isRoad ? 5 : 20, l.z);
+    const sp = makeLabel(
+      l.text,
+      isRoad ? 'rgba(5,14,24,0.56)' : 'rgba(6,16,28,0.64)',
+      isRoad ? '#a9c9dc' : '#d0e2ee',
+      isRoad ? 0.43 : 0.56,
+    );
+    sp.position.set(l.x, isRoad ? 4.2 : 18, l.z);
     sp.userData.kind = l.kind;
-    if (isRoad) { sp.material.depthTest = true; sp.material.depthWrite = false; }
+    sp.material.depthTest = true;
+    sp.material.depthWrite = false;
     poiLabelGroup.add(sp);
   }
 
   // 功能区/社区名：补足住宅区、学校、医院等面数据，避免只有零散 POI
   const labelTexts = new Set([...CONTEXT.roadLabels, ...CONTEXT.poiLabels].map((l) => l.text));
   const zoneStyle = {
-    residential: ['rgba(10,20,34,0.74)', '#d7e6f4', 0.6, 14],
-    school: ['rgba(35,28,8,0.78)', '#ffe2a4', 0.68, 17],
-    hospital: ['rgba(8,30,20,0.78)', '#b8f0d0', 0.68, 17],
-    commercial: ['rgba(34,18,10,0.78)', '#ffd0b0', 0.66, 16],
+    residential: ['rgba(5,14,24,0.54)', '#b9d2e2', 0.40, 13],
+    school: ['rgba(22,16,5,0.58)', '#e9d39b', 0.46, 15],
+    hospital: ['rgba(4,18,12,0.58)', '#a9d6bf', 0.46, 15],
+    commercial: ['rgba(22,11,7,0.58)', '#e0b8a2', 0.44, 14],
   };
   for (const z of CONTEXT.zones || []) {
     const st = zoneStyle[z.cls];
@@ -3415,15 +3421,24 @@ function buildContext() {
     const sp = makeLabel(z.name, bg, fg, scale);
     sp.position.set(cx, y, cz);
     sp.userData.kind = 'poi';
+    sp.material.depthTest = true;
+    sp.material.depthWrite = false;
     poiLabelGroup.add(sp);
     labelTexts.add(z.name);
   }
 
   // 地标
   for (const l of CONTEXT.labels) {
-    const sp = makeLabel(l.text, 'rgba(10,20,34,0.82)', '#dff2ff', 1.1);
-    sp.position.set(l.x, l.kind === 'viaduct' ? 30 : l.kind === 'water' ? 18 : 22, l.z);
+    const sp = makeLabel(
+      l.text,
+      'rgba(5,14,24,0.58)',
+      '#b6d5e5',
+      l.kind === 'viaduct' ? 0.54 : 0.66,
+    );
+    sp.position.set(l.x, l.kind === 'viaduct' ? 22 : l.kind === 'water' ? 15 : 19, l.z);
     sp.userData.kind = l.kind;
+    sp.material.depthTest = true;
+    sp.material.depthWrite = false;
     contextLabelGroup.add(sp);
   }
 
