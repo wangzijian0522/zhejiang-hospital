@@ -3862,11 +3862,6 @@ function cadPlanFor(name, n) {
   return pr;
 }
 
-const median = (arr) => {
-  const a = [...arr].sort((x, y) => x - y);
-  return a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
-};
-
 // 配准：CAD 平面单位就是米（unit=m），尺度固定 1，只判断轴向是否要换（6号楼图纸与模型差 90°）。
 // 判据：变换后墙线必须装进该层楼体截面，取「溢出量最小、贴合余量最小」的轴向。
 async function calibrateBuilding(name) {
