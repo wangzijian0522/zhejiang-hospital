@@ -329,6 +329,9 @@
     </div>
   </div>
 </div>
+<div id="focus-veil" style="position:fixed; inset:0; z-index:95; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at 50% 45%, rgba(8,20,32,.92), rgba(3,8,14,.98)); opacity:0; pointer-events:none; transition:opacity .22s ease;">
+  <span id="focus-veil-text" style="color:#9fe8ff; font-size:14px; letter-spacing:2px;"></span>
+</div>
 <div id="loader" style="position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(160deg,#0e1626 0%,#1a2b45 55%,#0e1c30 100%); opacity:0; transition:opacity .8s ease;">
   <div style="position:relative; width:96px; height:96px;">
     <div style="position:absolute; inset:0; border-radius:50%; border:4px solid rgba(255,255,255,.1); border-top-color:#4da3ff; animation:lspin 1s linear infinite;"></div>
@@ -1005,6 +1008,22 @@ function hideLoader() {
 }
 function setLoaderPct(p) { loaderPct.textContent = Math.round(p) + '%'; }
 
+// 切入/切出透视的过渡遮罩：先把重活（壳体边线、楼层截面）盖住，再随相机飞行淡出
+function focusVeil(on, text) {
+  const el = document.getElementById('focus-veil');
+  const label = document.getElementById('focus-veil-text');
+  if (!el) return Promise.resolve();
+  if (label) label.textContent = on ? (text || '') : '';
+  if (on) {
+    el.style.pointerEvents = 'auto';
+    requestAnimationFrame(() => { el.style.opacity = '1'; });
+    return new Promise((r) => setTimeout(r, 180));
+  }
+  el.style.opacity = '0';
+  el.style.pointerEvents = 'none';
+  return Promise.resolve();
+}
+
 // ---------- 整体模型（按需加载） ----------
 const realGroup = new THREE.Group();
 let realModelRef = null; // { obj, cx, cy, cz }：模型中心基准，供实时配准
@@ -1037,6 +1056,7 @@ function applyRealCal() {
     }
     liveBuildingXf.clear();
   }
+  dropShellCache(); // 模型位置变了，缓存的壳体会错位
 }
 scene.add(realGroup);
 const realBuildings = new Map(); // 楼名 -> mesh（2号楼/6号楼 可点击分层）
@@ -1161,6 +1181,31 @@ function loadRealModel() {
     hideLoader();
   });
 }
+
+// 空闲预热：透视最贵的是壳体边线（2号楼约 13 万条边）和逐层截面扫描，
+// 提前在空闲时算好，双击进入就只剩 add + 相机飞行。
+let prewarmed = false;
+function prewarmDemos(retry = 0) {
+  if (prewarmed) return;
+  const names = ['2号楼', '6号楼'].filter((n) => realBuildings.get(n));
+  // 模型/中控目录都可能还没就绪，等到齐了再预热（最多等 ~16s）
+  if ((!names.length || !names.some((n) => floorInfoFor(n))) && retry < 8) {
+    setTimeout(() => prewarmDemos(retry + 1), 2000);
+    return;
+  }
+  if (!names.length) return;
+  for (const name of names) {
+    buildingVertices(realBuildings.get(name));
+    prepareShell(name);
+    const info = floorInfoFor(name);
+    if (!info) continue;
+    for (const n of info.floors) modelBandFrame(name, info.baseY + (n - 1) * info.h);
+    for (const n of info.floors) cadPlanFor(name, n);
+  }
+  prewarmed = true;
+  console.log('[预热] 2/6号楼壳体与楼层截面已就绪');
+}
+setTimeout(() => prewarmDemos(), 2500);
 
 loadRealModel();
 
@@ -1588,6 +1633,19 @@ function removeLiveMarker(rid) {
   liveGroup.remove(mk.obj);
   liveMarkers.delete(rid);
 }
+// 总览里的真机落位也要和楼层套件同源：CAD 平面缓存好之后现算一份楼层帧
+const liveFrameCache = new Map();
+function liveFloorFrame(name, n) {
+  const key = name + '/' + n;
+  if (liveFrameCache.has(key)) return liveFrameCache.get(key);
+  const plan = cadPlanSync.get(key);
+  const info = floorInfoFor(name);
+  if (!plan || !info) return null;
+  const frame = floorFrame(name, n, plan);
+  if (frame) liveFrameCache.set(key, frame);
+  return frame;
+}
+
 function refreshLiveMarkers() {
   if (!$('tg-live')) return;
   for (const [rid, mk] of liveMarkers) {
@@ -1599,9 +1657,10 @@ function refreshLiveMarkers() {
     if (!xf) { mk.obj.visible = false; continue; }
     mk.obj.visible = true;
     const p = loc.cadPose;
-    // 透视中优先用该层的套件变换：楼板/墙体/真机共用一套坐标，才不会各走各的
+    // 优先用「该层套件」的变换：楼板/墙体/真机共用一套坐标，才不会各走各的；
+    // 透视中直接用会话里的帧，总览下用同一套公式（CAD 平面已缓存时）现算。
     const st = floor.buildingName === '2号楼' ? demo2State : floor.buildingName === '6号楼' ? demo6State : null;
-    const fr = st?.frames?.get(floor.floorNumber);
+    const fr = st?.frames?.get(floor.floorNumber) || liveFloorFrame(floor.buildingName, floor.floorNumber);
     if (fr) {
       const [wx, wz] = fr.toWorld(p.x, p.y);
       mk.obj.position.set(wx, fr.y + 0.8, wz);
@@ -3557,6 +3616,7 @@ const FLOOR_FIT = {
 const floorInfoCache = new Map();
 const buildingVertexCache = new Map();
 const cadPlanCache = new Map();
+const cadPlanSync = new Map(); // 解析完成的平面，供实时落位同步取用
 
 // 楼栋全部顶点（world 坐标，扁平 Float32Array），供按高度带取截面
 function buildingVertices(node) {
@@ -3787,7 +3847,9 @@ function cadPlanFor(name, n) {
       const filtered = segs.filter(([x1, y1, x2, y2]) => inBox(x1, y1) && inBox(x2, y2));
       if (filtered.length > segs.length * 0.5) segs.length = 0, segs.push(...filtered);
     }
-    return { bounds, segs, center, __bounds: geo.bounds || floor.bounds };
+    const result = { bounds, segs, center, __bounds: geo.bounds || floor.bounds };
+    cadPlanSync.set(key, result);
+    return result;
   })().catch(() => null);
   cadPlanCache.set(key, pr);
   return pr;
@@ -4015,8 +4077,52 @@ function applyFloorFocus(state, n) {
   }
 }
 
+// ---------- 透视壳体缓存 ----------
+// 每次进入都重新 clone + EdgesGeometry 会卡 ~200ms（2号楼 13 万条边）。
+// 壳体按楼栋缓存，进出只做 add/remove，边线不再重建。
+const shellCache = new Map();
+function prepareShell(name) {
+  const hit = shellCache.get(name);
+  if (hit) return hit;
+  const src = realBuildings.get(name);
+  if (!src) return null;
+  src.updateWorldMatrix(true, false);
+  const bld = src.clone(true);
+  src.matrixWorld.decompose(bld.position, bld.quaternion, bld.scale);
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x9fe9ff, transparent: true, opacity: 0.68, depthWrite: false });
+  bld.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = holoMat;
+    o.castShadow = false;
+    o.geometry.computeBoundingBox();
+    const gs = o.geometry.boundingBox.getSize(new THREE.Vector3());
+    if (gs.y < 0.8) { o.visible = false; return; } // 场地/雨棚薄片在暗场里是大块薄板
+    const edgeGeo = new THREE.EdgesGeometry(o.geometry, 38);
+    if (edgeGeo.attributes.position.count) {
+      const edge = new THREE.LineSegments(edgeGeo, edgeMat);
+      edge.renderOrder = 6;
+      edge.frustumCulled = false;
+      o.add(edge);
+    }
+  });
+  const shell = { name, bld, edgeMat, box: new THREE.Box3().setFromObject(bld) };
+  bld.visible = false;
+  shellCache.set(name, shell);
+  return shell;
+}
+function dropShellCache() {
+  for (const shell of shellCache.values()) {
+    scene.remove(shell.bld);
+    shell.bld.traverse((o) => {
+      if (o.isLineSegments && o.material === shell.edgeMat) o.geometry.dispose();
+    });
+    shell.edgeMat.dispose();
+  }
+  shellCache.clear();
+}
+
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
-const demo6State = { active: false, robots: [], group: null, bbox: null, shell: null, plates: new Map(), selectedFloor: 3 };
+const demo6State = { active: false, robots: [], group: null, bbox: null, plates: new Map(), selectedFloor: 3 };
 
 async function spawnDemo6Robots(bbox, baseY) {
   const defs = [
@@ -4152,31 +4258,15 @@ async function startDemo6() {
   demo6State.group = new THREE.Group();
   scene.add(demo6State.group);
   let bbox = null;
+  // 先把画面淡入遮住，壳体/楼层这类同步重活不会以掉帧的形式被看到
+  await focusVeil(true, '正在切入 6 号楼透视…');
   try {
-    grp.updateWorldMatrix(true, false);
-    const bld = grp.clone(true);
-    grp.matrixWorld.decompose(bld.position, bld.quaternion, bld.scale);
-    const edgeMat = new THREE.LineBasicMaterial({
-      color: 0x9fe9ff, transparent: true, opacity: 0.68, depthWrite: false,
-    });
-    bld.traverse((o) => {
-      if (!o.isMesh) return;
-      o.material = holoMat;
-      o.castShadow = false;
-      o.geometry.computeBoundingBox();
-      const gs = o.geometry.boundingBox.getSize(new THREE.Vector3());
-      if (gs.y < 0.8) { o.visible = false; return; }
-      const edgeGeo = new THREE.EdgesGeometry(o.geometry, 38);
-      if (edgeGeo.attributes.position.count) {
-        const edge = new THREE.LineSegments(edgeGeo, edgeMat);
-        edge.renderOrder = 6;
-        edge.frustumCulled = false;
-        o.add(edge);
-      }
-    });
-    demo6State.group.add(bld);
-    demo6State.shell = bld;
-    bbox = new THREE.Box3().setFromObject(bld);
+    const shell = prepareShell('6号楼');
+    if (!shell) throw new Error('6 号楼壳体不可用');
+    shell.bld.visible = true;
+    scene.add(shell.bld);
+    demo6State.shellRef = shell;
+    bbox = shell.box.clone();
   } catch (e) {
     console.warn('[6号楼模拟] 6号楼壳体构建失败', e);
   }
@@ -4197,6 +4287,7 @@ async function startDemo6() {
   }
   liveGroup.visible = $('tg-live').checked;
   flyToFloor(demo6State, '6号楼', demo6State.selectedFloor);
+  focusVeil(false);
   console.log('[6号楼模拟] 沉浸透视 + 楼层板已应用');
 }
 function stopDemo6() {
@@ -4206,6 +4297,11 @@ function stopDemo6() {
   setDemoBack(false);
   demo6State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
   demo6State.robots = [];
+  if (demo6State.shellRef) {
+    scene.remove(demo6State.shellRef.bld);
+    demo6State.shellRef.bld.visible = false;
+    demo6State.shellRef = null;
+  }
   if (demo6State.group) {
     disposeDemoSubtree(demo6State.group, '6号楼');
     scene.remove(demo6State.group);
@@ -4216,7 +4312,6 @@ function stopDemo6() {
   demo6State.cages?.clear();
   demo6State.frames?.clear();
   demo6State.bbox = null;
-  demo6State.shell = null;
   demo6State.selectedFloor = 3;
   liveGroup.visible = $('tg-live').checked;
   refreshLiveMarkers();   // 退出后解除按层过滤
@@ -4655,36 +4750,15 @@ async function startDemo2() {
   demo2State.group = new THREE.Group();
   scene.add(demo2State.group);
   let bbox = null;
+  // 先把画面淡入遮住，壳体/楼层这类同步重活不会以掉帧的形式被看到
+  await focusVeil(true, '正在切入 2 号楼透视…');
   try {
-    const source = realBuildings.get('2号楼');
-    if (!source) throw new Error('整体模型中的 2号楼 尚未就绪');
-    source.updateWorldMatrix(true, false);
-    const bld = source.clone(true);
-    source.matrixWorld.decompose(bld.position, bld.quaternion, bld.scale);
-    const holoEdgeMat = new THREE.LineBasicMaterial({
-      color: 0x9fe9ff, transparent: true, opacity: 0.68, depthWrite: false,
-    });
-    bld.traverse((o) => {
-      if (!o.isMesh) return;
-      o.material = holoMat;
-      o.castShadow = false;
-      o.geometry.computeBoundingBox();
-      const gs = o.geometry.boundingBox.getSize(new THREE.Vector3());
-      // 场地/雨棚等扁平几何在暗场里会变成大块薄片，聚焦模式下直接隐藏
-      if (gs.y < 0.8) {
-        o.visible = false;
-        return;
-      }
-      const edgeGeo = new THREE.EdgesGeometry(o.geometry, 38);
-      if (edgeGeo.attributes.position.count) {
-        const edge = new THREE.LineSegments(edgeGeo, holoEdgeMat);
-        edge.renderOrder = 6;
-        edge.frustumCulled = false;
-        o.add(edge);
-      }
-    });
-    demo2State.group.add(bld);
-    bbox = new THREE.Box3().setFromObject(bld);
+    const shell = prepareShell('2号楼');
+    if (!shell) throw new Error('整体模型中的 2 号楼 尚未就绪');
+    shell.bld.visible = true;
+    scene.add(shell.bld);
+    demo2State.shellRef = shell;
+    bbox = shell.box.clone();
   } catch (e) {
     console.warn('[2号楼模拟] 2号楼模型加载失败', e);
   }
@@ -4711,6 +4785,7 @@ async function startDemo2() {
   liveGroup.visible = $('tg-live').checked;
   // 相机：正南侧正视，按当前层楼板取景
   flyToFloor(demo2State, '2号楼', demo2State.selectedFloor);
+  focusVeil(false);
   console.log('[2号楼模拟] 透视白膜 + 楼层板已应用，bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
 }
 function stopDemo2() {
@@ -4723,6 +4798,11 @@ function stopDemo2() {
   demo2State.bbox = null;
   if (demo2State.source) { demo2State.source.visible = true; demo2State.source = null; }
   if (demo2State.signGroup) { demo2State.signGroup.visible = true; demo2State.signGroup = null; }
+  if (demo2State.shellRef) {
+    scene.remove(demo2State.shellRef.bld);
+    demo2State.shellRef.bld.visible = false;
+    demo2State.shellRef = null;
+  }
   if (demo2State.group) {
     disposeDemoSubtree(demo2State.group, '2号楼');
     scene.remove(demo2State.group);
@@ -5042,6 +5122,7 @@ window.__dt = {
   get demo2State() { return demo2State; },
   get demo6State() { return demo6State; },
   cadPlanFor, floorInfoFor, modelBandFrame, floorFrame, calibrateBuilding, FLOOR_FIT,
+  liveFloorFrame, cadPlanSync, stableBand, prepareShell, focusVeil,
   setHour(h) {
     timeState.hour = h;
     timeState.playing = false;
