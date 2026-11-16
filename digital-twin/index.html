@@ -3981,8 +3981,9 @@ function applyFloorFocus(state, n) {
   if (!state.walls) return;
   for (const [num, line] of state.walls) {
     const d = Math.abs(num - n);
-    line.visible = true;
-    line.material.opacity = d === 0 ? 0.42 : d === 1 ? 0.1 : 0.03;
+    // 远处的楼层墙线全叠起来会糊成一张网，只留当前层和上下各一层
+    line.visible = d <= 1;
+    line.material.opacity = d === 0 ? 0.45 : 0.09;
   }
   for (const [num, cage] of state.cages) {
     const on = num === n;
@@ -4113,7 +4114,7 @@ function updateDemo6(dt) {
   const sel = demo6State.plates.get(demo6State.selectedFloor);
   if (sel) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.09 + pulse * 0.025;
+    sel.mesh.material.opacity = 0.15 + pulse * 0.03;
     sel.edge.material.opacity = 0.82 + pulse * 0.16;
   }
 }
@@ -4403,7 +4404,7 @@ function demo2SelectFloor(n, state = demo2State) {
   applyFloorFocus(state, n);
   for (const [num, p] of state.plates) {
     const on = num === n;
-    p.mesh.material.opacity = on ? 0.09 : 0.03;
+    p.mesh.material.opacity = on ? 0.16 : 0.02;
     p.mesh.material.emissiveIntensity = on ? 0.55 : 0.2;
     p.edge.material.opacity = on ? 0.92 : 0.16;
     p.edge.visible = on;
@@ -4590,7 +4591,7 @@ function updateDemo2(dt) {
   const sel = demo2State.plates.get(demo2State.selectedFloor);
   if (sel) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.09 + pulse * 0.025;
+    sel.mesh.material.opacity = 0.15 + pulse * 0.03;
     sel.edge.material.opacity = 0.82 + pulse * 0.16;
   }
 }
