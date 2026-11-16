@@ -342,7 +342,6 @@
   <div id="loader-pct" style="margin-top:8px; color:#7f9cc0; font-size:12px; font-variant-numeric:tabular-nums; min-height:16px;"></div>
 </div>
 
-<script src="./vendor/echarts.min.js"></script>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -1087,35 +1086,6 @@ function computeCampusFocus() {
   return campusFocus;
 }
 
-// 用独立导出的 6号楼.glb 替换整体模型里的旧 6 号楼（坐标同源，加载后直接对齐）
-async function replaceSixModel() {
-  const oldSix = realBuildings.get('6号楼');
-  if (!oldSix) return;
-  try {
-    const gltf = await makeGLTFLoader().loadAsync('/models/models/6号楼.glb');
-    const obj = gltf.scene;
-    const newSix = obj.getObjectByName('6号楼');
-    if (!newSix) throw new Error('6号楼节点缺失');
-    obj.traverse((o) => {
-      if (o.isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-        o.userData.buildingName = '6号楼';
-      }
-    });
-    oldSix.parent.parent.add(obj); // 与整体同处模型根节点，继承配准变换
-    obj.updateMatrixWorld(true);
-    oldSix.visible = false;
-    oldSix.name = '6号楼_old';
-    newSix.name = '6号楼';
-    realBuildings.set('6号楼', newSix);
-    liveBuildingXf.clear(); // 实时机器人按新节点重算落位
-    console.log('[模型] 6号楼已替换为独立 GLB');
-  } catch (e) {
-    console.warn('[模型] 6号楼替换失败，保留整体模型节点', e);
-  }
-}
-
 // 模型导出时可能给节点名加序号（如 1号楼003），与中控 buildingName 对齐
 const NODE_NAME_FIX = { '1号楼003': '1号楼' };
 
@@ -1154,8 +1124,7 @@ function loadRealModel() {
       }
     });
     realGroup.add(obj);
-    await replaceSixModel();
-    realLoaded = true;
+    realLoaded = true; // 6号楼 直接用整体模型里的节点（实测与独立 6号楼.glb 像素差 0.26%）
     realLoading = false;
     realGroup.visible = document.getElementById('tg-real').checked;
     const r = Math.max(size.x, size.y, size.z) * s;
@@ -1205,7 +1174,18 @@ function prewarmDemos(retry = 0) {
   prewarmed = true;
   console.log('[预热] 2/6号楼壳体与楼层截面已就绪');
 }
-setTimeout(() => prewarmDemos(), 2500);
+// 预热不抢首屏：等 load + 空闲再做，省流量/慢网直接跳过
+function schedulePrewarm() {
+  const conn = navigator.connection;
+  if (conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || ''))) return;
+  const run = () => {
+    if ('requestIdleCallback' in window) requestIdleCallback(() => prewarmDemos(), { timeout: 10000 });
+    else setTimeout(() => prewarmDemos(), 2000);
+  };
+  if (document.readyState === 'complete') run();
+  else window.addEventListener('load', run, { once: true });
+}
+schedulePrewarm();
 
 loadRealModel();
 
@@ -1597,19 +1577,15 @@ function updateLiveHud() {
   else liveHud.textContent = `实时机器人：${readyCount} 台就位${stale ? '（' + stale + ' 台未配准/离线）' : ''}`;
   renderRobotLiveList();
 }
-async function createLiveMarker(r) {
-  const type = liveTypeOf(r);
-  const g = new THREE.Group();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.7), new THREE.MeshLambertMaterial({ color: 0x2b7fd4 }));
-  g.add(box);
-  liveGroup.add(g);
-  const mk = { obj: g, modelType: type };
-  liveMarkers.set(r.robotId, mk);
+// 真机模型（每台 8~12MB）只在透视里才需要；总览用方块占位，避免首屏被模型拖垮
+async function loadLiveMarkerModel(mk, type, rid) {
+  if (mk.loaded || mk.loading) return;
+  mk.loading = true;
   const file = LIVE_TYPE_FILES[type];
   try {
     let gltf = gltfCache.get(file);
     if (!gltf) { gltf = await makeGLTFLoader().loadAsync(file); gltfCache.set(file, gltf); }
-    if (liveMarkers.get(r.robotId) !== mk) { liveGroup.remove(g); return; }
+    if (liveMarkers.get(rid) !== mk) return;
     const model = gltf.scene.clone(true);
     const mb = new THREE.Box3().setFromObject(model);
     const ms = mb.getSize(new THREE.Vector3());
@@ -1617,13 +1593,35 @@ async function createLiveMarker(r) {
     model.scale.setScalar(s);
     model.position.set(0, -mb.min.y * s, 0);
     model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    g.add(model);
-    g.remove(box);
-    mk.beacon = addBeacon(g, '·');
-    mk.floor = null;
+    mk.obj.add(model);
+    if (mk.placeholder) { mk.obj.remove(mk.placeholder); mk.placeholder.geometry.dispose(); mk.placeholder.material.dispose(); mk.placeholder = null; }
+    mk.loaded = true;
   } catch (e) {
     console.warn('[twin] 机器人模型加载失败', file, e);
+  } finally {
+    mk.loading = false;
   }
+}
+// 进入透视时把已就位的真机升级成实模型
+function upgradeLiveMarkers() {
+  for (const [rid, mk] of liveMarkers) loadLiveMarkerModel(mk, mk.modelType, rid);
+}
+
+function createLiveMarker(r) {
+  const type = liveTypeOf(r);
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.7), new THREE.MeshLambertMaterial({ color: 0x2b7fd4 }));
+  g.add(box);
+  liveGroup.add(g);
+  const mk = { obj: g, modelType: type, loaded: false, loading: false, placeholder: box };
+  liveMarkers.set(r.robotId, mk);
+  if (mk.placeholder) {
+    const bc = addBeacon(g, '·');
+    mk.beacon = bc;
+  }
+  mk.floor = null;
+  // 总览只保留方块；透视里再拉 8~12MB 的机器人模型
+  if (focusState.active) loadLiveMarkerModel(mk, type, r.robotId);
   refreshLiveMarkers();
 }
 function removeLiveMarker(rid) {
@@ -1774,9 +1772,27 @@ document.querySelectorAll('.simbox button').forEach((b) => {
 });
 
 // ---------- ECharts 指标面板 ----------
+// 1MB 的 echarts 不参与首屏：首帧渲染完、浏览器空闲时再拉，面板打开时也兜底加载
 const chartsState = { inited: false, charts: {}, series: {} };
-function initCharts() {
-  if (chartsState.inited || !window.echarts) return;
+let echartsPromise = null;
+function ensureEcharts() {
+  if (window.echarts) return Promise.resolve(window.echarts);
+  if (echartsPromise) return echartsPromise;
+  echartsPromise = new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = './vendor/echarts.min.js';
+    el.onload = () => resolve(window.echarts);
+    el.onerror = () => { echartsPromise = null; reject(new Error('echarts 加载失败')); };
+    document.head.appendChild(el);
+  });
+  return echartsPromise;
+}
+async function initCharts() {
+  if (chartsState.inited) return;
+  if (!window.echarts) {
+    try { await ensureEcharts(); } catch { return; }
+    if (chartsState.inited) return;
+  }
   chartsState.inited = true;
   const mk = (id) => { const el = $(id); if (!el) return null; const c = window.echarts.init(el, null, { renderer: 'canvas' }); chartsState.charts[id] = c; return c; };
   mk('ch-flow');
@@ -1993,7 +2009,13 @@ $('charts-btn').onclick = () => {
     setTimeout(() => Object.values(chartsState.charts).forEach((c) => c.resize()), 450);
   }
 };
-initCharts();
+// 首帧之后空闲时再加载图表库，避免和模型争夺带宽
+function scheduleCharts() {
+  const run = () => { initCharts(); };
+  if (document.readyState === 'complete') setTimeout(run, 800);
+  else window.addEventListener('load', () => setTimeout(run, 800), { once: true });
+}
+scheduleCharts();
 
 // ---------- 天地图卫星底图 ----------
 // 坐标基准：浙江省人民医院朝晖院区（上塘路158号，南应加河北岸）
@@ -4288,6 +4310,7 @@ async function startDemo6() {
     syncCruiseButtons();
   }
   liveGroup.visible = $('tg-live').checked;
+  upgradeLiveMarkers();
   flyToFloor(demo6State, '6号楼', demo6State.selectedFloor);
   focusVeil(false);
   console.log('[6号楼模拟] 沉浸透视 + 楼层板已应用');
@@ -4785,6 +4808,7 @@ async function startDemo2() {
     syncCruiseButtons();
   }
   liveGroup.visible = $('tg-live').checked;
+  upgradeLiveMarkers();
   // 相机：正南侧正视，按当前层楼板取景
   flyToFloor(demo2State, '2号楼', demo2State.selectedFloor);
   focusVeil(false);

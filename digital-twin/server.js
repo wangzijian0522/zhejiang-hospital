@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = process.env.PORT || 8080;
@@ -39,10 +40,28 @@ function handleTwinResource(req, res, twinRelay) {
     res.end('missing rid');
     return true;
   }
+  const etag = 'W/"' + crypto.createHash('sha1').update(rid).digest('hex').slice(0, 16) + '"';
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { 'ETag': etag, 'Cache-Control': 'public, max-age=86400, immutable' });
+    res.end();
+    return true;
+  }
   twinRelay.getResource(rid)
     .then((json) => {
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify(json));
+      const body = Buffer.from(JSON.stringify(json), 'utf8');
+      const accept = String(req.headers['accept-encoding'] || '');
+      const zipped = /\bgzip\b/.test(accept) ? zlib.gzipSync(body) : body;
+      const headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        // rid 里带内容哈希，同一 rid 的内容不会变
+        'Cache-Control': 'public, max-age=86400, immutable',
+        'ETag': etag,
+        'Vary': 'Accept-Encoding',
+        'Content-Length': zipped.length,
+      };
+      if (zipped !== body) headers['Content-Encoding'] = 'gzip';
+      res.writeHead(200, headers);
+      res.end(zipped);
     })
     .catch((e) => {
       res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -56,6 +75,78 @@ const BITMAP_URL = /^\/tdt\/([a-z_]+)\/(\d+)\/(\d+)\/(\d+)$/;
 const TDT_TK = process.env.TDT_TK || '4cdaaf6bd0bf76f314152dc58d2db861';
 // 天地图会按 UA 判定“浏览器端 Key”，非浏览器 UA 直接 403（301012）
 const TDT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+// ---------- 静态资源的压缩与缓存 ----------
+// 文本类按 Accept-Encoding 现压并缓存（同一个文件+mtime 只压一次）；
+// 二进制（glb/jpg/png）本身已压缩，不再二次压缩。
+const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.txt', '.map']);
+const zipCache = new Map();
+
+// 缓存策略：第三方与 vendor 一年不变；模型 1 天；数据 10 分钟；页面 no-cache 走 ETag
+function cachePolicy(urlPath) {
+  if (urlPath.startsWith('/node_modules/') || urlPath.startsWith('/digital-twin/vendor/')) {
+    return 'public, max-age=31536000, immutable';
+  }
+  if (urlPath.startsWith('/models/')) return 'public, max-age=86400';
+  if (urlPath.startsWith('/digital-twin/assets/')) return 'public, max-age=604800';
+  if (urlPath.startsWith('/digital-twin/data/')) return 'public, max-age=600';
+  return 'no-cache';
+}
+
+function serveStatic(req, res, file, urlPath, st) {
+  const ext = path.extname(file).toLowerCase();
+  const etag = 'W/"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
+  const headers = {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': cachePolicy(urlPath),
+    'ETag': etag,
+    'Last-Modified': st.mtime.toUTCString(),
+    'Vary': 'Accept-Encoding',
+  };
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  const accept = String(req.headers['accept-encoding'] || '');
+  const canZip = COMPRESSIBLE.has(ext) && st.size > 1024 && st.size < 8 * 1024 * 1024;
+  const enc = !canZip ? null : /\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null;
+  if (!enc) {
+    headers['Content-Length'] = st.size;
+    res.writeHead(200, headers);
+    fs.createReadStream(file).pipe(res);
+    return;
+  }
+  const key = file + ':' + Math.floor(st.mtimeMs) + ':' + enc;
+  const cached = zipCache.get(key);
+  if (cached) {
+    headers['Content-Encoding'] = enc;
+    headers['Content-Length'] = cached.length;
+    res.writeHead(200, headers);
+    res.end(cached);
+    return;
+  }
+  fs.readFile(file, (err, buf) => {
+    if (err) { res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end('read error'); return; }
+    let body;
+    try {
+      body = enc === 'br'
+        ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 10 } })
+        : zlib.gzipSync(buf, { level: 9 });
+    } catch {
+      headers['Content-Length'] = st.size;
+      res.writeHead(200, headers);
+      res.end(buf);
+      return;
+    }
+    if (zipCache.size > 64) zipCache.clear();
+    zipCache.set(key, body);
+    headers['Content-Encoding'] = enc;
+    headers['Content-Length'] = body.length;
+    res.writeHead(200, headers);
+    res.end(body);
+  });
+}
 
 const server = http.createServer((req, res) => {
   if (handleTwinResource(req, res, twinRelay)) return;
@@ -103,12 +194,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('404 Not Found: ' + urlPath); return;
     }
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
-      'Content-Length': st.size,
-    });
-    fs.createReadStream(file).pipe(res);
+    serveStatic(req, res, file, urlPath, st);
   });
 });
 
