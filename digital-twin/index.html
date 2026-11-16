@@ -1125,6 +1125,7 @@ function loadRealModel() {
     });
     realGroup.add(obj);
     realLoaded = true; // 6号楼 直接用整体模型里的节点（实测与独立 6号楼.glb 像素差 0.26%）
+    schedulePrewarm();
     realLoading = false;
     realGroup.visible = document.getElementById('tg-real').checked;
     const r = Math.max(size.x, size.y, size.z) * s;
@@ -1173,17 +1174,42 @@ function prewarmDemos(retry = 0) {
   }
   prewarmed = true;
   console.log('[预热] 2/6号楼壳体与楼层截面已就绪');
+  // 真机模型 8~12MB/台，也趁空闲先拉，双击进透视时就不用等
+  setTimeout(prefetchRobotModels, 4000);
 }
-// 预热不抢首屏：等 load + 空闲再做，省流量/慢网直接跳过
+
+// 透视里必然用到 medicine/meal 两台模拟机器人（各 8~12MB），提前拉进 gltfCache；
+// 另外最多再预取 1 类真机模型，避免把 4 个大模型全下下来
+function prefetchRobotModels() {
+  const conn = navigator.connection;
+  if (conn && (conn.saveData || /(^|-)2g$|(^|-)3g$/.test(conn.effectiveType || ''))) return;
+  const wanted = new Set(['medicine', 'meal']);
+  let extra = 0;
+  for (const mk of liveMarkers.values()) {
+    if (wanted.has(mk.modelType)) continue;
+    if (extra++ >= 1) break;
+    wanted.add(mk.modelType);
+  }
+  for (const type of wanted) {
+    const file = LIVE_TYPE_FILES[type];
+    if (!file || gltfCache.has(file)) continue;
+    makeGLTFLoader().loadAsync(file)
+      .then((gltf) => { gltfCache.set(file, gltf); console.log('[预热] 机器人模型', file.split('/').pop()); })
+      .catch(() => {});
+  }
+}
+// 预热不抢首屏：模型就绪后趁空闲做；省流量/2G 直接跳过
+let prewarmScheduled = false;
 function schedulePrewarm() {
+  if (prewarmScheduled) return;
+  prewarmScheduled = true;
   const conn = navigator.connection;
   if (conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || ''))) return;
   const run = () => {
-    if ('requestIdleCallback' in window) requestIdleCallback(() => prewarmDemos(), { timeout: 10000 });
-    else setTimeout(() => prewarmDemos(), 2000);
+    if ('requestIdleCallback' in window) requestIdleCallback(() => prewarmDemos(), { timeout: 8000 });
+    else setTimeout(() => prewarmDemos(), 1200);
   };
-  if (document.readyState === 'complete') run();
-  else window.addEventListener('load', run, { once: true });
+  run();
 }
 schedulePrewarm();
 
@@ -1602,9 +1628,12 @@ async function loadLiveMarkerModel(mk, type, rid) {
     mk.loading = false;
   }
 }
-// 进入透视时把已就位的真机升级成实模型
-function upgradeLiveMarkers() {
-  for (const [rid, mk] of liveMarkers) loadLiveMarkerModel(mk, mk.modelType, rid);
+// 进入透视时只升级本栋楼的真机模型（另一栋留着占位，不白下 8~12MB）
+function upgradeLiveMarkers(buildingName) {
+  for (const [rid, mk] of liveMarkers) {
+    if (buildingName && mk.building !== buildingName) continue;
+    loadLiveMarkerModel(mk, mk.modelType, rid);
+  }
 }
 
 function createLiveMarker(r) {
@@ -1613,7 +1642,9 @@ function createLiveMarker(r) {
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.7), new THREE.MeshLambertMaterial({ color: 0x2b7fd4 }));
   g.add(box);
   liveGroup.add(g);
-  const mk = { obj: g, modelType: type, loaded: false, loading: false, placeholder: box };
+  const loc = readyPose(r);
+  const fl = loc && liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
+  const mk = { obj: g, modelType: type, loaded: false, loading: false, placeholder: box, building: fl?.buildingName || null };
   liveMarkers.set(r.robotId, mk);
   if (mk.placeholder) {
     const bc = addBeacon(g, '·');
@@ -1654,8 +1685,6 @@ function refreshLiveMarkers() {
     const floor = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
     const xf = floor && buildingTransformFor(floor);
     if (!xf) { mk.obj.visible = false; continue; }
-    const filterNow = demoFloorFilter(floor.buildingName);
-    mk.obj.visible = filterNow != null;
     const p = loc.cadPose;
     // 优先用「该层套件」的变换：楼板/墙体/真机共用一套坐标，才不会各走各的；
     // 透视中直接用会话里的帧，总览下用同一套公式（CAD 平面已缓存时）现算。
@@ -1677,8 +1706,9 @@ function refreshLiveMarkers() {
       mk.floor = flNum;
       setBeaconTag(mk.beacon, flNum != null ? flNum + 'F' : '·');
     }
+    // 只显示「当前透视楼栋 + 当前层」的真机；其余一律隐藏（含另一栋楼）
     const filter = demoFloorFilter(floor.buildingName);
-    mk.obj.visible = filter == null || filter === flNum;
+    mk.obj.visible = filter != null && filter === flNum;
   }
   for (const [rid, r] of liveState.robots) {
     if (liveMarkers.has(rid)) continue;
@@ -3763,7 +3793,11 @@ function footprintAngle(node, fallback) {
 }
 
 // 某高度带的截面 bbox：在「去旋转」空间里取，避免斜置楼栋的 AABB 虚胖
+const bandCache = new Map();
 function modelBandFrame(name, y) {
+  const key = name + ':' + y.toFixed(2);
+  const hit = bandCache.get(key);
+  if (hit !== undefined) return hit;
   const info = floorInfoFor(name);
   if (!info) return null;
   const buf = buildingVertices(info.node);
@@ -3791,8 +3825,10 @@ function modelBandFrame(name, y) {
     if (bz < minZ) minZ = bz; if (bz > maxZ) maxZ = bz;
     used++;
   }
-  if (used < 40 || !(maxX > minX)) return null;
-  return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, count: used };
+  if (used < 40 || !(maxX > minX)) { bandCache.set(key, null); return null; }
+  const frame = { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, count: used };
+  bandCache.set(key, frame);
+  return frame;
 }
 
 // 稀疏截面（顶层往往只剩屋面构件）向下借用最近一层的轮廓
@@ -4014,8 +4050,11 @@ async function buildFloorWalls(state, name) {
   state.cages = new Map();
   const wallH = Math.max(2.6, info.h - 1.0);
   const worldBox = new THREE.Box3().setFromObject(info.node);
+  // 先把所有楼层的 CAD 平面并发取回（多数已在预热缓存里），再逐层建几何
+  const plans = await Promise.all(info.floors.map((n) => cadPlanFor(name, n)));
+  const planByFloor = new Map(info.floors.map((n, i) => [n, plans[i]]));
   for (const n of info.floors) {
-    const plan = await cadPlanFor(name, n);
+    const plan = planByFloor.get(n);
     if (!plan || !state.active) return;
     const frame = floorFrame(name, n, plan);
     if (!frame) continue;
@@ -4095,9 +4134,10 @@ function applyFloorFocus(state, n) {
     cage.panel.visible = on;
     cage.rail.visible = on;
   }
-  // 真机只显示当前层，其余层隐掉——避免和本层楼板对不上显得飘
+  // 真机只显示「当前楼栋 + 当前层」，别栋的真机不出现
+  const bname = state === demo6State ? '6号楼' : '2号楼';
   for (const mk of liveMarkers.values()) {
-    mk.obj.visible = mk.floor === n;
+    mk.obj.visible = mk.building === bname && mk.floor === n;
   }
 }
 
@@ -4148,66 +4188,78 @@ function dropShellCache() {
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
 const demo6State = { active: false, robots: [], group: null, bbox: null, plates: new Map(), selectedFloor: 3 };
 
-async function spawnDemo6Robots(bbox, baseY) {
+// 两台模拟机器人：先用发光占位块就位（进入透视不等 20MB 模型），模型到了再换上
+function spawnSimRobots(state, name, bbox, baseY, label) {
   const defs = [
-    { file: '/models/models/detail/medicine.glb', floor: 3 },
-    { file: '/models/models/detail/meal.glb', floor: 4 },
+    { file: '/models/models/detail/medicine.glb', floor: 3, color: 0x54f0d0 },
+    { file: '/models/models/detail/meal.glb', floor: 4, color: 0xffb35c },
   ];
+  const h = floorInfoFor(name)?.h || 3.8;
   for (const def of defs) {
-    try {
-      let gltf = gltfCache.get(def.file);
-      if (!gltf) { gltf = await makeGLTFLoader().loadAsync(def.file); gltfCache.set(def.file, gltf); }
-      const model = gltf.scene.clone(true);
-      const mb = new THREE.Box3().setFromObject(model);
-      const ms = mb.getSize(new THREE.Vector3());
-      const s = 1.65 / Math.max(ms.y, 0.01);
-      model.scale.setScalar(s);
-      model.position.set(0, -mb.min.y * s, 0);
-      model.traverse((o) => {
-        if (!o.isMesh) return;
-        o.castShadow = false;
-        if (o.material) {
-          const mats = Array.isArray(o.material) ? o.material : [o.material];
-          const cloned = mats.map((m) => {
-            const c = m.clone();
-            c.depthTest = false;
-            c.depthWrite = false;
-            return c;
-          });
-          o.material = Array.isArray(o.material) ? cloned : cloned[0];
-          o.renderOrder = 270;
-        }
-      });
-      const g = new THREE.Group();
-      g.add(model);
-      const floorY = baseY + (def.floor - 1) * (floorInfoFor('6号楼')?.h || 3.8);
-      const y = floorY + 0.8;
-      const startX = (bbox.min.x + bbox.max.x) / 2 + (def.floor === 3 ? -9 : 9);
-      const startZ = (bbox.min.z + bbox.max.z) / 2 + (def.floor === 3 ? -5 : 5);
-      g.position.set(startX, y, startZ);
-      demo6State.group.add(g);
-      const bc = addBeacon(g, def.floor + 'F');
-      for (const o of [bc.beam, bc.ring, bc.glow, bc.tag]) {
-        if (o?.material) { o.material.depthTest = false; o.renderOrder = 280; }
-      }
-      const trail = demo2MakeTrail(def.floor === 3 ? 0x54f0d0 : 0xffb35c);
-      demo6State.group.add(trail.line, trail.dots);
-      const margin = Math.min(2, Math.max(0.5, (bbox.max.x - bbox.min.x) / 4));
-      const marginZ = Math.min(2, Math.max(0.5, (bbox.max.z - bbox.min.z) / 4));
-      demo6State.robots.push({
-        obj: g, y, floorY, floor: def.floor, beacon: bc, trail,
-        minX: bbox.min.x + margin, maxX: bbox.max.x - margin,
-        minZ: bbox.min.z + marginZ, maxZ: bbox.max.z - marginZ,
-        wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
-      });
-      demo2PushTrail(demo6State.robots[demo6State.robots.length - 1]);
-      console.log('[6号楼模拟] 机器人已就位', def.file.split('/').pop(), '楼层', def.floor);
-    } catch (e) {
-      console.warn('[6号楼模拟] 机器人模型加载失败', def.file, e);
+    const floorY = baseY + (def.floor - 1) * h;
+    const y = floorY + 0.8;
+    const g = new THREE.Group();
+    g.position.set(
+      (bbox.min.x + bbox.max.x) / 2 + (def.floor === 3 ? -9 : 9),
+      y,
+      (bbox.min.z + bbox.max.z) / 2 + (def.floor === 3 ? -5 : 5),
+    );
+    const ph = new THREE.Mesh(
+      new THREE.BoxGeometry(0.62, 1.05, 0.62),
+      new THREE.MeshLambertMaterial({ color: def.color, transparent: true, opacity: 0.8, depthWrite: false }),
+    );
+    ph.renderOrder = 269;
+    g.add(ph);
+    state.group.add(g);
+    const bc = addBeacon(g, def.floor + 'F');
+    for (const o of [bc.beam, bc.ring, bc.glow, bc.tag]) {
+      if (o?.material) { o.material.depthTest = false; o.renderOrder = 280; }
     }
+    const trail = demo2MakeTrail(def.color);
+    state.group.add(trail.line, trail.dots);
+    const margin = Math.min(2, Math.max(0.5, (bbox.max.x - bbox.min.x) / 4));
+    const marginZ = Math.min(2, Math.max(0.5, (bbox.max.z - bbox.min.z) / 4));
+    const robot = {
+      obj: g, y, floorY, floor: def.floor, beacon: bc, trail,
+      minX: bbox.min.x + margin, maxX: bbox.max.x - margin,
+      minZ: bbox.min.z + marginZ, maxZ: bbox.max.z - marginZ,
+      wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
+    };
+    state.robots.push(robot);
+    demo2PushTrail(robot);
+    (async () => {
+      try {
+        let gltf = gltfCache.get(def.file);
+        if (!gltf) { gltf = await makeGLTFLoader().loadAsync(def.file); gltfCache.set(def.file, gltf); }
+        if (!state.active) return;
+        const model = gltf.scene.clone(true);
+        const mb = new THREE.Box3().setFromObject(model);
+        const s = 1.65 / Math.max(mb.getSize(new THREE.Vector3()).y, 0.01);
+        model.scale.setScalar(s);
+        model.position.set(0, -mb.min.y * s, 0);
+        model.traverse((o) => {
+          if (!o.isMesh) return;
+          o.castShadow = false;
+          const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+          const cloned = mats.map((m) => { const c = m.clone(); c.depthTest = false; c.depthWrite = false; return c; });
+          if (cloned.length) o.material = Array.isArray(o.material) ? cloned : cloned[0];
+          o.renderOrder = 270;
+        });
+        g.add(model);
+        g.remove(ph);
+        ph.geometry.dispose();
+        ph.material.dispose();
+        console.log(`[${label}] 机器人模型就位`, def.file.split('/').pop(), '楼层', def.floor);
+      } catch (e) {
+        console.warn(`[${label}] 机器人模型加载失败`, def.file, e?.message || e);
+      }
+    })();
   }
-  demo2SelectFloor(demo6State.selectedFloor || 3, demo6State);
+  demo2SelectFloor(state.selectedFloor || 3, state);
 }
+
+function spawnDemo6Robots(bbox, baseY) { spawnSimRobots(demo6State, '6号楼', bbox, baseY, '6号楼模拟'); }
+function spawnDemo2Robots(bbox, baseY) { spawnSimRobots(demo2State, '2号楼', bbox, baseY, '2号楼模拟'); }
 const cadResCache = new Map();
 async function loadDemo6Cad() {
   // 等待中控楼层目录（含 geometryResource 引用）
@@ -4310,7 +4362,7 @@ async function startDemo6() {
     syncCruiseButtons();
   }
   liveGroup.visible = $('tg-live').checked;
-  upgradeLiveMarkers();
+  upgradeLiveMarkers('6号楼');
   flyToFloor(demo6State, '6号楼', demo6State.selectedFloor);
   focusVeil(false);
   console.log('[6号楼模拟] 沉浸透视 + 楼层板已应用');
@@ -4645,66 +4697,6 @@ function demo2PushTrail(r) {
   t.colors.needsUpdate = true;
 }
 
-async function spawnDemo2Robots(bbox, baseY) {
-  const defs = [
-    { file: '/models/models/detail/medicine.glb', floor: 3 },
-    { file: '/models/models/detail/meal.glb', floor: 4 },
-  ];
-  for (const def of defs) {
-    try {
-      let gltf = gltfCache.get(def.file);
-      if (!gltf) { gltf = await makeGLTFLoader().loadAsync(def.file); gltfCache.set(def.file, gltf); }
-      const model = gltf.scene.clone(true);
-      const mb = new THREE.Box3().setFromObject(model);
-      const ms = mb.getSize(new THREE.Vector3());
-      const s = 1.65 / Math.max(ms.y, 0.01);
-      model.scale.setScalar(s);
-      model.position.set(0, -mb.min.y * s, 0);
-      model.traverse((o) => {
-        if (!o.isMesh) return;
-        o.castShadow = false;
-        if (o.material) {
-          const mats = Array.isArray(o.material) ? o.material : [o.material];
-          const cloned = mats.map((m) => {
-            const c = m.clone();
-            c.depthTest = false;
-            c.depthWrite = false;
-            return c;
-          });
-          o.material = Array.isArray(o.material) ? cloned : cloned[0];
-          o.renderOrder = 270;
-        }
-      });
-      const g = new THREE.Group();
-      g.add(model);
-      const floorY = baseY + (def.floor - 1) * (floorInfoFor('2号楼')?.h || 3.8);
-      const y = floorY + 0.8;
-      const startX = (bbox.min.x + bbox.max.x) / 2 + (def.floor === 3 ? -9 : 9);
-      const startZ = (bbox.min.z + bbox.max.z) / 2 + (def.floor === 3 ? -5 : 5);
-      g.position.set(startX, y, startZ);
-      demo2State.group.add(g);
-      const bc = addBeacon(g, def.floor + 'F');
-      for (const o of [bc.beam, bc.ring, bc.glow, bc.tag]) {
-        if (o?.material) { o.material.depthTest = false; o.renderOrder = 280; }
-      }
-      const trail = demo2MakeTrail(def.floor === 3 ? 0x54f0d0 : 0xffb35c);
-      demo2State.group.add(trail.line, trail.dots);
-      const margin = Math.min(2, Math.max(0.5, (bbox.max.x - bbox.min.x) / 4));
-      const marginZ = Math.min(2, Math.max(0.5, (bbox.max.z - bbox.min.z) / 4));
-      demo2State.robots.push({
-        obj: g, y, floorY, floor: def.floor, beacon: bc, trail,
-        minX: bbox.min.x + margin, maxX: bbox.max.x - margin,
-        minZ: bbox.min.z + marginZ, maxZ: bbox.max.z - marginZ,
-        wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
-      });
-      demo2PushTrail(demo2State.robots[demo2State.robots.length - 1]);
-      console.log('[2号楼模拟] 机器人已就位', def.file.split('/').pop(), '楼层', def.floor);
-    } catch (e) {
-      console.warn('[2号楼模拟] 机器人模型加载失败', def.file, e?.message || e, (e?.stack || '').split('\n').slice(0, 3).join(' | '));
-    }
-  }
-  demo2SelectFloor(demo2State.selectedFloor || 3);
-}
 async function loadDemo2Cad() {
   // 等待中控楼层目录（按 buildingName 过滤 2号楼）
   const t0 = Date.now();
@@ -4808,7 +4800,7 @@ async function startDemo2() {
     syncCruiseButtons();
   }
   liveGroup.visible = $('tg-live').checked;
-  upgradeLiveMarkers();
+  upgradeLiveMarkers('2号楼');
   // 相机：正南侧正视，按当前层楼板取景
   flyToFloor(demo2State, '2号楼', demo2State.selectedFloor);
   focusVeil(false);
