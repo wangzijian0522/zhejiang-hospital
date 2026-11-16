@@ -1541,7 +1541,7 @@ const liveGroup = new THREE.Group();
 liveGroup.visible = false; // 真机只在透视模式里显示，总览不出现
 scene.add(liveGroup);
 const liveHud = $('live-hud');
-const liveState = { ws: null, connected: false, disabled: false, seq: -1, floors: new Map(), robots: new Map(), reconnectDelay: 1000 };
+const liveState = { ws: null, connected: false, disabled: false, floors: new Map(), robots: new Map(), reconnectDelay: 1000 };
 const liveMarkers = new Map(); // robotId -> { obj, modelType }
 const liveBuildingXf = new Map(); // buildingName -> {cx, cz, baseY, s} 或 null
 const LIVE_TYPE_FILES = {
@@ -3990,12 +3990,10 @@ async function buildFloorStack(state, name) {
   const info = floorInfoFor(name);
   if (!info) return;
   await calibrateBuilding(name);
-  let lastBand = null;
   for (const n of info.floors) {
     const y = info.baseY + (n - 1) * info.h;
-    const band = stableBand(name, n) || lastBand;
+    const band = stableBand(name, n); // 内部已按稀疏程度向下回退
     if (!band) continue;
-    lastBand = band;
     // 楼板取模型该高度的截面矩形（外轮廓一定和楼体一致），CAD 只负责室内墙线
     const c = Math.cos(info.frameAngle), sn = Math.sin(info.frameAngle);
     const rect = [[band.minX, band.minZ], [band.maxX, band.minZ], [band.maxX, band.maxZ], [band.minX, band.maxZ]]
@@ -4004,9 +4002,9 @@ async function buildFloorStack(state, name) {
       minX: Math.min(...rect.map((p) => p.x)), maxX: Math.max(...rect.map((p) => p.x)),
       minZ: Math.min(...rect.map((p) => p.z)), maxZ: Math.max(...rect.map((p) => p.z)),
     };
-    demo2AddFloorPlate(n, y, rect, bbox, true, state);
+    addFloorPlate(n, y, rect, bbox, true, state);
   }
-  demo2SelectFloor(state.selectedFloor || info.floors[Math.min(2, info.floors.length - 1)], state);
+  selectFloor(state.selectedFloor || info.floors[Math.min(2, info.floors.length - 1)], state);
   await buildFloorWalls(state, name);
 }
 
@@ -4117,7 +4115,7 @@ async function buildFloorWalls(state, name) {
     (state.frames || (state.frames = new Map())).set(n, frame);
     if (n === state.selectedFloor) applyFloorFocus(state, n);
   }
-  demo2SelectFloor(state.selectedFloor, state);
+  selectFloor(state.selectedFloor, state);
 }
 
 // 楼层焦点：当前层墙片/顶线全开，相邻层留淡轮廓，其余只留地面墙线
@@ -4215,7 +4213,7 @@ function spawnSimRobots(state, name, bbox, baseY, label) {
     for (const o of [bc.beam, bc.ring, bc.glow, bc.tag]) {
       if (o?.material) { o.material.depthTest = false; o.renderOrder = 280; }
     }
-    const trail = demo2MakeTrail(def.color);
+    const trail = makeTrail(def.color);
     state.group.add(trail.line, trail.dots);
     const margin = Math.min(2, Math.max(0.5, (bbox.max.x - bbox.min.x) / 4));
     const marginZ = Math.min(2, Math.max(0.5, (bbox.max.z - bbox.min.z) / 4));
@@ -4226,7 +4224,7 @@ function spawnSimRobots(state, name, bbox, baseY, label) {
       wp: null, speed: 0.45 + Math.random() * 0.2, wait: 0,
     };
     state.robots.push(robot);
-    demo2PushTrail(robot);
+    pushTrail(robot);
     (async () => {
       try {
         let gltf = gltfCache.get(def.file);
@@ -4255,7 +4253,7 @@ function spawnSimRobots(state, name, bbox, baseY, label) {
       }
     })();
   }
-  demo2SelectFloor(state.selectedFloor || 3, state);
+  selectFloor(state.selectedFloor || 3, state);
 }
 
 function spawnDemo6Robots(bbox, baseY) { spawnSimRobots(demo6State, '6号楼', bbox, baseY, '6号楼模拟'); }
@@ -4288,36 +4286,6 @@ async function loadDemo6Cad() {
     drawn++;
   }
   console.log('[6号楼模拟] CAD 平面已就绪', drawn, '层');
-}
-function updateDemo6(dt) {
-  if (!demo6State.active) return;
-  for (const r of demo6State.robots) {
-    demo2PushTrail(r);
-    if (!r.wp) r.wp = { x: r.obj.position.x, z: r.obj.position.z };
-    const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist < 0.5) {
-      r.wait -= dt;
-      if (r.wait <= 0) {
-        r.wp = {
-          x: r.minX + Math.random() * Math.max(0.5, r.maxX - r.minX),
-          z: r.minZ + Math.random() * Math.max(0.5, r.maxZ - r.minZ),
-        };
-        r.wait = 2 + Math.random() * 5;
-      }
-      continue;
-    }
-    const step = Math.min(r.speed * dt, dist);
-    r.obj.position.x += (dx / dist) * step;
-    r.obj.position.z += (dz / dist) * step;
-    r.obj.rotation.y = Math.atan2(dx, dz);
-  }
-  const sel = demo6State.plates.get(demo6State.selectedFloor);
-  if (sel) {
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.15 + pulse * 0.03;
-    sel.edge.material.opacity = 0.82 + pulse * 0.16;
-  }
 }
 async function startDemo6() {
   if (demo6State.active) { stopDemo6(); return; }
@@ -4405,7 +4373,7 @@ const demo2State = {
   active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
   plates: new Map(), selectedFloor: 3,
 };
-function demo2FocusStage(bbox) {
+function makeFocusStage(bbox) {
   const cx = (bbox.min.x + bbox.max.x) / 2;
   const cz = (bbox.min.z + bbox.max.z) / 2;
   const y = bbox.min.y - 0.34;
@@ -4481,7 +4449,7 @@ function enterDemo2Focus(bbox, state = demo2State) {
   sunLight.castShadow = false;
   camera.fov = 38;
   camera.updateProjectionMatrix();
-  const stage = demo2FocusStage(bbox);
+  const stage = makeFocusStage(bbox);
   state.group.add(stage);
   focusState.stage = stage;
   updateSun();
@@ -4521,7 +4489,7 @@ function exitDemo2Focus() {
   updateSkyFog();
 }
 
-function demo2AddFloorPlate(n, y, loop, bbox, replace = false, state = demo2State) {
+function addFloorPlate(n, y, loop, bbox, replace = false, state = demo2State) {
   if (state.plates.has(n)) {
     if (!replace) return;
     const old = state.plates.get(n);
@@ -4598,10 +4566,10 @@ function demo2AddFloorPlate(n, y, loop, bbox, replace = false, state = demo2Stat
   lead.visible = false;
   state.group.add(lead);
   state.plates.set(n, { mesh, edge, label, lead, y });
-  demo2SelectFloor(state.selectedFloor || 3, state);
+  selectFloor(state.selectedFloor || 3, state);
 }
 
-function demo2SelectFloor(n, state = demo2State) {
+function selectFloor(n, state = demo2State) {
   if (!state.plates.size) return;
   state.selectedFloor = n;
   applyFloorFocus(state, n);
@@ -4642,7 +4610,7 @@ function demo2SelectFloor(n, state = demo2State) {
   }
 }
 
-function demo2MakeTrail(color) {
+function makeTrail(color) {
   const max = 140;
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 3), 3));
@@ -4668,7 +4636,7 @@ function demo2MakeTrail(color) {
   };
 }
 
-function demo2PushTrail(r) {
+function pushTrail(r) {
   const t = r.trail;
   if (!t) return;
   const x = r.obj.position.x, z = r.obj.position.z;
@@ -4724,10 +4692,11 @@ async function loadDemo2Cad() {
   }
   console.log('[2号楼模拟] CAD 平面已就绪', drawn, '层');
 }
-function updateDemo2(dt) {
-  if (!demo2State.active) return;
-  for (const r of demo2State.robots) {
-    demo2PushTrail(r);
+// 两台模拟机器人的推进（2/6号楼共用一套逻辑）
+function stepSimRobots(state, dt) {
+  if (!state.active) return;
+  for (const r of state.robots) {
+    pushTrail(r);
     if (!r.wp) r.wp = { x: r.obj.position.x, z: r.obj.position.z };
     const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
     const dist = Math.hypot(dx, dz);
@@ -4747,7 +4716,7 @@ function updateDemo2(dt) {
     r.obj.position.z += (dz / dist) * step;
     r.obj.rotation.y = Math.atan2(dx, dz);
   }
-  const sel = demo2State.plates.get(demo2State.selectedFloor);
+  const sel = state.plates.get(state.selectedFloor);
   if (sel) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
     sel.mesh.material.opacity = 0.15 + pulse * 0.03;
@@ -4941,8 +4910,8 @@ function fpPickFloor(n) {
   buildFloorChips();
   const cur = document.getElementById('fp-current');
   if (cur) cur.textContent = '当前 ' + n + 'F';
-  if (demo2State.active) demo2SelectFloor(n);
-  else if (demo6State.active) demo2SelectFloor(n, demo6State);
+  if (demo2State.active) selectFloor(n);
+  else if (demo6State.active) selectFloor(n, demo6State);
 }
 function fpAddCadFloor(building, n, segs, b) {
   if (fpState.building !== building) return;
@@ -4984,8 +4953,8 @@ function buildFloorChips() {
     el.onclick = () => {
       fpState.cur = i; fpState.userPicked = true; fpState.zoom = 1; fpState.panX = 0; fpState.panY = 0;
       buildFloorChips(); fpDraw(true);
-      if (demo2State.active) { demo2SelectFloor(f.n); flyToFloor(demo2State, '2号楼', f.n); }
-      else if (demo6State.active) { demo2SelectFloor(f.n, demo6State); flyToFloor(demo6State, '6号楼', f.n); }
+      if (demo2State.active) { selectFloor(f.n); flyToFloor(demo2State, '2号楼', f.n); }
+      else if (demo6State.active) { selectFloor(f.n, demo6State); flyToFloor(demo6State, '6号楼', f.n); }
     };
     wrap.appendChild(el);
   });
@@ -5304,8 +5273,8 @@ function animate() {
     waterNormal.offset.x = (waterNormal.offset.x - dt * 0.006) % 1;
     waterNormal.offset.y = (waterNormal.offset.y + dt * 0.004) % 1;
   }
-  updateDemo6(dt);
-  updateDemo2(dt);
+  stepSimRobots(demo6State, dt);
+  stepSimRobots(demo2State, dt);
   holoMat.uniforms.uTime.value = elapsed;
   for (const b of BEACONS) {
     const k = 0.5 + 0.5 * Math.sin(elapsed * 2.4 + b.phase);
