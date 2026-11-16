@@ -3587,41 +3587,125 @@ function floorInfoFor(name) {
   const rotY = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
   const info = {
     name, node, baseY: box.min.y, topY: box.max.y, rotY,
-    h: (box.max.y - box.min.y) / floors.length,
+    h: (box.max.y - box.min.y) / floors.length, // 兜底值，稍后用顶板高度修正
     floors,
   };
+  const fit = fitFloorStack(node, info);
+  info.h = fit.period;
+  info.topSlabY = fit.topSlab;
+  // 关键：配准旋转之后，楼体在场景里未必与坐标轴平行（实测 2号楼 -0.75°、6号楼 -4.5°）。
+  // 楼层矩形必须按楼体自身朝向画，否则会相对楼歪一个角度。
+  info.frameAngle = footprintAngle(node, rotY);
   floorInfoCache.set(name, info);
   return info;
 }
 
+// 楼层堆叠拟合：模型没有楼层语义，但屋面是面积最大的水平板——用它当顶层楼板，
+// 层距 = (顶层楼板 - 基底) / (层数 - 1)。这样顶层楼板一定压在模型的大板上，不会悬在机房里。
+function fitFloorStack(node, info) {
+  const N = info.floors.length;
+  const BIN = 0.1;
+  const n = Math.ceil((info.topY - info.baseY) / BIN) + 2;
+  const area = new Float64Array(n);
+  const pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3();
+  const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nrm = new THREE.Vector3();
+  node.updateWorldMatrix(true, true);
+  node.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const pos = o.geometry.attributes.position;
+    const idx = o.geometry.index;
+    const cnt = idx ? idx.count : pos.count;
+    for (let i = 0; i + 2 < cnt; i += 3) {
+      const a = idx ? idx.getX(i) : i, b = idx ? idx.getX(i + 1) : i + 1, c = idx ? idx.getX(i + 2) : i + 2;
+      pA.fromBufferAttribute(pos, a).applyMatrix4(o.matrixWorld);
+      pB.fromBufferAttribute(pos, b).applyMatrix4(o.matrixWorld);
+      pC.fromBufferAttribute(pos, c).applyMatrix4(o.matrixWorld);
+      e1.subVectors(pB, pA); e2.subVectors(pC, pA);
+      nrm.crossVectors(e1, e2);
+      const ar = nrm.length() / 2;
+      if (ar < 2) continue;                       // 忽略细碎面
+      if (Math.abs(nrm.y / (nrm.length() || 1)) < 0.85) continue; // 只要水平面
+      const k = Math.round(((pA.y + pB.y + pC.y) / 3 - info.baseY) / BIN);
+      if (k >= 0 && k < n) area[k] += ar;
+    }
+  });
+  let maxA = 0;
+  for (let i = 0; i < n; i++) if (area[i] > maxA) maxA = area[i];
+  let topSlab = info.topY;
+  if (maxA > 20) {
+    for (let i = n - 1; i >= 0; i--) {
+      if (area[i] >= maxA * 0.6) { topSlab = info.baseY + i * BIN; break; }
+    }
+  }
+  let period = N > 1 ? (topSlab - info.baseY) / (N - 1) : info.h;
+  if (!(period > 2) || period > 8) period = info.h;
+  return { topSlab, period: +period.toFixed(3) };
+}
+
+// 最小面积外接矩形角度：在水平面上扫角度，取包围盒面积最小的朝向
+function footprintAngle(node, fallback) {
+  const buf = buildingVertices(node);
+  const stride = Math.max(3, Math.floor(buf.length / 3 / 4000) * 3);
+  const pts = [];
+  for (let i = 0; i < buf.length; i += stride) pts.push([buf[i], buf[i + 2]]);
+  if (pts.length < 100) return fallback;
+  let best = null;
+  for (let deg = -45; deg <= 45; deg += 0.25) {
+    const th = deg * Math.PI / 180, c = Math.cos(th), s = Math.sin(th);
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const [x, z] of pts) {
+      const rx = x * c - z * s, rz = x * s + z * c;
+      if (rx < minX) minX = rx; if (rx > maxX) maxX = rx;
+      if (rz < minZ) minZ = rz; if (rz > maxZ) maxZ = rz;
+    }
+    const area = (maxX - minX) * (maxZ - minZ);
+    if (!best || area < best.area) best = { deg, area };
+  }
+  return best.deg * Math.PI / 180;
+}
+
 // 某高度带的截面 bbox：在「去旋转」空间里取，避免斜置楼栋的 AABB 虚胖
-function modelBandFrame(name, y, half = 1.8) {
+function modelBandFrame(name, y) {
   const info = floorInfoFor(name);
   if (!info) return null;
   const buf = buildingVertices(info.node);
-  const c = Math.cos(info.rotY), s = Math.sin(info.rotY);
-  // 顶点云里有大量重复点和薄片（檐口/栏杆），按 1m 栅格统计再取占据格，避免分位数被聚簇带偏
+  // 取「整层高度」而不是薄片：薄片会随窗台/梁的位置飘，整层才稳定反映该层外轮廓
+  const y0 = y + 0.15, y1 = y + info.h * 0.85;
+  const c = Math.cos(info.frameAngle), s = Math.sin(info.frameAngle);
+  // 先按 1m 栅格统计密度，再用「稠密格里的原始点」取边界：
+  // 栅格只是过滤器（去掉檐口/栏杆这类孤立薄片），边界本身不被 1m 量化。
   const CELL = 1;
-  const cells = new Map();
+  const hits = new Map();
+  const pts = [];
   for (let i = 0; i < buf.length; i += 3) {
-    if (Math.abs(buf[i + 1] - y) > half) continue;
+    if (buf[i + 1] < y0 || buf[i + 1] > y1) continue;
     const x = buf[i], z = buf[i + 2];
-    const bx = c * x - s * z;   // R(-θ)
+    const bx = c * x - s * z;   // 楼体自身朝向
     const bz = s * x + c * z;
     const key = Math.floor(bx / CELL) + ',' + Math.floor(bz / CELL);
-    cells.set(key, (cells.get(key) || 0) + 1);
+    hits.set(key, (hits.get(key) || 0) + 1);
+    pts.push([bx, bz, key]);
   }
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, used = 0;
-  for (const [key, hits] of cells) {
-    if (hits < 3) continue;    // 稀疏格＝毛刺，丢掉
-    const [ix, iz] = key.split(',');
-    const bx = +ix * CELL, bz = +iz * CELL;
-    if (bx < minX) minX = bx; if (bx + CELL > maxX) maxX = bx + CELL;
-    if (bz < minZ) minZ = bz; if (bz + CELL > maxZ) maxZ = bz + CELL;
+  for (const [bx, bz, key] of pts) {
+    if (hits.get(key) < 3) continue;
+    if (bx < minX) minX = bx; if (bx > maxX) maxX = bx;
+    if (bz < minZ) minZ = bz; if (bz > maxZ) maxZ = bz;
     used++;
   }
-  if (used < 12 || !(maxX > minX)) return null;
+  if (used < 40 || !(maxX > minX)) return null;
   return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, count: used };
+}
+
+// 稀疏截面（顶层往往只剩屋面构件）向下借用最近一层的轮廓
+function stableBand(name, n) {
+  const info = floorInfoFor(name);
+  if (!info) return null;
+  for (let k = n; k >= info.floors[0]; k--) {
+    const b = modelBandFrame(name, info.baseY + (k - 1) * info.h);
+    if (b && b.count >= 400) return b;
+  }
+  return modelBandFrame(name, info.baseY + (n - 1) * info.h);
 }
 
 // CAD 墙线清洗：墙体多为 0.4~20m 的双线段；碎线是洁具/家具，超长线是图框与标注引线
@@ -3747,9 +3831,9 @@ function floorFrame(name, n, plan) {
   const fit = FLOOR_FIT[name];
   if (!info || !fit || !plan?.center) return null;
   const y = info.baseY + (n - 1) * info.h;
-  const band = modelBandFrame(name, y);
+  const band = stableBand(name, n);
   if (!band) return null;
-  const c = Math.cos(info.rotY), s = Math.sin(info.rotY);
+  const c = Math.cos(info.frameAngle), s = Math.sin(info.frameAngle);
   const cadC = plan.center;
   const uC = fit.swap ? cadC.y : cadC.x;
   const vC = fit.swap ? cadC.x : cadC.y;
@@ -3772,11 +3856,11 @@ async function buildFloorStack(state, name) {
   let lastBand = null;
   for (const n of info.floors) {
     const y = info.baseY + (n - 1) * info.h;
-    const band = modelBandFrame(name, y) || lastBand;
+    const band = stableBand(name, n) || lastBand;
     if (!band) continue;
     lastBand = band;
     // 楼板取模型该高度的截面矩形（外轮廓一定和楼体一致），CAD 只负责室内墙线
-    const c = Math.cos(info.rotY), sn = Math.sin(info.rotY);
+    const c = Math.cos(info.frameAngle), sn = Math.sin(info.frameAngle);
     const rect = [[band.minX, band.minZ], [band.maxX, band.minZ], [band.maxX, band.maxZ], [band.minX, band.maxZ]]
       .map(([bx, bz]) => new THREE.Vector3(c * bx + sn * bz, y, -sn * bx + c * bz));
     const bbox = {
@@ -4260,8 +4344,8 @@ function demo2AddFloorPlate(n, y, loop, bbox, replace = false, state = demo2Stat
   const boxMaxX = bbox.max?.x ?? bbox.maxX;
   const boxMinZ = bbox.min?.z ?? bbox.minZ;
   const boxMaxZ = bbox.max?.z ?? bbox.maxZ;
-  // CAD 轮廓往往包含外挑/场地范围；楼板内缩，避免高亮层穿出塔楼
-  const inset = state === demo6State ? 0.75 : 0.94;
+  // 楼板直接用楼体该高度的截面矩形，不再内缩（内缩是给 CAD 外轮廓留的余量，现在不用了）
+  const inset = 1;
   const cx0 = (boxMinX + boxMaxX) / 2;
   const cz0 = (boxMinZ + boxMaxZ) / 2;
   let shape;
