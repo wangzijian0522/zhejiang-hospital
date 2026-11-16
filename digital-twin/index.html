@@ -204,7 +204,7 @@
     <label><input type="checkbox" id="tg-poi" checked> 名称标注</label>
     <div class="tg-group">业务</div>
     <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
-    <label><input type="checkbox" id="tg-live" checked> 真实机器人</label>
+    <label><input type="checkbox" id="tg-live" checked> 真实机器人（仅透视）</label>
   </div>
   <div class="qualitybox"><b>画质</b><select id="quality-select"><option value="auto">自动</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select><span class="qnote">按帧率自动选择</span></div>
   <div class="timebox">
@@ -1532,6 +1532,7 @@ setInterval(fetchRealWeather, 10 * 60 * 1000);
 
 // ---------- 真实机器人（中控 openTwin 数据，经本服务 /twin 中继） ----------
 const liveGroup = new THREE.Group();
+liveGroup.visible = false; // 真机只在透视模式里显示，总览不出现
 scene.add(liveGroup);
 const liveHud = $('live-hud');
 const liveState = { ws: null, connected: false, disabled: false, seq: -1, floors: new Map(), robots: new Map(), reconnectDelay: 1000 };
@@ -1655,7 +1656,8 @@ function refreshLiveMarkers() {
     const floor = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
     const xf = floor && buildingTransformFor(floor);
     if (!xf) { mk.obj.visible = false; continue; }
-    mk.obj.visible = true;
+    const filterNow = demoFloorFilter(floor.buildingName);
+    mk.obj.visible = filterNow != null;
     const p = loc.cadPose;
     // 优先用「该层套件」的变换：楼板/墙体/真机共用一套坐标，才不会各走各的；
     // 透视中直接用会话里的帧，总览下用同一套公式（CAD 平面已缓存时）现算。
@@ -1689,6 +1691,8 @@ function refreshLiveMarkers() {
     if (!buildingTransformFor(floor)) continue;
     createLiveMarker(r);
   }
+  // 总览里不显示真机：新建的标记也要在最后统一压掉，避免有一帧露出来
+  if (!focusState.active) for (const mk of liveMarkers.values()) mk.obj.visible = false;
   updateLiveHud();
 }
 function handleLiveMessage(msg) {
@@ -1748,7 +1752,7 @@ function connectLive() {
     console.warn('[twin] 中继连接失败', e);
   }
 }
-$('tg-live').onchange = (e) => { liveGroup.visible = e.target.checked; };
+$('tg-live').onchange = (e) => { liveGroup.visible = e.target.checked && focusState.active; };
 connectLive();
 setInterval(refreshLiveMarkers, 2000); // 兜底刷新位置
 
@@ -3850,7 +3854,10 @@ function cadPlanFor(name, n) {
     const result = { bounds, segs, center, __bounds: geo.bounds || floor.bounds };
     cadPlanSync.set(key, result);
     return result;
-  })().catch(() => null);
+  })()
+    // 网络抖一下不该把「这层永远拿不到」缓存下来：失败就删缓存，下次进入重试
+    .then((r) => { if (!r) cadPlanCache.delete(key); return r; })
+    .catch(() => { cadPlanCache.delete(key); return null; });
   cadPlanCache.set(key, pr);
   return pr;
 }
@@ -4313,7 +4320,7 @@ function stopDemo6() {
   demo6State.frames?.clear();
   demo6State.bbox = null;
   demo6State.selectedFloor = 3;
-  liveGroup.visible = $('tg-live').checked;
+  liveGroup.visible = false;
   refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
   const btn = $('demo6-btn');
@@ -4813,7 +4820,7 @@ function stopDemo2() {
   demo2State.cages?.clear();
   demo2State.frames?.clear();
   demo2State.selectedFloor = 3;
-  liveGroup.visible = $('tg-live').checked;
+  liveGroup.visible = false;
   refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
   const btn = $('demo2-btn');
@@ -5123,6 +5130,7 @@ window.__dt = {
   get demo6State() { return demo6State; },
   cadPlanFor, floorInfoFor, modelBandFrame, floorFrame, calibrateBuilding, FLOOR_FIT,
   liveFloorFrame, cadPlanSync, stableBand, prepareShell, focusVeil,
+  refreshLiveMarkers, buildingTransformFor,
   setHour(h) {
     timeState.hour = h;
     timeState.playing = false;
