@@ -37,6 +37,7 @@
   .simbox button { width: 100%; font-size: 13px; border: 1px solid #2b7fd4; background: rgba(43,127,212,.85); color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; }
   .simbox button:hover { background: #3a8fe6; }
   .simbox button.on { background: #b4552f; border-color: #b4552f; }
+  .simhint { margin-top: 8px; font-size: 11px; line-height: 1.5; color: rgba(180, 214, 235, .75); }
 
   /* 顶部标题栏 */
   #topbar { position: fixed; top: 0; left: 0; right: 0; height: 58px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, rgba(8,14,28,.95), rgba(10,18,34,.82)); border-bottom: 1px solid rgba(0,229,255,.22); box-shadow: 0 2px 16px rgba(0,0,0,.4); }
@@ -223,6 +224,7 @@
     <button id="cruise-btn" style="margin-top:6px">自动巡航（360°逆时针）</button>
     <button id="demo6-btn" style="margin-top:6px">透视 6号楼（双机模拟）</button>
     <button id="demo2-btn" style="margin-top:6px">透视 2号楼（双机模拟）</button>
+    <div class="simhint">场景里双击 2/6 号楼也可直接进入透视</div>
   </div>
 </div>
 <div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转</div>
@@ -382,6 +384,8 @@ const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerH
 camera.position.set(W * 0.05, 300, H * 1.15);
 
 const controls = new OrbitControls(camera, renderer.domElement);
+// 用户一上手就放弃自动飞行：否则拖拽会被 flyToPos 的插值一直拽回去
+controls.addEventListener('start', () => { flyTarget = null; });
 controls.target.set(0, 20, 0);
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.minDistance = 30;
@@ -1336,6 +1340,7 @@ function syncCruiseButtons() {
 }
 function startCruise(automatic = false) {
   if (cruiseState.on || !realLoaded || pendingDemoLoads > 0) return;
+  if (automatic && focusState.active) return; // 自动巡航不打断透视
   if (demo6State.active) stopDemo6();
   if (demo2State.active) stopDemo2();
   setDemoBack(false);
@@ -1407,6 +1412,8 @@ document.addEventListener('visibilitychange', () => {
 });
 function checkCruiseIdle() {
   syncCruiseButtons();
+  // 透视模式下不自动巡航：自动巡航会退出透视并接管相机，用户正在看某一层时非常突兀
+  if (focusState.active) return;
   if (!document.hidden && !cruiseState.on && !flyTarget && !activePointers.size && performance.now() - lastActivityAt >= CRUISE_IDLE_MS) {
     startCruise(true);
   }
@@ -4751,13 +4758,9 @@ function pickBuildingAt(clientX, clientY) {
   return null;
 }
 const pickCanvas = renderer.domElement;
-let pickDownAt = null;
-pickCanvas.addEventListener('pointerdown', (e) => { pickDownAt = [e.clientX, e.clientY]; });
-pickCanvas.addEventListener('pointerup', (e) => {
-  const start = pickDownAt;
-  pickDownAt = null;
-  // 拖动旋转视角后松手不算点击
-  if (!start || Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 6) return;
+// 双击 2/6 号楼进入透视：单击留给旋转视角，避免拖拽/误触把人拽进透视
+pickCanvas.addEventListener('dblclick', (e) => {
+  if (focusState.active || demo2State.active || demo6State.active) return;
   const name = pickBuildingAt(e.clientX, e.clientY);
   if (name === '2号楼') startDemo2();
   else if (name === '6号楼') startDemo6();
