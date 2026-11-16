@@ -3912,13 +3912,14 @@ async function buildFloorWalls(state, name) {
   state.walls = new Map();
   state.cages = new Map();
   const wallH = Math.max(2.6, info.h - 1.0);
+  const worldBox = new THREE.Box3().setFromObject(info.node);
   for (const n of info.floors) {
     const plan = await cadPlanFor(name, n);
     if (!plan || !state.active) return;
     const frame = floorFrame(name, n, plan);
     if (!frame) continue;
     const y0 = frame.y + 0.08, y1 = frame.y + wallH;
-    const pad = 2;
+    const pad = 0.25;
     const band = frame.band;
     const inBand = (x, y) => {
       const [bx, bz] = frame.toBack(x, y);
@@ -3927,11 +3928,14 @@ async function buildFloorWalls(state, name) {
     const flat = new Float32Array(plan.segs.length * 6);
     let kf = 0;
     const quad = [], rail = [];
+    const wb = worldBox;
+    const inWorld = (wx, wz) => wx >= wb.min.x - 0.3 && wx <= wb.max.x + 0.3 && wz >= wb.min.z - 0.3 && wz <= wb.max.z + 0.3;
     for (const [x1, c1, x2, c2] of plan.segs) {
       // 跑出楼体截面的线是标注/图框残留，淡线也不画
       if (!inBand(x1, c1) || !inBand(x2, c2)) continue;
       const [ax, az] = frame.toWorld(x1, c1);
       const [bx, bz] = frame.toWorld(x2, c2);
+      if (!inWorld(ax, az) || !inWorld(bx, bz)) continue;
       flat[kf++] = ax; flat[kf++] = y0; flat[kf++] = az;
       flat[kf++] = bx; flat[kf++] = y0; flat[kf++] = bz;
       // 太短的线段是家具/洁具，拉成墙片只会糊成一团
@@ -4334,19 +4338,22 @@ function demo2AddFloorPlate(n, y, loop, bbox, replace = false, state = demo2Stat
   if (state.plates.has(n)) {
     if (!replace) return;
     const old = state.plates.get(n);
-    state.group.remove(old.mesh, old.edge, old.label);
+    state.group.remove(old.mesh, old.edge, old.label, old.lead);
     old.mesh.geometry.dispose(); old.mesh.material.dispose();
     old.edge.geometry.dispose(); old.edge.material.dispose();
     if (old.label.material.map) old.label.material.map.dispose();
     old.label.material.dispose();
+    if (old.lead) { old.lead.geometry.dispose(); old.lead.material.dispose(); }
     state.plates.delete(n);
   }
   const boxMinX = bbox.min?.x ?? bbox.minX;
   const boxMaxX = bbox.max?.x ?? bbox.maxX;
   const boxMinZ = bbox.min?.z ?? bbox.minZ;
   const boxMaxZ = bbox.max?.z ?? bbox.maxZ;
-  // 楼板直接用楼体该高度的截面矩形，不再内缩（内缩是给 CAD 外轮廓留的余量，现在不用了）
-  const inset = 1;
+  // 截面矩形含檐口/阳台外挑，楼板每边内收 0.45m，避免高亮板从立面探出去
+  const INWARD = 0.45;
+  const halfW = Math.max(1, (boxMaxX - boxMinX) / 2), halfD = Math.max(1, (boxMaxZ - boxMinZ) / 2);
+  const inset = Math.max(0.9, 1 - INWARD / Math.min(halfW, halfD));
   const cx0 = (boxMinX + boxMaxX) / 2;
   const cz0 = (boxMinZ + boxMaxZ) / 2;
   let shape;
@@ -4363,15 +4370,15 @@ function demo2AddFloorPlate(n, y, loop, bbox, replace = false, state = demo2Stat
       new THREE.Vector2(cx0 + (boxMinX - cx0) * inset, -(cz0 + (boxMaxZ - cz0) * inset)),
     ]);
   }
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.28, bevelEnabled: false, steps: 1 });
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: false, steps: 1 });
   geo.rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x68c7e8, emissive: 0x0b3446, emissiveIntensity: 0.45,
-    transparent: true, opacity: 0.09, depthWrite: false, side: THREE.DoubleSide,
-    roughness: 0.35, metalness: 0.0,
+    color: 0x7fddff, emissive: 0x0d3a52, emissiveIntensity: 0.5,
+    transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide,
+    roughness: 0.3, metalness: 0.0,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.y = y - 0.30;
+  mesh.position.y = y - 0.16;
   mesh.renderOrder = 20;
   state.group.add(mesh);
 
@@ -4388,13 +4395,22 @@ function demo2AddFloorPlate(n, y, loop, bbox, replace = false, state = demo2Stat
     minX = Math.min(...loop.map((p) => p.x)); maxX = Math.max(...loop.map((p) => p.x));
     minZ = Math.min(...loop.map((p) => p.z)); maxZ = Math.max(...loop.map((p) => p.z));
   }
-  const label = makeLabel(`${n}F`, 'rgba(5,20,30,0.88)', '#9fe8ff', 0.5);
-  label.position.set(maxX + 2.8, y + 0.8, (minZ + maxZ) / 2);
+  const cz = (minZ + maxZ) / 2;
+  const label = makeLabel(`${n}F`, 'rgba(6,24,36,0.9)', '#a8f0ff', 0.46);
+  label.position.set(maxX + 3.4, y + 1.1, cz);
   label.material.depthTest = false;
   label.renderOrder = 300;
   label.visible = false;
   state.group.add(label);
-  state.plates.set(n, { mesh, edge, label, y });
+  const leadGeo = new THREE.BufferGeometry();
+  leadGeo.setAttribute('position', new THREE.Float32BufferAttribute([maxX - 0.2, y + 0.1, cz, maxX + 3.4, y + 0.95, cz], 3));
+  const lead = new THREE.LineSegments(leadGeo, new THREE.LineBasicMaterial({
+    color: 0x9fe8ff, transparent: true, opacity: 0.55, depthWrite: false,
+  }));
+  lead.renderOrder = 299;
+  lead.visible = false;
+  state.group.add(lead);
+  state.plates.set(n, { mesh, edge, label, lead, y });
   demo2SelectFloor(state.selectedFloor || 3, state);
 }
 
@@ -4409,6 +4425,7 @@ function demo2SelectFloor(n, state = demo2State) {
     p.edge.material.opacity = on ? 0.92 : 0.16;
     p.edge.visible = on;
     p.label.visible = on;
+    if (p.lead) p.lead.visible = on;
   }
   const cur = document.getElementById('fp-current');
   if (cur) cur.textContent = '当前 ' + n + 'F';
@@ -4439,24 +4456,29 @@ function demo2SelectFloor(n, state = demo2State) {
 }
 
 function demo2MakeTrail(color) {
-  const max = 90;
+  const max = 140;
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 3), 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(max * 3), 3));
   geom.setDrawRange(0, 0);
+  const base = new THREE.Color(color);
   const mat = new THREE.LineBasicMaterial({
-    color, transparent: true, opacity: 0.86, depthTest: false, depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    transparent: true, opacity: 0.95, depthTest: false, depthWrite: false,
+    blending: THREE.AdditiveBlending, vertexColors: true,
   });
   const line = new THREE.Line(geom, mat);
   line.renderOrder = 260;
   line.frustumCulled = false;
   const dots = new THREE.Points(geom, new THREE.PointsMaterial({
-    color, size: 0.42, sizeAttenuation: true, transparent: true, opacity: 0.82,
-    depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+    size: 0.3, sizeAttenuation: true, transparent: true, opacity: 0.9,
+    depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
   }));
   dots.renderOrder = 261;
   dots.frustumCulled = false;
-  return { line, dots, positions: geom.attributes.position.array, count: 0, max, lastX: NaN, lastZ: NaN };
+  return {
+    line, dots, positions: geom.attributes.position.array, colors: geom.attributes.color,
+    base: [base.r, base.g, base.b], count: 0, max, lastX: NaN, lastZ: NaN,
+  };
 }
 
 function demo2PushTrail(r) {
@@ -4471,11 +4493,21 @@ function demo2PushTrail(r) {
   }
   const o = t.count * 3;
   t.positions[o] = x;
-  t.positions[o + 1] = r.floorY + 0.18;
+  t.positions[o + 1] = r.floorY + 0.12;
   t.positions[o + 2] = z;
   t.count++;
+  // 越新的点越亮：加法混合下"褪成黑色"就是淡出，能直接读出运动方向
+  const col = t.colors.array;
+  for (let i = 0; i < t.count; i++) {
+    const k = t.count > 1 ? i / (t.count - 1) : 1;
+    const f = 0.06 + 0.94 * k * k;
+    col[i * 3] = t.base[0] * f;
+    col[i * 3 + 1] = t.base[1] * f;
+    col[i * 3 + 2] = t.base[2] * f;
+  }
   t.line.geometry.setDrawRange(0, t.count);
   t.line.geometry.attributes.position.needsUpdate = true;
+  t.colors.needsUpdate = true;
 }
 
 async function spawnDemo2Robots(bbox, baseY) {
