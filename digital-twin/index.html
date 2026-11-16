@@ -1092,6 +1092,9 @@ async function replaceSixModel() {
   }
 }
 
+// 模型导出时可能给节点名加序号（如 1号楼003），与中控 buildingName 对齐
+const NODE_NAME_FIX = { '1号楼003': '1号楼' };
+
 function loadRealModel() {
   if (realLoaded || realLoading) return;
   realLoading = true;
@@ -1118,10 +1121,12 @@ function loadRealModel() {
         if (o.name === '氛围建筑') o.visible = false;
       }
       // 注册所有楼栋节点（含 5号楼01 等拆分塔楼），供实时机器人落位
-      if (o.name && /号楼\d*$/.test(o.name) && (o.isMesh || o.children.length > 0)) {
-        o.userData.buildingName = o.name;
-        o.traverse((c) => { if (c.isMesh) c.userData.buildingName = o.name; });
-        realBuildings.set(o.name, o);
+      // 导出偶尔会给节点加序号后缀（如 1号楼003），这里统一回中控的 buildingName
+      const nm = NODE_NAME_FIX[o.name] || o.name;
+      if (nm && /号楼\d*$/.test(nm) && (o.isMesh || o.children.length > 0)) {
+        o.userData.buildingName = nm;
+        o.traverse((c) => { if (c.isMesh) c.userData.buildingName = nm; });
+        realBuildings.set(nm, o);
       }
     });
     realGroup.add(obj);
@@ -3701,11 +3706,14 @@ function modelBandFrame(name, y) {
 function stableBand(name, n) {
   const info = floorInfoFor(name);
   if (!info) return null;
-  for (let k = n; k >= info.floors[0]; k--) {
-    const b = modelBandFrame(name, info.baseY + (k - 1) * info.h);
+  // 楼板封的是「它下面那层的体量」；顶层若按上方取样，会被女儿墙/机房收窄
+  const idx = info.floors.indexOf(n);
+  const startK = idx > 0 ? idx - 1 : 0;
+  for (let k = startK; k >= 0; k--) {
+    const b = modelBandFrame(name, info.baseY + k * info.h);
     if (b && b.count >= 400) return b;
   }
-  return modelBandFrame(name, info.baseY + (n - 1) * info.h);
+  return modelBandFrame(name, info.baseY + startK * info.h);
 }
 
 // CAD 墙线清洗：墙体多为 0.4~20m 的双线段；碎线是洁具/家具，超长线是图框与标注引线
@@ -3794,7 +3802,7 @@ async function calibrateBuilding(name) {
   for (const n of info.floors) {
     const plan = await cadPlanFor(name, n);
     if (!plan) continue;
-    const band = modelBandFrame(name, info.baseY + (n - 1) * info.h);
+    const band = stableBand(name, n);
     if (!band) continue;
     const b = plan.__bounds || plan.bounds;
     if (!b) continue;
