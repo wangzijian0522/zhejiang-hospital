@@ -378,7 +378,7 @@ scene.fog = new THREE.Fog(0xcfe2f2, 900, 2200);
 {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.18;
+  scene.environmentIntensity = 0.22;
   pmrem.dispose();
 }
 
@@ -400,22 +400,28 @@ controls.mouseButtons = {
 };
 
 renderer.shadowMap.enabled = true;
+// three r187 已移除 PCFSoftShadowMap(会退化成硬边 PCF),软边靠 shadow.radius 的 Vogel 采样
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+// 曝光压到 0.82:白墙原本糊成一片,压下来才能看到板缝与玻璃层次,并且不再过曝
+renderer.toneMappingExposure = 0.82;
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c6d4, 0.88);
 scene.add(hemi);
-const sunLight = new THREE.DirectionalLight(0xfff6e8, 2.0);
+const sunLight = new THREE.DirectionalLight(0xfff6e8, 3.2);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
-sunLight.shadow.camera.near = 120;
-sunLight.shadow.camera.far = 1800;
-sunLight.shadow.camera.left = -300;
-sunLight.shadow.camera.right = 300;
-sunLight.shadow.camera.top = 300;
-sunLight.shadow.camera.bottom = -300;
-sunLight.shadow.bias = -0.0004;
+sunLight.shadow.camera.near = 60;
+sunLight.shadow.camera.far = 1400;
+sunLight.shadow.camera.left = -240;
+sunLight.shadow.camera.right = 240;
+sunLight.shadow.camera.top = 240;
+sunLight.shadow.camera.bottom = -240;
+// 法线偏移优先于深度偏移:立面斜射时不会出现条纹状自阴影,也不拖影
+sunLight.shadow.normalBias = 0.08;
+sunLight.shadow.bias = -0.0002;
+// 半径 3 像素 ≈ 0.7m 半影,建筑尺度上接近晴天日影的柔和过渡
+sunLight.shadow.radius = 3;
 scene.add(sunLight);
 scene.add(sunLight.target);
 const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
@@ -609,6 +615,35 @@ new THREE.TextureLoader().load('/digital-twin/assets/site-plan.jpg', (t) => {
   if ($('tg-tex').checked) ground.material = groundMapMat;
 });
 
+// ---------- 视角范围限制 ----------
+// 城市体量只生成到 1.5km，再往外就是生成的边缘。这里把视点锁在院区附近：
+// 目标点（平移）最多离院区中心 PAN_R，相机最多离中心 CAM_R，外圈只允许看到一部分。
+const VIEW_LIMIT = { center: new THREE.Vector3(), panR: 430, camR: 1150 };
+function syncViewLimit() {
+  if (campusFocus) VIEW_LIMIT.center.set(campusFocus.x, 0, campusFocus.z);
+  controls.maxDistance = 900;
+}
+function clampView() {
+  const c = VIEW_LIMIT.center;
+  const t = controls.target;
+  const dx = t.x - c.x, dz = t.z - c.z;
+  const d = Math.hypot(dx, dz);
+  if (d > VIEW_LIMIT.panR) {
+    const k = VIEW_LIMIT.panR / d;
+    t.x = c.x + dx * k;
+    t.z = c.z + dz * k;
+  }
+  t.y = THREE.MathUtils.clamp(t.y, 2, 120);
+  const p = camera.position;
+  const px = p.x - c.x, pz = p.z - c.z;
+  const pd = Math.hypot(px, pz);
+  if (pd > VIEW_LIMIT.camR) {
+    const k = VIEW_LIMIT.camR / pd;
+    p.x = c.x + px * k;
+    p.z = c.z + pz * k;
+  }
+}
+
 // ---------- 时间 / 太阳 ----------
 const timeState = { hour: 12, playing: false, speed: 0.35 }; // 默认 12:00，小时/秒（约70秒一整天）
 const sunDir = new THREE.Vector3();
@@ -655,7 +690,9 @@ function updateSun() {
   sunDirAt(timeState.hour, sunDir);
   const elv = sunElvAt(timeState.hour);
   if (elv > 0.02) {
-    sunLight.intensity = (0.35 + elv * 1.8) * weatherDim;
+    // 主光拉强、环境光压低:明暗差出来立面才有体积感,不再是"均匀泛白"。
+    // elv 封顶 0.9,否则正午太阳把白墙面打到过曝,反倒丢了板缝细节
+    sunLight.intensity = (0.55 + Math.min(elv, 0.9) * 3.05) * weatherDim;
     sunLight.color.copy(SUN_LOW).lerp(SUN_WHITE, Math.min(1, elv * 1.6));
     sunDisc.visible = true;
   } else {
@@ -673,8 +710,13 @@ function updateSun() {
   else if (elv > 0) skyCol.copy(SUNSET).lerp(HORIZON, elv / 0.14);
   else if (elv > -0.14) skyCol.copy(NIGHT).lerp(SUNSET, (elv + 0.14) / 0.14);
   else skyCol.copy(NIGHT);
-  hemi.intensity = 0.22 + Math.max(0, elv) * 0.8;
-  fillLight.intensity = 0.04 + Math.max(0, elv) * 0.32;
+  // 环境光按天气插值:晴天走低环境光拿对比,阴雨雾天把被云挡掉的直射换成漫射天光,
+  // 否则场景会发灰发闷(weatherDim=1 时等价于晴天那组系数)
+  const dayA = Math.max(0, elv);
+  const ambSunny = 0.12 + dayA * 0.075;
+  const ambOvercast = 0.55 + dayA * 0.45;
+  hemi.intensity = ambOvercast + (ambSunny - ambOvercast) * weatherDim;
+  fillLight.intensity = 0.05 + dayA * 0.02;
   // 天空穹顶配色
   const u = skyDomeMat.uniforms;
   const cT = u.topCol.value, cM = u.midCol.value, cB = u.botCol.value;
@@ -1083,6 +1125,7 @@ function computeCampusFocus() {
   campusFocus = new THREE.Vector3(acc.x / areaSum, 0, acc.z / areaSum);
   const sz = bb.getSize(new THREE.Vector3());
   campusRadius = Math.max(Math.hypot(sz.x, sz.z) * 0.5, 100);
+  syncViewLimit();
   return campusFocus;
 }
 
@@ -5311,6 +5354,7 @@ function animate() {
   const MIN_VIEW_Y = 0.6;
   if (controls.target.y < MIN_VIEW_Y) controls.target.y = MIN_VIEW_Y;
   if (camera.position.y < MIN_VIEW_Y) camera.position.y = MIN_VIEW_Y;
+  clampView();
   updateLabelLOD();
   renderer.render(scene, camera);
 }
