@@ -1587,19 +1587,27 @@ function refreshLiveMarkers() {
     if (!xf) { mk.obj.visible = false; continue; }
     mk.obj.visible = true;
     const p = loc.cadPose;
-    mk.obj.position.set(
-      xf.cx + (p.x - xf.cadCX) * xf.s,
-      // 层高约定与分层楼板一致（floorNumber 1 基，1F 落在 baseY）；
-      // 原来用 floorNumber*3.8 会让机器人整栋高一层
-      xf.baseY + ((floor.floorNumber ?? 1) - 1) * 3.8 + 0.8,
-      xf.cz - (p.y - xf.cadCY) * xf.s
-    );
+    // 透视中优先用该层的套件变换：楼板/墙体/真机共用一套坐标，才不会各走各的
+    const st = floor.buildingName === '2号楼' ? demo2State : floor.buildingName === '6号楼' ? demo6State : null;
+    const fr = st?.frames?.get(floor.floorNumber);
+    if (fr) {
+      const [wx, wz] = fr.toWorld(p.x, p.y);
+      mk.obj.position.set(wx, fr.y + 0.8, wz);
+    } else {
+      mk.obj.position.set(
+        xf.cx + (p.x - xf.cadCX) * xf.s,
+        xf.baseY + ((floor.floorNumber ?? 1) - 1) * (floorInfoFor(floor.buildingName)?.h || 3.8) + 0.8,
+        xf.cz - (p.y - xf.cadCY) * xf.s
+      );
+    }
     mk.obj.rotation.y = Math.PI / 2 + (p.yawRad || 0);
     const flNum = floor.floorNumber;
     if (flNum !== mk.floor) {
       mk.floor = flNum;
       setBeaconTag(mk.beacon, flNum != null ? flNum + 'F' : '·');
     }
+    const filter = demoFloorFilter(floor.buildingName);
+    mk.obj.visible = filter == null || filter === flNum;
   }
   for (const [rid, r] of liveState.robots) {
     if (liveMarkers.has(rid)) continue;
@@ -3525,37 +3533,387 @@ function fitFocusDistance(box, camera, cameraPosFor, target, margin = 1.08) {
   return hi * margin;
 }
 
+// ---------- 楼层套件：层高 / CAD↔场景配准 / 楼板 ----------
+// 标定表（实测 CAD 平面 bbox 与 GLB 该高度截面 bbox 的比值，逐层稳定）：
+//  - 2号楼：x 向 1.06、进深 1.20（模型比图纸多出北侧外廊），CAD 轴即场景轴
+//  - 6号楼：图纸与模型差 90°（CAD x ↔ 场景 z），约 1.09 等比
+// flipU/flipV 决定 CAD 坐标轴正方向，墙体接入后再按现场目视校正。
+const FLOOR_FIT = {
+  '2号楼': { swap: false, sx: 1.06, sz: 1.20, flipU: 1, flipV: -1 },
+  '6号楼': { swap: true, sx: 1.09, sz: 1.09, flipU: 1, flipV: -1 },
+};
+const floorInfoCache = new Map();
+const buildingVertexCache = new Map();
+const cadPlanCache = new Map();
+
+// 楼栋全部顶点（world 坐标，扁平 Float32Array），供按高度带取截面
+function buildingVertices(node) {
+  const cached = buildingVertexCache.get(node.uuid);
+  if (cached) return cached;
+  node.updateWorldMatrix(true, true);
+  const meshes = [];
+  let total = 0;
+  node.traverse((o) => {
+    if (o.isMesh && o.geometry?.attributes?.position) { meshes.push(o); total += o.geometry.attributes.position.count; }
+  });
+  const buf = new Float32Array(total * 3);
+  const v = new THREE.Vector3();
+  let k = 0;
+  for (const o of meshes) {
+    const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      buf[k++] = v.x; buf[k++] = v.y; buf[k++] = v.z;
+    }
+  }
+  buildingVertexCache.set(node.uuid, buf);
+  return buf;
+}
+
+// 楼栋层高信息：层高 = 楼高 / 地上层数（1F 板贴 baseY，顶层板贴屋面）
+function floorInfoFor(name) {
+  const cached = floorInfoCache.get(name);
+  if (cached) return cached;
+  const node = realBuildings.get(name);
+  if (!node) return null;
+  const floors = [...liveState.floors.values()]
+    .filter((f) => f.buildingName === name && f.floorNumber >= 1)
+    .map((f) => f.floorNumber)
+    .sort((a, b) => a - b);
+  if (!floors.length) return null; // 中控目录未就绪，先不缓存
+  const box = new THREE.Box3().setFromObject(node);
+  const q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+  node.matrixWorld.decompose(p, q, s);
+  const rotY = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
+  const info = {
+    name, node, baseY: box.min.y, topY: box.max.y, rotY,
+    h: (box.max.y - box.min.y) / floors.length,
+    floors,
+  };
+  floorInfoCache.set(name, info);
+  return info;
+}
+
+// 某高度带的截面 bbox：在「去旋转」空间里取，避免斜置楼栋的 AABB 虚胖
+function modelBandFrame(name, y, half = 1.8) {
+  const info = floorInfoFor(name);
+  if (!info) return null;
+  const buf = buildingVertices(info.node);
+  const c = Math.cos(info.rotY), s = Math.sin(info.rotY);
+  // 顶点云里有大量重复点和薄片（檐口/栏杆），按 1m 栅格统计再取占据格，避免分位数被聚簇带偏
+  const CELL = 1;
+  const cells = new Map();
+  for (let i = 0; i < buf.length; i += 3) {
+    if (Math.abs(buf[i + 1] - y) > half) continue;
+    const x = buf[i], z = buf[i + 2];
+    const bx = c * x - s * z;   // R(-θ)
+    const bz = s * x + c * z;
+    const key = Math.floor(bx / CELL) + ',' + Math.floor(bz / CELL);
+    cells.set(key, (cells.get(key) || 0) + 1);
+  }
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, used = 0;
+  for (const [key, hits] of cells) {
+    if (hits < 3) continue;    // 稀疏格＝毛刺，丢掉
+    const [ix, iz] = key.split(',');
+    const bx = +ix * CELL, bz = +iz * CELL;
+    if (bx < minX) minX = bx; if (bx + CELL > maxX) maxX = bx + CELL;
+    if (bz < minZ) minZ = bz; if (bz + CELL > maxZ) maxZ = bz + CELL;
+    used++;
+  }
+  if (used < 12 || !(maxX > minX)) return null;
+  return { minX, maxX, minZ, maxZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, count: used };
+}
+
+// CAD 墙线清洗：墙体多为 0.4~20m 的双线段；碎线是洁具/家具，超长线是图框与标注引线
+function cleanCadSegs(segs) {
+  const kept = [];
+  for (const s of segs) {
+    const len = Math.hypot(s[2] - s[0], s[3] - s[1]);
+    if (len < 0.35 || len > 30) continue;
+    kept.push(s);
+  }
+  if (kept.length < 40) return kept;
+  const xs = [], ys = [];
+  for (const s of kept) { xs.push((s[0] + s[2]) / 2); ys.push((s[1] + s[3]) / 2); }
+  const q = (arr, p) => { const a = [...arr].sort((m, n) => m - n); return a[Math.min(a.length - 1, Math.max(0, Math.round(p * (a.length - 1))))]; };
+  const x0 = q(xs, 0.02), x1 = q(xs, 0.98), y0 = q(ys, 0.02), y1 = q(ys, 0.98);
+  const inBox = kept.filter((s) => {
+    const mx = (s[0] + s[2]) / 2, my = (s[1] + s[3]) / 2;
+    return mx >= x0 && mx <= x1 && my >= y0 && my <= y1;
+  });
+  // 孤立线段（2m 邻域内没有第二段）基本是标注引线/箭头，墙体总是成簇出现
+  const CELL = 2;
+  const cell = (x, y) => Math.floor(x / CELL) + ',' + Math.floor(y / CELL);
+  const density = new Map();
+  for (const [x1s, y1s, x2s, y2s] of inBox) {
+    const k = cell((x1s + x2s) / 2, (y1s + y2s) / 2);
+    density.set(k, (density.get(k) || 0) + 1);
+  }
+  const clustered = inBox.filter(([x1s, y1s, x2s, y2s]) => density.get(cell((x1s + x2s) / 2, (y1s + y2s) / 2)) >= 2);
+  return clustered.length > inBox.length * 0.4 ? clustered : inBox;
+}
+
+// 读取并缓存某层 CAD 平面（墙线 + 闭环）
+function cadPlanFor(name, n) {
+  const key = `${name}/${n}`;
+  if (cadPlanCache.has(key)) return cadPlanCache.get(key);
+  const pr = (async () => {
+    const floor = [...liveState.floors.values()].find((f) => f.buildingName === name && f.floorNumber === n);
+    const rid = floor?.geometryResource?.resourceId;
+    if (!rid) return null;
+    let geo = cadResCache.get(rid);
+    if (!geo) {
+      const res = await fetch('/twin-resource?rid=' + encodeURIComponent(rid));
+      if (!res.ok) return null;
+      geo = await res.json();
+      cadResCache.set(rid, geo);
+    }
+    const segs = cleanCadSegs((geo.lines || []).map(([a, b]) => [a[0], a[1], b[0], b[1]]));
+    // 基准框取线段中点的 2%~98% 分位：图框线/标注引线不会把整层拉偏
+    let bounds = geo.bounds || floor.bounds;
+    if (segs.length >= 40) {
+      const xs = [], ys = [];
+      for (const s of segs) { xs.push((s[0] + s[2]) / 2); ys.push((s[1] + s[3]) / 2); }
+      const q = (arr, p2) => { const a = [...arr].sort((m, n) => m - n); return a[Math.min(a.length - 1, Math.max(0, Math.round(p2 * (a.length - 1))))]; };
+      bounds = { minX: q(xs, 0.02), maxX: q(xs, 0.98), minY: q(ys, 0.02), maxY: q(ys, 0.98) };
+    }
+    let px = 0, py = 0;
+    for (const s2 of segs) { px += s2[0] + s2[2]; py += s2[1] + s2[3]; }
+    const n2 = Math.max(1, segs.length * 2);
+    const center = { x: px / n2, y: py / n2 };
+    // 标注引线/图框：任一端点跑出基准框 4m 就不要
+    if (segs.length >= 40) {
+      const pad = 4;
+      const inBox = (x, y) => x >= bounds.minX - pad && x <= bounds.maxX + pad && y >= bounds.minY - pad && y <= bounds.maxY + pad;
+      const filtered = segs.filter(([x1, y1, x2, y2]) => inBox(x1, y1) && inBox(x2, y2));
+      if (filtered.length > segs.length * 0.5) segs.length = 0, segs.push(...filtered);
+    }
+    return { bounds, segs, center, __bounds: geo.bounds || floor.bounds };
+  })().catch(() => null);
+  cadPlanCache.set(key, pr);
+  return pr;
+}
+
+const median = (arr) => {
+  const a = [...arr].sort((x, y) => x - y);
+  return a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+};
+
+// 配准：CAD 平面单位就是米（unit=m），尺度固定 1，只判断轴向是否要换（6号楼图纸与模型差 90°）。
+// 判据：变换后墙线必须装进该层楼体截面，取「溢出量最小、贴合余量最小」的轴向。
+async function calibrateBuilding(name) {
+  const info = floorInfoFor(name);
+  const fit = FLOOR_FIT[name];
+  if (!info || !fit) return null;
+  if (fit.calibrated) return fit;
+  const samples = [];
+  for (const n of info.floors) {
+    const plan = await cadPlanFor(name, n);
+    if (!plan) continue;
+    const band = modelBandFrame(name, info.baseY + (n - 1) * info.h);
+    if (!band) continue;
+    const b = plan.__bounds || plan.bounds;
+    if (!b) continue;
+    samples.push({
+      cadW: b.maxX - b.minX, cadH: b.maxY - b.minY,
+      bandW: band.maxX - band.minX, bandH: band.maxZ - band.minZ,
+    });
+  }
+  if (!samples.length) return fit;
+  const rate = (swap) => {
+    let overflow = 0, slack = 0;
+    for (const s2 of samples) {
+      const w = swap ? s2.cadH : s2.cadW;
+      const h = swap ? s2.cadW : s2.cadH;
+      overflow += Math.max(0, w - s2.bandW) + Math.max(0, h - s2.bandH);
+      slack += Math.abs(s2.bandW - w) + Math.abs(s2.bandH - h);
+    }
+    return { overflow, slack };
+  };
+  const direct = rate(false);
+  const swapped = rate(true);
+  fit.swap = swapped.overflow < direct.overflow - 0.5;
+  fit.sx = fit.sz = 1;
+  fit.ox = fit.oz = 0;
+  fit.calibrated = true;
+  const picked = fit.swap ? swapped : direct;
+  console.log('[配准]', name, 'swap', fit.swap, 'scale 1(m)', '轴向溢出', picked.overflow.toFixed(1) + 'm', '贴合余量', picked.slack.toFixed(1) + 'm', '样本层', samples.length);
+  return fit;
+}
+
+// 单层映射：CAD 平面 (x,y) → 场景 world (x,z)；scale/平移按该层模型截面标定
+function floorFrame(name, n, plan) {
+  const info = floorInfoFor(name);
+  const fit = FLOOR_FIT[name];
+  if (!info || !fit || !plan?.center) return null;
+  const y = info.baseY + (n - 1) * info.h;
+  const band = modelBandFrame(name, y);
+  if (!band) return null;
+  const c = Math.cos(info.rotY), s = Math.sin(info.rotY);
+  const cadC = plan.center;
+  const uC = fit.swap ? cadC.y : cadC.x;
+  const vC = fit.swap ? cadC.x : cadC.y;
+  const toBack = (x, cadY) => [
+    band.cx + (fit.ox || 0) + fit.flipU * ((fit.swap ? cadY : x) - uC) * fit.sx,
+    band.cz + (fit.oz || 0) + fit.flipV * ((fit.swap ? x : cadY) - vC) * fit.sz,
+  ];
+  const toWorld = (x, cadY) => {
+    const [bx, bz] = toBack(x, cadY);
+    return [c * bx + s * bz, -s * bx + c * bz];
+  };
+  return { y, band, toBack, toWorld, c, s };
+}
+
+// 建整栋楼板：先按模型截面立刻出板，再按 CAD 闭环逐层精修
+async function buildFloorStack(state, name) {
+  const info = floorInfoFor(name);
+  if (!info) return;
+  await calibrateBuilding(name);
+  let lastBand = null;
+  for (const n of info.floors) {
+    const y = info.baseY + (n - 1) * info.h;
+    const band = modelBandFrame(name, y) || lastBand;
+    if (!band) continue;
+    lastBand = band;
+    // 楼板取模型该高度的截面矩形（外轮廓一定和楼体一致），CAD 只负责室内墙线
+    const c = Math.cos(info.rotY), sn = Math.sin(info.rotY);
+    const rect = [[band.minX, band.minZ], [band.maxX, band.minZ], [band.maxX, band.maxZ], [band.minX, band.maxZ]]
+      .map(([bx, bz]) => new THREE.Vector3(c * bx + sn * bz, y, -sn * bx + c * bz));
+    const bbox = {
+      minX: Math.min(...rect.map((p) => p.x)), maxX: Math.max(...rect.map((p) => p.x)),
+      minZ: Math.min(...rect.map((p) => p.z)), maxZ: Math.max(...rect.map((p) => p.z)),
+    };
+    demo2AddFloorPlate(n, y, rect, bbox, true, state);
+  }
+  demo2SelectFloor(state.selectedFloor || info.floors[Math.min(2, info.floors.length - 1)], state);
+  await buildFloorWalls(state, name);
+}
+
+// 透视会话正在看哪一层（非透视返回 null）
+function demoFloorFilter(buildingName) {
+  if (buildingName === '2号楼' && demo2State.active) return demo2State.selectedFloor;
+  if (buildingName === '6号楼' && demo6State.active) return demo6State.selectedFloor;
+  return null;
+}
+
+// 中控当前有可用位姿的楼层（真实机器人只在这些层能落位）
+function liveReadyFloor(name) {
+  for (const r of liveState.robots.values()) {
+    const loc = readyPose(r);
+    if (!loc) continue;
+    const f = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
+    if (f?.buildingName === name && f.floorNumber >= 1) return f.floorNumber;
+  }
+  return null;
+}
+
+// 取景：机位留在楼外看整栋，视线对准当前层——既不钻进楼里，也能一眼看出高亮的是哪层
+function flyToFloor(state, name, n) {
+  const info = floorInfoFor(name);
+  if (!info) return;
+  const box = state?.bbox || (state?.plates?.get(n) && new THREE.Box3().setFromObject(state.plates.get(n).mesh));
+  if (!box) return;
+  const y = info.baseY + (n - 1) * info.h;
+  const ctr = box.getCenter(new THREE.Vector3());
+  const midY = info.baseY + (info.topY - info.baseY) * 0.55;
+  const look = new THREE.Vector3(ctr.x, y + info.h * 0.9, ctr.z);
+  const dist = fitFocusDistance(box, camera, (d) => new THREE.Vector3(look.x, midY, look.z + d), look, 1.15);
+  flyToPos(new THREE.Vector3(look.x, midY, look.z + dist), look);
+}
+
+// 每层墙体：全楼层铺极淡的地面墙线；当前层把墙线拉成「玻璃墙片」+ 顶部亮线，读起来是房间而不是涂鸦
+async function buildFloorWalls(state, name) {
+  const info = floorInfoFor(name);
+  if (!info) return;
+  state.walls = new Map();
+  state.cages = new Map();
+  const wallH = Math.max(2.6, info.h - 1.0);
+  for (const n of info.floors) {
+    const plan = await cadPlanFor(name, n);
+    if (!plan || !state.active) return;
+    const frame = floorFrame(name, n, plan);
+    if (!frame) continue;
+    const y0 = frame.y + 0.08, y1 = frame.y + wallH;
+    const pad = 2;
+    const band = frame.band;
+    const inBand = (x, y) => {
+      const [bx, bz] = frame.toBack(x, y);
+      return bx >= band.minX - pad && bx <= band.maxX + pad && bz >= band.minZ - pad && bz <= band.maxZ + pad;
+    };
+    const flat = new Float32Array(plan.segs.length * 6);
+    let kf = 0;
+    const quad = [], rail = [];
+    for (const [x1, c1, x2, c2] of plan.segs) {
+      // 跑出楼体截面的线是标注/图框残留，淡线也不画
+      if (!inBand(x1, c1) || !inBand(x2, c2)) continue;
+      const [ax, az] = frame.toWorld(x1, c1);
+      const [bx, bz] = frame.toWorld(x2, c2);
+      flat[kf++] = ax; flat[kf++] = y0; flat[kf++] = az;
+      flat[kf++] = bx; flat[kf++] = y0; flat[kf++] = bz;
+      // 太短的线段是家具/洁具，拉成墙片只会糊成一团
+      if (Math.hypot(bx - ax, bz - az) < 0.9) continue;
+      quad.push(ax, y0, az, bx, y0, bz, bx, y1, bz);
+      quad.push(ax, y0, az, bx, y1, bz, ax, y1, az);
+      rail.push(ax, y1, az, bx, y1, bz);
+    }
+    const flatGeo = new THREE.BufferGeometry();
+    flatGeo.setAttribute('position', new THREE.BufferAttribute(flat, 3));
+    const flatLine = new THREE.LineSegments(flatGeo, new THREE.LineBasicMaterial({
+      color: 0x86d8f2, transparent: true, opacity: 0.06, depthWrite: false,
+    }));
+    flatLine.renderOrder = 4;
+    flatLine.visible = false;
+    state.group.add(flatLine);
+    state.walls.set(n, flatLine);
+
+    const panelGeo = new THREE.BufferGeometry();
+    panelGeo.setAttribute('position', new THREE.Float32BufferAttribute(quad, 3));
+    panelGeo.computeVertexNormals();
+    const panel = new THREE.Mesh(panelGeo, new THREE.MeshBasicMaterial({
+      color: 0x5cc8ee, transparent: true, opacity: 0.15, side: THREE.DoubleSide,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    panel.renderOrder = 6;
+    panel.visible = false;
+    state.group.add(panel);
+
+    const railGeo = new THREE.BufferGeometry();
+    railGeo.setAttribute('position', new THREE.Float32BufferAttribute(rail, 3));
+    const railLine = new THREE.LineSegments(railGeo, new THREE.LineBasicMaterial({
+      color: 0xa8f0ff, transparent: true, opacity: 0.5, depthWrite: false,
+    }));
+    railLine.renderOrder = 7;
+    railLine.visible = false;
+    state.group.add(railLine);
+    state.cages.set(n, { panel, rail: railLine });
+    (state.frames || (state.frames = new Map())).set(n, frame);
+    if (n === state.selectedFloor) applyFloorFocus(state, n);
+  }
+  demo2SelectFloor(state.selectedFloor, state);
+}
+
+// 楼层焦点：当前层墙片/顶线全开，相邻层留淡轮廓，其余只留地面墙线
+function applyFloorFocus(state, n) {
+  if (!state.walls) return;
+  for (const [num, line] of state.walls) {
+    const d = Math.abs(num - n);
+    line.visible = true;
+    line.material.opacity = d === 0 ? 0.42 : d === 1 ? 0.1 : 0.03;
+  }
+  for (const [num, cage] of state.cages) {
+    const on = num === n;
+    cage.panel.visible = on;
+    cage.rail.visible = on;
+  }
+  // 真机只显示当前层，其余层隐掉——避免和本层楼板对不上显得飘
+  for (const mk of liveMarkers.values()) {
+    mk.obj.visible = mk.floor === n;
+  }
+}
+
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
 const demo6State = { active: false, robots: [], group: null, bbox: null, shell: null, plates: new Map(), selectedFloor: 3 };
 
-function demo6FloorBox(floorY) {
-  const shell = demo6State.shell;
-  if (!shell) return null;
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, count = 0;
-  const v = new THREE.Vector3();
-  shell.updateWorldMatrix(true, true);
-  shell.traverse((mesh) => {
-    if (!mesh.isMesh || !mesh.geometry) return;
-    const pos = mesh.geometry.attributes.position;
-    if (!pos) return;
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
-      if (v.y < floorY + 0.2 || v.y > floorY + 3.2) continue;
-      minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
-      minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
-      count++;
-    }
-  });
-  return count ? { minX, maxX, minZ, maxZ } : null;
-}
-
-function demo6BuildFloorPlates(baseY, bbox) {
-  for (let n = 1; n <= 6; n++) {
-    const y = baseY + (n - 1) * 3.8;
-    demo2AddFloorPlate(n, baseY, null, demo6FloorBox(y) || bbox, false, demo6State);
-  }
-  demo2SelectFloor(3, demo6State);
-}
 async function spawnDemo6Robots(bbox, baseY) {
   const defs = [
     { file: '/models/models/detail/medicine.glb', floor: 3 },
@@ -3588,7 +3946,7 @@ async function spawnDemo6Robots(bbox, baseY) {
       });
       const g = new THREE.Group();
       g.add(model);
-      const floorY = baseY + (def.floor - 1) * 3.8;
+      const floorY = baseY + (def.floor - 1) * (floorInfoFor('6号楼')?.h || 3.8);
       const y = floorY + 0.8;
       const startX = (bbox.min.x + bbox.max.x) / 2 + (def.floor === 3 ? -9 : 9);
       const startZ = (bbox.min.z + bbox.max.z) / 2 + (def.floor === 3 ? -5 : 5);
@@ -3616,77 +3974,34 @@ async function spawnDemo6Robots(bbox, baseY) {
   }
   demo2SelectFloor(demo6State.selectedFloor || 3, demo6State);
 }
-function cadXfFor(floor) {
-  const name = floor.buildingName;
-  const cfg = LIVE_BUILDING_CFG[name];
-  const b = floor.bounds;
-  if (!cfg || !b) return null;
-  const grp = realBuildings.get(name);
-  if (!grp) return null;
-  const bb = new THREE.Box3().setFromObject(grp);
-  const center = bb.getCenter(new THREE.Vector3());
-  return {
-    cx: center.x, cz: center.z, baseY: bb.min.y, s: cfg.s || 1,
-    cadCX: (b.minX + b.maxX) / 2, cadCY: (b.minY + b.maxY) / 2,
-  };
-}
 const cadResCache = new Map();
-async function loadDemo6Cad(baseY) {
+async function loadDemo6Cad() {
   // 等待中控楼层目录（含 geometryResource 引用）
   const t0 = Date.now();
   while (Date.now() - t0 < 10000) {
     if (Array.from(liveState.floors.keys()).some((k) => k.startsWith('1/B-'))) break;
     await new Promise((r) => setTimeout(r, 500));
   }
-  const floors = Array.from(liveState.floors.entries())
-    .filter(([k]) => k.startsWith('1/B-'))
-    .map(([, f]) => f)
-    .filter((f) => f.geometryResource && f.geometryResource.resourceId);
+  const floors = [...liveState.floors.values()]
+    .filter((f) => f.buildingName === '6号楼' && f.floorNumber >= 1)
+    .sort((a, b) => a.floorNumber - b.floorNumber);
   if (!floors.length) { console.warn('[6号楼模拟] 无楼层 CAD 数据（中控目录未就绪）'); return; }
+  await calibrateBuilding('6号楼');
   let drawn = 0;
   for (const f of floors) {
-    try {
-      const rid = f.geometryResource.resourceId;
-      let geo = cadResCache.get(rid);
-      if (!geo) {
-        const res = await fetch('/twin-resource?rid=' + encodeURIComponent(rid));
-        if (!res.ok) throw new Error('http ' + res.status);
-        geo = await res.json();
-        cadResCache.set(rid, geo);
-      }
-      const lines = geo.lines || [];
-      const xf = cadXfFor(f);
-      if (!xf || !lines.length) continue;
-      const yBase = baseY + ((f.floorNumber || 1) - 1) * 3.8;
-      const segs = [];
-      for (const [a, b] of lines) {
-        const x1 = xf.cx + (a[0] - xf.cadCX) * xf.s, z1 = xf.cz - (a[1] - xf.cadCY) * xf.s;
-        const x2 = xf.cx + (b[0] - xf.cadCX) * xf.s, z2 = xf.cz - (b[1] - xf.cadCY) * xf.s;
-        segs.push([x1, z1, x2, z2]);
-      }
-      const b = geo.bounds || f.bounds;
-      const n = f.floorNumber || 1;
-      const fb = b ? {
-        minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
-        maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
-        minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
-        maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
-      } : demo6State.bbox;
-      const actual = demo6FloorBox(yBase);
-      if (n >= 1) demo2AddFloorPlate(n, baseY, null, actual || fb, true, demo6State);
-      fpAddCadFloor('6号楼', n, segs,
-        b ? {
-          minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
-          maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
-          minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
-          maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
-        } : null);
-      drawn++;
-    } catch (e) {
-      console.warn('[6号楼模拟] CAD 楼层加载失败', f.floorKey, e.message);
-    }
+    const plan = await cadPlanFor('6号楼', f.floorNumber);
+    if (!plan) continue;
+    const frame = floorFrame('6号楼', f.floorNumber, plan);
+    if (!frame) continue;
+    const segs = plan.segs.map(([x1, y1, x2, y2]) => {
+      const [ax, az] = frame.toWorld(x1, y1);
+      const [bx, bz] = frame.toWorld(x2, y2);
+      return [ax, az, bx, bz];
+    });
+    fpAddCadFloor('6号楼', f.floorNumber, segs, null);
+    drawn++;
   }
-  console.log('[6号楼模拟] CAD 墙体/地面已绘制', drawn, '层');
+  console.log('[6号楼模拟] CAD 平面已就绪', drawn, '层');
 }
 function updateDemo6(dt) {
   if (!demo6State.active) return;
@@ -3714,7 +4029,7 @@ function updateDemo6(dt) {
   const sel = demo6State.plates.get(demo6State.selectedFloor);
   if (sel) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.14 + pulse * 0.035;
+    sel.mesh.material.opacity = 0.09 + pulse * 0.025;
     sel.edge.material.opacity = 0.82 + pulse * 0.16;
   }
 }
@@ -3764,32 +4079,20 @@ async function startDemo6() {
   if (!bbox) { console.warn('[6号楼模拟] 无法定位 6号楼，退出'); stopDemo6(); return; }
   demo6State.bbox = bbox;
   demo6State.plates.clear();
-  demo6State.selectedFloor = 3;
-  demo6BuildFloorPlates(bbox.min.y, bbox);
+  demo6State.selectedFloor = liveReadyFloor('6号楼') || 3;
+  buildFloorStack(demo6State, '6号楼');
   enterDemo2Focus(bbox, demo6State);
   pendingDemoLoads++;
   syncCruiseButtons();
   try {
     await spawnDemo6Robots(bbox, bbox.min.y);
-    await loadDemo6Cad(bbox.min.y);
+    await loadDemo6Cad();
   } finally {
     pendingDemoLoads--;
     syncCruiseButtons();
   }
-  liveGroup.visible = false;
-  const ctr = bbox.getCenter(new THREE.Vector3());
-  const size = bbox.getSize(new THREE.Vector3());
-  const az = -3 * Math.PI / 180;
-  const look = new THREE.Vector3(ctr.x + 2, ctr.y + size.y * 0.10, ctr.z);
-  const dist = fitFocusDistance(
-    bbox, camera,
-    (d) => new THREE.Vector3(ctr.x + d * Math.sin(az), ctr.y + size.y * 0.38, ctr.z + d * Math.cos(az)),
-    look, 1.1,
-  );
-  flyToPos(
-    new THREE.Vector3(ctr.x + dist * Math.sin(az), ctr.y + size.y * 0.38, ctr.z + dist * Math.cos(az)),
-    look
-  );
+  liveGroup.visible = $('tg-live').checked;
+  flyToFloor(demo6State, '6号楼', demo6State.selectedFloor);
   console.log('[6号楼模拟] 沉浸透视 + 楼层板已应用');
 }
 function stopDemo6() {
@@ -3805,10 +4108,14 @@ function stopDemo6() {
     demo6State.group = null;
   }
   demo6State.plates.clear();
+  demo6State.walls?.clear();
+  demo6State.cages?.clear();
+  demo6State.frames?.clear();
   demo6State.bbox = null;
   demo6State.shell = null;
   demo6State.selectedFloor = 3;
   liveGroup.visible = $('tg-live').checked;
+  refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
   const btn = $('demo6-btn');
   btn.classList.remove('on');
@@ -3938,65 +4245,7 @@ function exitDemo2Focus() {
   updateSkyFog();
 }
 
-function demo2LargestLoop(segs) {
-  if (!segs.length) return null;
-  const adj = new Map();
-  segs.forEach((s, id) => {
-    if (!adj.has(s.ka)) adj.set(s.ka, []);
-    if (!adj.has(s.kb)) adj.set(s.kb, []);
-    adj.get(s.ka).push({ id, other: s.kb });
-    adj.get(s.kb).push({ id, other: s.ka });
-  });
-  const used = new Uint8Array(segs.length);
-  let best = null, bestArea = 0;
-  for (let i = 0; i < segs.length; i++) {
-    if (used[i]) continue;
-    let id = i, start = segs[i].ka, cur = start, closed = false;
-    const pts = [];
-    while (id != null && !used[id]) {
-      used[id] = 1;
-      const s = segs[id];
-      const forward = s.ka === cur;
-      pts.push((forward ? s.a : s.b).clone());
-      const next = forward ? s.kb : s.ka;
-      if (next === start) { closed = true; break; }
-      cur = next;
-      const list = adj.get(cur) || [];
-      let nx = null;
-      for (const e of list) if (!used[e.id]) { nx = e; break; }
-      id = nx ? nx.id : null;
-    }
-    if (!closed || pts.length < 4) continue;
-    let area = 0;
-    for (let k = 0, j = pts.length - 1; k < pts.length; j = k++) {
-      area += pts[j].x * pts[k].z - pts[k].x * pts[j].z;
-    }
-    area = Math.abs(area) / 2;
-    if (area > bestArea) { bestArea = area; best = pts; }
-  }
-  return best;
-}
-
-// CAD 墙线 → 闭合外轮廓；取面积最大的闭环作为楼板边界
-function demo2CadLoop(segs2D, y) {
-  const segs = [];
-  const seen = new Set();
-  for (const [x1, z1, x2, z2] of segs2D) {
-    const a = new THREE.Vector3(x1, y, z1);
-    const b = new THREE.Vector3(x2, y, z2);
-    if (a.distanceToSquared(b) < 1e-4) continue;
-    const ka = `${Math.round(x1 * 50)},${Math.round(z1 * 50)}`;
-    const kb = `${Math.round(x2 * 50)},${Math.round(z2 * 50)}`;
-    if (ka === kb) continue;
-    const key = ka < kb ? ka + '|' + kb : kb + '|' + ka;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    segs.push({ a, b, ka, kb });
-  }
-  return demo2LargestLoop(segs);
-}
-
-function demo2AddFloorPlate(n, baseY, loop, bbox, replace = false, state = demo2State) {
+function demo2AddFloorPlate(n, y, loop, bbox, replace = false, state = demo2State) {
   if (state.plates.has(n)) {
     if (!replace) return;
     const old = state.plates.get(n);
@@ -4007,7 +4256,6 @@ function demo2AddFloorPlate(n, baseY, loop, bbox, replace = false, state = demo2
     old.label.material.dispose();
     state.plates.delete(n);
   }
-  const y = baseY + (n - 1) * 3.8;
   const boxMinX = bbox.min?.x ?? bbox.minX;
   const boxMaxX = bbox.max?.x ?? bbox.maxX;
   const boxMinZ = bbox.min?.z ?? bbox.minZ;
@@ -4065,27 +4313,14 @@ function demo2AddFloorPlate(n, baseY, loop, bbox, replace = false, state = demo2
   demo2SelectFloor(state.selectedFloor || 3, state);
 }
 
-function demo2BuildFloorPlates(baseY, bbox, state = demo2State) {
-  for (let n = 1; n <= 6; n++) demo2AddFloorPlate(n, baseY, null, bbox, false, state);
-  demo2SelectFloor(state.selectedFloor || 3, state);
-}
-
-function demo2LoopArea(loop) {
-  if (!loop || loop.length < 3) return 0;
-  let a = 0;
-  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
-    a += loop[j].x * loop[i].z - loop[i].x * loop[j].z;
-  }
-  return Math.abs(a) / 2;
-}
-
 function demo2SelectFloor(n, state = demo2State) {
   if (!state.plates.size) return;
   state.selectedFloor = n;
+  applyFloorFocus(state, n);
   for (const [num, p] of state.plates) {
     const on = num === n;
-    p.mesh.material.opacity = on ? 0.14 : 0.035;
-    p.mesh.material.emissiveIntensity = on ? 0.95 : 0.25;
+    p.mesh.material.opacity = on ? 0.09 : 0.03;
+    p.mesh.material.emissiveIntensity = on ? 0.55 : 0.2;
     p.edge.material.opacity = on ? 0.92 : 0.16;
     p.edge.visible = on;
     p.label.visible = on;
@@ -4190,7 +4425,7 @@ async function spawnDemo2Robots(bbox, baseY) {
       });
       const g = new THREE.Group();
       g.add(model);
-      const floorY = baseY + (def.floor - 1) * 3.8;
+      const floorY = baseY + (def.floor - 1) * (floorInfoFor('2号楼')?.h || 3.8);
       const y = floorY + 0.8;
       const startX = (bbox.min.x + bbox.max.x) / 2 + (def.floor === 3 ? -9 : 9);
       const startZ = (bbox.min.z + bbox.max.z) / 2 + (def.floor === 3 ? -5 : 5);
@@ -4218,72 +4453,32 @@ async function spawnDemo2Robots(bbox, baseY) {
   }
   demo2SelectFloor(demo2State.selectedFloor || 3);
 }
-function demo2CadXfFor(floor) {
-  const cfg = LIVE_BUILDING_CFG[floor.buildingName];
-  const b = floor.bounds;
-  const bb = demo2State.bbox;
-  if (!cfg || !b || !bb) return null;
-  return {
-    cx: (bb.min.x + bb.max.x) / 2, cz: (bb.min.z + bb.max.z) / 2, baseY: bb.min.y, s: cfg.s || 1,
-    cadCX: (b.minX + b.maxX) / 2, cadCY: (b.minY + b.maxY) / 2,
-  };
-}
-async function loadDemo2Cad(baseY) {
+async function loadDemo2Cad() {
   // 等待中控楼层目录（按 buildingName 过滤 2号楼）
   const t0 = Date.now();
   while (Date.now() - t0 < 10000) {
     if (Array.from(liveState.floors.values()).some((f) => f.buildingName === '2号楼')) break;
     await new Promise((r) => setTimeout(r, 500));
   }
-  const floors = Array.from(liveState.floors.values())
-    .filter((f) => f.buildingName === '2号楼' && f.geometryResource && f.geometryResource.resourceId);
+  const floors = [...liveState.floors.values()]
+    .filter((f) => f.buildingName === '2号楼' && f.floorNumber >= 1)
+    .sort((a, b) => a.floorNumber - b.floorNumber);
   if (!floors.length) { console.warn('[2号楼模拟] 无 2号楼 楼层 CAD 数据（中控目录未就绪）'); return; }
   let drawn = 0;
   for (const f of floors) {
-    try {
-      const rid = f.geometryResource.resourceId;
-      let geo = cadResCache.get(rid);
-      if (!geo) {
-        const res = await fetch('/twin-resource?rid=' + encodeURIComponent(rid));
-        if (!res.ok) throw new Error('http ' + res.status);
-        geo = await res.json();
-        cadResCache.set(rid, geo);
-      }
-      const lines = geo.lines || [];
-      const xf = demo2CadXfFor(f);
-      if (!xf || !lines.length) continue;
-      const yBase = baseY + ((f.floorNumber || 1) - 1) * 3.8;
-      const segs = [];
-      for (const [a, b] of lines) {
-        const x1 = xf.cx + (a[0] - xf.cadCX) * xf.s, z1 = xf.cz - (a[1] - xf.cadCY) * xf.s;
-        const x2 = xf.cx + (b[0] - xf.cadCX) * xf.s, z2 = xf.cz - (b[1] - xf.cadCY) * xf.s;
-        segs.push([x1, z1, x2, z2]);
-      }
-      const b = geo.bounds || f.bounds;
-      const n = f.floorNumber || 1;
-      const fb = b ? {
-        minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
-        maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
-        minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
-        maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
-      } : demo2State.bbox;
-      const loop = demo2CadLoop(segs, yBase);
-      const bboxArea = Math.max(1, (fb.maxX - fb.minX) * (fb.maxZ - fb.minZ));
-      const useLoop = loop && demo2LoopArea(loop) >= bboxArea * 0.12;
-      if (n >= 1) demo2AddFloorPlate(n, baseY, useLoop ? loop : null, fb, true);
-      fpAddCadFloor('2号楼', n, segs,
-        b ? {
-          minX: xf.cx + (b.minX - xf.cadCX) * xf.s,
-          maxX: xf.cx + (b.maxX - xf.cadCX) * xf.s,
-          minZ: xf.cz - (b.maxY - xf.cadCY) * xf.s,
-          maxZ: xf.cz - (b.minY - xf.cadCY) * xf.s,
-        } : null);
-      drawn++;
-    } catch (e) {
-      console.warn('[2号楼模拟] CAD 楼层加载失败', f.floorKey, e.message, (e.stack || '').split('\n').slice(0, 4).join(' | '));
-    }
+    const plan = await cadPlanFor('2号楼', f.floorNumber);
+    if (!plan) continue;
+    const frame = floorFrame('2号楼', f.floorNumber, plan);
+    if (!frame) continue;
+    const segs = plan.segs.map(([x1, y1, x2, y2]) => {
+      const [ax, az] = frame.toWorld(x1, y1);
+      const [bx, bz] = frame.toWorld(x2, y2);
+      return [ax, az, bx, bz];
+    });
+    fpAddCadFloor('2号楼', f.floorNumber, segs, null);
+    drawn++;
   }
-  console.log('[2号楼模拟] CAD 墙体/地面已绘制', drawn, '层');
+  console.log('[2号楼模拟] CAD 平面已就绪', drawn, '层');
 }
 function updateDemo2(dt) {
   if (!demo2State.active) return;
@@ -4311,7 +4506,7 @@ function updateDemo2(dt) {
   const sel = demo2State.plates.get(demo2State.selectedFloor);
   if (sel) {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.14 + pulse * 0.035;
+    sel.mesh.material.opacity = 0.09 + pulse * 0.025;
     sel.edge.material.opacity = 0.82 + pulse * 0.16;
   }
 }
@@ -4364,7 +4559,8 @@ async function startDemo2() {
   if (!bbox) { console.warn('[2号楼模拟] 无法定位 2号楼，退出'); stopDemo2(); return; }
   demo2State.bbox = bbox;
   demo2State.plates.clear();
-  demo2BuildFloorPlates(bbox.min.y, bbox);
+  demo2State.selectedFloor = liveReadyFloor('2号楼') || 3;
+  buildFloorStack(demo2State, '2号楼');
   enterDemo2Focus(bbox);
   // 原 2 号楼整栋隐藏（含 <3m 的雨棚/门头薄板）；门头文字是独立节点，单独隐藏
   const source = realBuildings.get('2号楼');
@@ -4375,19 +4571,14 @@ async function startDemo2() {
   syncCruiseButtons();
   try {
     await spawnDemo2Robots(bbox, bbox.min.y);
-    await loadDemo2Cad(bbox.min.y);
+    await loadDemo2Cad();
   } finally {
     pendingDemoLoads--;
     syncCruiseButtons();
   }
-  liveGroup.visible = false;
-  // 相机：正南侧正视、平视（正北=-Z，正南=+Z），贴近建筑
-  {
-    const ctr = bbox.getCenter(new THREE.Vector3());
-    const size = bbox.getSize(new THREE.Vector3());
-    const dist = fitFocusDistance(bbox, camera, (d) => new THREE.Vector3(ctr.x, ctr.y + size.y * 0.45, ctr.z + d), ctr);
-    flyToPos(new THREE.Vector3(ctr.x, ctr.y + size.y * 0.45, ctr.z + dist), ctr);
-  }
+  liveGroup.visible = $('tg-live').checked;
+  // 相机：正南侧正视，按当前层楼板取景
+  flyToFloor(demo2State, '2号楼', demo2State.selectedFloor);
   console.log('[2号楼模拟] 透视白膜 + 楼层板已应用，bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
 }
 function stopDemo2() {
@@ -4406,8 +4597,12 @@ function stopDemo2() {
     demo2State.group = null;
   }
   demo2State.plates.clear();
+  demo2State.walls?.clear();
+  demo2State.cages?.clear();
+  demo2State.frames?.clear();
   demo2State.selectedFloor = 3;
   liveGroup.visible = $('tg-live').checked;
+  refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
   const btn = $('demo2-btn');
   btn.classList.remove('on');
@@ -4563,8 +4758,8 @@ function buildFloorChips() {
     el.onclick = () => {
       fpState.cur = i; fpState.userPicked = true; fpState.zoom = 1; fpState.panX = 0; fpState.panY = 0;
       buildFloorChips(); fpDraw(true);
-      if (demo2State.active) demo2SelectFloor(f.n);
-      else if (demo6State.active) demo2SelectFloor(f.n, demo6State);
+      if (demo2State.active) { demo2SelectFloor(f.n); flyToFloor(demo2State, '2号楼', f.n); }
+      else if (demo6State.active) { demo2SelectFloor(f.n, demo6State); flyToFloor(demo6State, '6号楼', f.n); }
     };
     wrap.appendChild(el);
   });
@@ -4716,6 +4911,9 @@ window.__dt = {
   get THREE() { return THREE; },
   get liveState() { return liveState; },
   get liveMarkers() { return liveMarkers; },
+  get demo2State() { return demo2State; },
+  get demo6State() { return demo6State; },
+  cadPlanFor, floorInfoFor, modelBandFrame, floorFrame, calibrateBuilding, FLOOR_FIT,
   setHour(h) {
     timeState.hour = h;
     timeState.playing = false;
