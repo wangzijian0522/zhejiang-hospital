@@ -1589,7 +1589,9 @@ function refreshLiveMarkers() {
     const p = loc.cadPose;
     mk.obj.position.set(
       xf.cx + (p.x - xf.cadCX) * xf.s,
-      xf.baseY + (floor.floorNumber || 0) * 3.8 + 0.8,
+      // 层高约定与分层楼板一致（floorNumber 1 基，1F 落在 baseY）；
+      // 原来用 floorNumber*3.8 会让机器人整栋高一层
+      xf.baseY + ((floor.floorNumber ?? 1) - 1) * 3.8 + 0.8,
       xf.cz - (p.y - xf.cadCY) * xf.s
     );
     mk.obj.rotation.y = Math.PI / 2 + (p.yawRad || 0);
@@ -4712,6 +4714,8 @@ window.__dt = {
   get renderer() { return renderer; },
   get scene() { return scene; },
   get THREE() { return THREE; },
+  get liveState() { return liveState; },
+  get liveMarkers() { return liveMarkers; },
   setHour(h) {
     timeState.hour = h;
     timeState.playing = false;
