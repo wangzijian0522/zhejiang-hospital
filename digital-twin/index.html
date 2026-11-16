@@ -620,10 +620,12 @@ const S_TOP = new THREE.Color(0x27406a), S_MID = new THREE.Color(0xa8654f), S_BO
 const N_TOP = new THREE.Color(0x0a1226), N_MID = new THREE.Color(0x111a30), N_BOT = new THREE.Color(0x1c2740);
 let weatherDim = 1, weatherBlend = 0;
 
-function sunDirAt(hour) {
+const SUN_WHITE = new THREE.Color(0xffffff);
+// 结果写入调用方给的向量：updateSun 每帧调用，不能逐帧 new Vector3
+function sunDirAt(hour, out = new THREE.Vector3()) {
   const a = Math.PI * Math.max(0, Math.min(1, (hour - 6) / 12)); // 6点日出(东)→18点日落(西)
   const el = Math.sin(a) * 1.22;                                  // 最大仰角约70°
-  return new THREE.Vector3(Math.cos(el) * Math.cos(a), Math.sin(el), Math.cos(el) * Math.sin(a));
+  return out.set(Math.cos(el) * Math.cos(a), Math.sin(el), Math.cos(el) * Math.sin(a));
 }
 function sunElvAt(hour) {
   const a = Math.PI * (hour - 6) / 12; // 不截断：18点后为负 → 黄昏余晖
@@ -644,11 +646,11 @@ function updateSun() {
     return;
   }
   const tgt = controls.target;
-  sunDir.copy(sunDirAt(timeState.hour));
+  sunDirAt(timeState.hour, sunDir);
   const elv = sunElvAt(timeState.hour);
   if (elv > 0.02) {
     sunLight.intensity = (0.35 + elv * 1.8) * weatherDim;
-    sunLight.color.copy(SUN_LOW).lerp(new THREE.Color(0xffffff), Math.min(1, elv * 1.6));
+    sunLight.color.copy(SUN_LOW).lerp(SUN_WHITE, Math.min(1, elv * 1.6));
     sunDisc.visible = true;
   } else {
     sunLight.intensity = 0;
@@ -3464,6 +3466,63 @@ function buildContext() {
 }
 buildContext();
 
+// ---------- 透视会话资源回收 ----------
+// 每次进入透视都会新建壳体边线、楼板、轨迹、信标与聚焦舞台，退出时必须 dispose，
+// 否则反复进入会持续占用显存。克隆壳体与缓存模型共享几何/贴图，全局 holoMat 也在复用，这些不能释放。
+function demoSharedResources(srcName) {
+  const geometries = new Set();
+  realBuildings.get(srcName)?.traverse((o) => { if (o.geometry) geometries.add(o.geometry); });
+  const textures = new Set([beaconGlowTex]);
+  for (const gltf of gltfCache.values()) {
+    gltf.scene.traverse((o) => {
+      const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+      for (const m of mats) for (const k in m) { const v = m[k]; if (v && v.isTexture) textures.add(v); }
+    });
+  }
+  return { geometries, materials: new Set([holoMat]), textures };
+}
+function disposeDemoSubtree(root, srcName) {
+  if (!root) return;
+  const shared = demoSharedResources(srcName);
+  root.traverse((o) => {
+    if (o.geometry && !shared.geometries.has(o.geometry)) o.geometry.dispose();
+    const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+    for (const m of mats) {
+      if (shared.materials.has(m)) continue;
+      for (const k in m) { const v = m[k]; if (v && v.isTexture && !shared.textures.has(v)) v.dispose(); }
+      m.dispose();
+    }
+  });
+}
+
+// 取景距离：用真实相机位姿投影包围盒 8 个角，二分求「刚好全部落在画面内」的距离。
+// 只按高度/进深估算会把靠近相机的一侧裁掉（透视里近角投影更大）。
+function fitFocusDistance(box, camera, cameraPosFor, target, margin = 1.08) {
+  const probe = camera.clone();
+  const corners = [];
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, y, z));
+  const tmp = new THREE.Vector3();
+  const fits = (d) => {
+    probe.position.copy(cameraPosFor(d));
+    probe.lookAt(target);
+    probe.updateMatrixWorld(true);
+    probe.updateProjectionMatrix();
+    for (const c of corners) {
+      tmp.copy(c).applyMatrix4(probe.matrixWorldInverse);
+      if (tmp.z > -0.5) return false; // 角点在相机后方/贴脸
+      tmp.copy(c).project(probe);
+      if (Math.abs(tmp.x) > 1 || Math.abs(tmp.y) > 1) return false;
+    }
+    return true;
+  };
+  let lo = 1, hi = 4000;
+  for (let i = 0; i < 32; i++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid; else lo = mid;
+  }
+  return hi * margin;
+}
+
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
 const demo6State = { active: false, robots: [], group: null, bbox: null, shell: null, plates: new Map(), selectedFloor: 3 };
 
@@ -3718,9 +3777,13 @@ async function startDemo6() {
   liveGroup.visible = false;
   const ctr = bbox.getCenter(new THREE.Vector3());
   const size = bbox.getSize(new THREE.Vector3());
-  const dist = Math.max(size.x, size.z, size.y) * 1.35 + 22;
   const az = -3 * Math.PI / 180;
   const look = new THREE.Vector3(ctr.x + 2, ctr.y + size.y * 0.10, ctr.z);
+  const dist = fitFocusDistance(
+    bbox, camera,
+    (d) => new THREE.Vector3(ctr.x + d * Math.sin(az), ctr.y + size.y * 0.38, ctr.z + d * Math.cos(az)),
+    look, 1.1,
+  );
   flyToPos(
     new THREE.Vector3(ctr.x + dist * Math.sin(az), ctr.y + size.y * 0.38, ctr.z + dist * Math.cos(az)),
     look
@@ -3735,6 +3798,7 @@ function stopDemo6() {
   demo6State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
   demo6State.robots = [];
   if (demo6State.group) {
+    disposeDemoSubtree(demo6State.group, '6号楼');
     scene.remove(demo6State.group);
     demo6State.group = null;
   }
@@ -3861,8 +3925,11 @@ function exitDemo2Focus() {
   sunLight.intensity = s.sun;
   hemi.intensity = s.hemi;
   fillLight.intensity = s.fill;
-  if (focusState.stage?.parent) focusState.stage.parent.remove(focusState.stage);
-  focusState.stage = null;
+  if (focusState.stage) {
+    disposeDemoSubtree(focusState.stage);
+    focusState.stage.parent?.remove(focusState.stage);
+    focusState.stage = null;
+  }
   focusState.saved = null;
   focusState.center = null;
   updateSun();
@@ -4316,7 +4383,7 @@ async function startDemo2() {
   {
     const ctr = bbox.getCenter(new THREE.Vector3());
     const size = bbox.getSize(new THREE.Vector3());
-    const dist = Math.max(size.z, size.y) * 0.95 + 16;
+    const dist = fitFocusDistance(bbox, camera, (d) => new THREE.Vector3(ctr.x, ctr.y + size.y * 0.45, ctr.z + d), ctr);
     flyToPos(new THREE.Vector3(ctr.x, ctr.y + size.y * 0.45, ctr.z + dist), ctr);
   }
   console.log('[2号楼模拟] 透视白膜 + 楼层板已应用，bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
@@ -4332,6 +4399,7 @@ function stopDemo2() {
   if (demo2State.source) { demo2State.source.visible = true; demo2State.source = null; }
   if (demo2State.signGroup) { demo2State.signGroup.visible = true; demo2State.signGroup = null; }
   if (demo2State.group) {
+    disposeDemoSubtree(demo2State.group, '2号楼');
     scene.remove(demo2State.group);
     demo2State.group = null;
   }
@@ -4345,6 +4413,43 @@ function stopDemo2() {
   if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
 }
 $('demo2-btn').onclick = () => (demo2State.active ? stopDemo2() : startDemo2());
+
+// ---------- 3D 拾取：点 2/6 号楼直接进入透视/分层 ----------
+// 只对可见精模做射线检测：透视进行中、精模开关关闭、或模型未就绪时一律不响应，
+// 避免命中已被隐藏的节点（隐藏对象仍在场景里，必须显式排除）。
+const pickRay = new THREE.Raycaster();
+const pickNdc = new THREE.Vector2();
+function pickBuildingAt(clientX, clientY) {
+  if (!realLoaded || !realGroup.visible || focusState.active) return null;
+  const targets = ['2号楼', '6号楼'].map((n) => realBuildings.get(n)).filter((g) => g && g.visible);
+  if (!targets.length) return null;
+  pickNdc.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
+  pickRay.setFromCamera(pickNdc, camera);
+  for (const g of targets) if (pickRay.intersectObject(g, true).length) return g.name;
+  return null;
+}
+const pickCanvas = renderer.domElement;
+let pickDownAt = null;
+pickCanvas.addEventListener('pointerdown', (e) => { pickDownAt = [e.clientX, e.clientY]; });
+pickCanvas.addEventListener('pointerup', (e) => {
+  const start = pickDownAt;
+  pickDownAt = null;
+  // 拖动旋转视角后松手不算点击
+  if (!start || Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 6) return;
+  const name = pickBuildingAt(e.clientX, e.clientY);
+  if (name === '2号楼') startDemo2();
+  else if (name === '6号楼') startDemo6();
+});
+let pickHoverAt = 0;
+pickCanvas.addEventListener('pointermove', (e) => {
+  if (e.buttons || focusState.active) { pickCanvas.style.cursor = ''; return; }
+  const now = performance.now();
+  if (now - pickHoverAt < 90) return; // 悬停检测限频，鼠标移动时不必每次都打射线
+  pickHoverAt = now;
+  pickCanvas.style.cursor = pickBuildingAt(e.clientX, e.clientY) ? 'pointer' : '';
+});
+// 指针移到面板/图表等覆盖层上时 canvas 收不到 pointermove，必须在这里清掉手型光标
+pickCanvas.addEventListener('pointerleave', () => { pickCanvas.style.cursor = ''; });
 
 // ---------- 楼层平面图侧栏（2D 平面 + 机器人点位，点击定位到 3D） ----------
 const fpState = {
@@ -4780,8 +4885,10 @@ function animate() {
   }
   if (fpState.building && !fpState.hidden) fpDraw(false);
   if (flyTarget) {
-    camera.position.lerp(flyTarget.pos, 0.06);
-    controls.target.lerp(flyTarget.look, 0.06);
+    // 固定每帧 0.06 的插值会把飞行速度绑在帧率上（后台/低帧率时几乎飞不动），按 dt 换算成等效步长
+    const k = 1 - Math.pow(0.94, Math.max(dt, 1 / 240) * 60);
+    camera.position.lerp(flyTarget.pos, k);
+    controls.target.lerp(flyTarget.look, k);
     if (camera.position.distanceTo(flyTarget.pos) < 2) flyTarget = null;
   }
   if (cruiseState.on) {
