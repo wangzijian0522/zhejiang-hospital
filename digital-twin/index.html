@@ -2378,10 +2378,12 @@ $('tg-map').onchange = (e) => {
 if ($('tg-map').checked) loadBasemap();
 
 // 底图校准：?calib=1；方向键平移（Shift ×10）、Q/E 旋转、P 打印配置，自动存 localStorage
+const calibHuds = []; // ?calib 时的两个校准浮层，进透视要临时收起来
 if (CAL_MODE) {
   const hud = document.createElement('div');
   hud.style.cssText = 'position:fixed;bottom:56px;right:12px;z-index:60;background:rgba(20,30,40,.86);color:#dfe8f0;font:12px/1.6 Menlo,monospace;padding:10px 12px;border-radius:10px;white-space:pre;pointer-events:none';
   document.body.appendChild(hud);
+  calibHuds.push(hud);
   const sync = () => {
     hud.textContent = `底图校准\n中心 ${BASEMAP.center.lon.toFixed(6)}, ${BASEMAP.center.lat.toFixed(6)}\n偏移 ${BASEMAP.offset.x.toFixed(1)}, ${BASEMAP.offset.z.toFixed(1)} m\n旋转 ${BASEMAP.rotationDeg.toFixed(2)}°\n方向键平移 · Q/E 旋转 · Shift ×10 · P 导出`;
   };
@@ -2410,6 +2412,7 @@ if (CAL_MODE) {
   const modelHud = document.createElement('div');
   modelHud.style.cssText = 'position:fixed;bottom:56px;left:12px;z-index:60;background:rgba(20,30,40,.86);color:#dfe8f0;font:12px/1.6 Menlo,monospace;padding:10px 12px;border-radius:10px;white-space:pre;pointer-events:none';
   document.body.appendChild(modelHud);
+  calibHuds.push(modelHud);
   const syncModel = () => {
     modelHud.textContent = `模型配准校准\n平移 ${REAL_CAL.x.toFixed(1)}, ${REAL_CAL.z.toFixed(1)} m\n旋转 ${REAL_CAL.rotDeg.toFixed(2)}°\nW/A/S/D 平移 · Z/C 旋转 · Shift ×10 · M 导出`;
   };
@@ -4212,9 +4215,9 @@ function applyFloorFocus(state, n) {
   const whole = n == null;
   for (const [num, line] of state.walls) {
     const d = whole ? 99 : Math.abs(num - n);
-    // 远处的楼层墙线全叠起来会糊成一张网，只留当前层和上下各一层
-    line.visible = !whole && d <= 1;
-    line.material.opacity = d === 0 ? 0.45 : 0.09;
+    // 整栋态每层的 CAD 墙线都留一点，看得出平面轮廓；选层后收敛到该层和上下各一层
+    line.visible = whole || d <= 1;
+    line.material.opacity = whole ? 0.1 : d === 0 ? 0.45 : 0.09;
   }
   for (const [num, cage] of state.cages) {
     const on = !whole && num === n;
@@ -4546,6 +4549,7 @@ function enterDemo2Focus(bbox, state = demo2State) {
   CUT.anim = null;
   setCutY(1e6);
   if (state.shellRef) state.shellRef.edgeMat.clippingPlanes = [CUT.plane];
+  for (const h of calibHuds) h.style.display = 'none';
   updateSun();
   updateSkyFog();
 }
@@ -4581,6 +4585,7 @@ function exitDemo2Focus() {
   focusState.center = null;
   CUT.anim = null;
   setCutY(1e6); // 退出透视恢复整栋壳体，避免下次进来还是剖开的
+  for (const h of calibHuds) h.style.display = '';
   updateSun();
   updateSkyFog();
 }
