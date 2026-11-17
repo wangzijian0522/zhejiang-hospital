@@ -1151,24 +1151,24 @@ function loadRealModel() {
   realLoading = true;
   showLoader('正在加载整体模型…');
   // ?v= 取模型文件 sha256 前 8 位：换模型时改这里，让已经缓存过旧文件的浏览器立即重新下载
-  makeGLTFLoader().load('/models/models/整体.glb?v=f260d92c', async (gltf) => {
+  makeGLTFLoader().load('/models/models/整体.glb?v=76cdbf22', async (gltf) => {
     const obj = gltf.scene;
+    const rawBox = new THREE.Box3().setFromObject(obj);
+    const rawSize = rawBox.getSize(new THREE.Vector3());
+    let s = 1;
+    if (Math.max(rawSize.x, rawSize.y, rawSize.z) > 1000) s = 0.001; // 单位 mm → m（院区级模型为米制，不缩放）
+    obj.scale.setScalar(s);
+    obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
-    let s = 1;
-    if (Math.max(size.x, size.y, size.z) > 1000) s = 0.001; // 单位 mm → m（院区级模型为米制，不缩放）
-    const c = box.getCenter(new THREE.Vector3());
-    obj.scale.setScalar(s);
-    // 记录模型中心基准，配准参数可实时调整（?calib 校准模式）
-    realModelRef = { obj, cx: c.x * s, cy: box.min.y * s, cz: c.z * s };
-    applyRealCal();
-    console.log('[模型] 配准 旋转', REAL_CAL.rotDeg, '° 平移', REAL_CAL.x + 'm,' + REAL_CAL.z + 'm');
+    // 先注册楼栋并顺手攒楼栋包围盒：配准基准必须取"楼栋"，不能取整包
+    const refBox = new THREE.Box3();
     obj.traverse((o) => {
       if (o.isMesh) {
         o.castShadow = true;
         o.receiveShadow = true;
-        // 模型里的贴片树（shu* 节点）按要求隐藏
-        if (/^shu\d+$/i.test(o.name)) o.visible = false;
+        // 模型里的贴片树按要求隐藏：老导出是 shu12 这种，新导出是 shu 组 + shu03_primitive0
+        if (/^shu(\d|$)/i.test(o.name)) o.visible = false;
         // 整体 GLB 自带的“氛围建筑”是旧版周边白模(透明 BLEND)，与百度建筑体量重复
         if (o.name === '氛围建筑') o.visible = false;
       }
@@ -1179,8 +1179,21 @@ function loadRealModel() {
         o.userData.buildingName = nm;
         o.traverse((c) => { if (c.isMesh) c.userData.buildingName = nm; });
         realBuildings.set(nm, o);
+        if (o.children.length) refBox.expandByObject(o);
       }
     });
+    const shuGroup = obj.getObjectByName('shu');
+    if (shuGroup) shuGroup.visible = false;
+    if (refBox.isEmpty()) refBox.copy(box);
+    const c = refBox.getCenter(new THREE.Vector3());
+    // 旧版是按"整包几何中心"配准的，而整包中心比楼栋中心偏 (+25.9, -12.7)；
+    // 新导出多了地形和树，整包中心被拉走，所以基准改成"楼栋中心 + 这个历史偏移"，
+    // 院区与底图/城市、以及 REAL_CAL 里的标定值都保持原样
+    const ANCHOR_FIX = { x: 25.9, z: -12.7 };
+    realModelRef = { obj, cx: c.x + ANCHOR_FIX.x, cy: refBox.min.y, cz: c.z + ANCHOR_FIX.z };
+    applyRealCal();
+    console.log('[模型] 配准 旋转', REAL_CAL.rotDeg, '° 平移', REAL_CAL.x + 'm,' + REAL_CAL.z + 'm',
+      '楼栋包围盒', refBox.getSize(new THREE.Vector3()).toArray().map((v) => +v.toFixed(1)).join('x'));
     realGroup.add(obj);
     realLoaded = true; // 6号楼 直接用整体模型里的节点（实测与独立 6号楼.glb 像素差 0.26%）
     schedulePrewarm();
