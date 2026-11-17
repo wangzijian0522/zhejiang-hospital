@@ -82,12 +82,14 @@ const TDT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.
 const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.txt', '.map']);
 const zipCache = new Map();
 
-// 缓存策略：第三方与 vendor 一年不变；模型 1 天；数据 10 分钟；页面 no-cache 走 ETag
+// 缓存策略：第三方与 vendor 一年不变；数据 10 分钟；页面与模型 no-cache 走 ETag。
+// 模型会被整体替换，若给 max-age 客户端在过期前根本不回源，换模型后刷新仍是旧的；
+// 这里强制每次校验（ETag 含 size+mtime），文件一动就拿到新的。
 function cachePolicy(urlPath) {
   if (urlPath.startsWith('/node_modules/') || urlPath.startsWith('/digital-twin/vendor/')) {
     return 'public, max-age=31536000, immutable';
   }
-  if (urlPath.startsWith('/models/')) return 'public, max-age=86400';
+  if (urlPath.startsWith('/models/')) return 'no-cache';
   if (urlPath.startsWith('/digital-twin/assets/')) return 'public, max-age=604800';
   if (urlPath.startsWith('/digital-twin/data/')) return 'public, max-age=600';
   return 'no-cache';
