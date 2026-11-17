@@ -1188,7 +1188,7 @@ function loadRealModel() {
   realLoading = true;
   showLoader('正在加载整体模型…');
   // ?v= 取模型文件 sha256 前 8 位：换模型时改这里，让已经缓存过旧文件的浏览器立即重新下载
-  makeGLTFLoader().load('/models/models/整体.glb?v=76cdbf22', async (gltf) => {
+  makeGLTFLoader().load('/models/models/整体.glb?v=93102f7e', async (gltf) => {
     const obj = gltf.scene;
     const rawBox = new THREE.Box3().setFromObject(obj);
     const rawSize = rawBox.getSize(new THREE.Vector3());
