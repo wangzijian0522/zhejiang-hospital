@@ -411,12 +411,14 @@ scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xfff6e8, 3.2);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
-sunLight.shadow.camera.near = 60;
-sunLight.shadow.camera.far = 1400;
-sunLight.shadow.camera.left = -240;
-sunLight.shadow.camera.right = 240;
-sunLight.shadow.camera.top = 240;
-sunLight.shadow.camera.bottom = -240;
+// 阴影覆盖半径：默认整城可见范围都要投影，否则只有院区一圈有影子，城市像贴在地面上
+let shadowExtent = 520;
+sunLight.shadow.camera.near = 40;
+sunLight.shadow.camera.far = 2300;
+sunLight.shadow.camera.left = -shadowExtent;
+sunLight.shadow.camera.right = shadowExtent;
+sunLight.shadow.camera.top = shadowExtent;
+sunLight.shadow.camera.bottom = -shadowExtent;
 // 法线偏移优先于深度偏移:立面斜射时不会出现条纹状自阴影,也不拖影
 sunLight.shadow.normalBias = 0.08;
 sunLight.shadow.bias = -0.0002;
@@ -606,11 +608,16 @@ const ground = new THREE.Mesh(groundGeo, groundPlainMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 groundGroup.add(ground);
-const groundMapMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+// 总平图地面走受光材质：之前是 MeshBasicMaterial，太阳、楼影全都照不到它，
+// 院区和周边城市光比一拉开就"贴纸感"很重。emissiveMap 保留一半原亮度，既吃阴影又不发灰。
+const groundMapMat = new THREE.MeshLambertMaterial({
+  color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.55,
+});
 new THREE.TextureLoader().load('/digital-twin/assets/site-plan.jpg', (t) => {
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   groundMapMat.map = t;
+  groundMapMat.emissiveMap = t;
   groundMapMat.needsUpdate = true;
   if ($('tg-tex').checked) ground.material = groundMapMat;
 });
@@ -714,9 +721,13 @@ function updateSun() {
   // 否则场景会发灰发闷(weatherDim=1 时等价于晴天那组系数)
   const dayA = Math.max(0, elv);
   const ambSunny = 0.12 + dayA * 0.075;
-  const ambOvercast = 0.55 + dayA * 0.45;
+  const ambOvercast = 0.14 + dayA * 0.68; // 低照度项也要随日落收掉，否则阴天的夜像蒙了一层灰
   hemi.intensity = ambOvercast + (ambSunny - ambOvercast) * weatherDim;
   fillLight.intensity = 0.05 + dayA * 0.02;
+  // 地面补光跟着天黑收掉，否则夜里总平图还亮着
+  groundMapMat.emissiveIntensity = 0.55 * (1 - THREE.MathUtils.clamp(-elv * 2.2, 0, 1));
+  // 环境贴图同理：常亮的环境光等于给整城挂了一盏补光灯，夜里必须压下去
+  scene.environmentIntensity = 0.22 * (0.22 + 0.78 * Math.min(1, dayA * 1.4));
   // 天空穹顶配色
   const u = skyDomeMat.uniforms;
   const cT = u.topCol.value, cM = u.midCol.value, cB = u.botCol.value;
@@ -767,17 +778,20 @@ function updateSkyFog() {
   if (focusState.active) {
     scene.background.set(0x050b14);
     scene.fog.color.set(0x050b14);
-    scene.fog.near = 120;
-    scene.fog.far = 1500;
+    // 透视里雾当景深用：近处实、远端退到背景，剖面才有纵深感
+    scene.fog.near = 70;
+    scene.fog.far = 900;
     return;
   }
   const w = WEATHER[weatherState.mode];
-  fogCol.copy(skyCol).lerp(w.skyColor, weatherBlend);
+  // 夜里的云不反光，天气色要按天色衰减，否则阴天入夜后整屏发灰像阴天白天
+  const nightK = THREE.MathUtils.clamp(-sunElvAt(timeState.hour) * 2.2, 0, 1);
+  fogCol.copy(skyCol).lerp(w.skyColor, weatherBlend * (1 - nightK * 0.82));
   scene.background.copy(fogCol);
   scene.fog.color.copy(fogCol);
   scene.fog.near = w.fogNear;
   scene.fog.far = w.fogFar;
-  const nightDim = 1 - THREE.MathUtils.clamp(-sunElvAt(timeState.hour) * 2.2, 0, 1) * 0.82;
+  const nightDim = 1 - nightK * 0.82;
   groundMapMat.color.copy(w.tintColor).multiplyScalar(nightDim);
   groundPlainMat.color.copy(w.tintColor).multiplyScalar(nightDim);
   for (const child of mapGroup.children) {
@@ -785,7 +799,7 @@ function updateSkyFog() {
   }
   // 天空穹顶与天气融合；白云在晴天/多云显示
   skyDomeMat.uniforms.weatherCol.value.set(w.sky);
-  skyDomeMat.uniforms.weatherBlend.value = weatherBlend;
+  skyDomeMat.uniforms.weatherBlend.value = weatherBlend * (1 - nightK * 0.82);
   cloudGroup.visible = weatherState.mode === 'sunny' || weatherState.mode === 'cloudy';
 }
 
@@ -1271,8 +1285,8 @@ const holoMat = new THREE.ShaderMaterial({
   uniforms: {
     uColor: { value: new THREE.Color(0xcfe4f4) },
     uRim: { value: new THREE.Color(0x2e6fa8) },
-    uMinO: { value: 0.24 },
-    uMaxO: { value: 0.62 },
+    uMinO: { value: 0.14 },
+    uMaxO: { value: 0.44 },
     uPow: { value: 1.55 },
     uTime: { value: 0 },
     uCutY: { value: 1e6 }, // 掀顶：世界 Y 高于此值的片元丢弃，默认不裁
@@ -1311,6 +1325,15 @@ const holoMat = new THREE.ShaderMaterial({
       float fr = pow(1.0 - ndv, uPow);
       float a = mix(uMinO, uMaxO, fr);
       vec3 col = mix(uColor, uRim, fr * 0.9);
+      // 剖口高光：紧贴切面上沿亮一圈，读起来是被剖开的截面而不是模型缺了一块
+      float cutGlow = uCutY < 1e5 ? smoothstep(uCutY - 3.0, uCutY - 0.2, vPosW.y) : 0.0;
+      a = min(1.0, a + cutGlow * 0.36);
+      col += uRim * cutGlow * 0.6;
+      // 剖面以下渐淡：离剖口越远越虚，视线自然落在被剖开的那层
+      if (uCutY < 1e5) {
+        float below = smoothstep(uCutY - 28.0, uCutY - 1.0, vPosW.y);
+        a *= 0.45 + 0.55 * below;
+      }
       float band = fract(vPosW.y * 0.045 - uTime * 0.05);
       col += uRim * smoothstep(0.0, 0.10, band) * smoothstep(0.30, 0.10, band) * 0.55;
       gl_FragColor = vec4(col, a);
@@ -2651,12 +2674,12 @@ function makeCityMat(kind, opts = {}) {
     map: set.high.day,
     vertexColors: true,
     side: THREE.DoubleSide,
-    roughness: opts.roughness ?? 0.9,
-    metalness: opts.metalness ?? 0,
+    roughness: opts.roughness ?? 0.82,
+    metalness: opts.metalness ?? 0.04,
     emissive: 0xffffff,
     emissiveMap: set.high.night,
     emissiveIntensity: 0,
-    envMapIntensity: opts.env ?? 0.4,
+    envMapIntensity: opts.env ?? 0.55,
   });
   m.userData.facade = { highMap: set.high.day, lowMap: set.low.day, highEmissive: set.high.night, lowEmissive: set.low.night };
   m.userData.nightGain = opts.nightGain ?? 1;
@@ -2998,8 +3021,13 @@ function applyQuality(q) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = q !== 'low';
   renderer.shadowMap.needsUpdate = true;
-  const size = q === 'high' ? 2048 : q === 'medium' ? 1024 : 512;
+  const size = q === 'high' ? 4096 : q === 'medium' ? 2048 : 512;
   sunLight.shadow.mapSize.set(size, size);
+  shadowExtent = q === 'high' ? 520 : q === 'medium' ? 380 : 300;
+  const sc = sunLight.shadow.camera;
+  sc.left = -shadowExtent; sc.right = shadowExtent;
+  sc.top = shadowExtent; sc.bottom = -shadowExtent;
+  sc.updateProjectionMatrix();
   if (sunLight.shadow.map) { sunLight.shadow.map.dispose(); sunLight.shadow.map = null; }
   console.log('[画质]', q, 'shadow', size, 'pixelRatio', px);
 }
@@ -4243,7 +4271,8 @@ function prepareShell(name) {
   src.updateWorldMatrix(true, false);
   const bld = src.clone(true);
   src.matrixWorld.decompose(bld.position, bld.quaternion, bld.scale);
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0x9fe9ff, transparent: true, opacity: 0.68, depthWrite: false });
+  // 结构线压到 0.4：全息壳退成背景，CAD 墙片和楼板才是画面主体
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x8fd8f0, transparent: true, opacity: 0.4, depthWrite: false });
   bld.traverse((o) => {
     if (!o.isMesh) return;
     o.material = holoMat;
@@ -4465,47 +4494,104 @@ const demo2State = {
   active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
   plates: new Map(), selectedFloor: null,
 };
+// 舞台底图：中心亮、边缘渐隐的网格 + 环，一次画进贴图；方形边界用 destination-in 抹掉，
+// 否则暗场里能看到一块明显的方形底板
+function focusStageTexture(size = 1024) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const half = size / 2;
+  const rg = g.createRadialGradient(half, half, size * 0.02, half, half, half);
+  rg.addColorStop(0, 'rgba(28,66,82,0.44)');
+  rg.addColorStop(0.42, 'rgba(11,29,40,0.26)');
+  rg.addColorStop(0.74, 'rgba(5,14,21,0.10)');
+  rg.addColorStop(1, 'rgba(3,8,14,0)');
+  g.fillStyle = rg;
+  g.fillRect(0, 0, size, size);
+  const step = size / 32;
+  for (let i = 0; i <= 32; i++) {
+    const v = i * step;
+    const major = i % 4 === 0;
+    g.strokeStyle = major ? 'rgba(110,205,235,0.12)' : 'rgba(96,180,214,0.06)';
+    g.lineWidth = major ? 1.4 : 1;
+    g.beginPath(); g.moveTo(v, 0); g.lineTo(v, size); g.stroke();
+    g.beginPath(); g.moveTo(0, v); g.lineTo(size, v); g.stroke();
+  }
+  for (const r of [0.19, 0.30, 0.41]) {
+    g.strokeStyle = r === 0.30 ? 'rgba(84,215,240,0.18)' : 'rgba(70,185,215,0.09)';
+    g.lineWidth = r === 0.30 ? 1.8 : 1.1;
+    g.beginPath(); g.arc(half, half, half * r, 0, Math.PI * 2); g.stroke();
+  }
+  // 径向渐隐遮罩：把方形边界溶进背景
+  g.globalCompositeOperation = 'destination-in';
+  const mask = g.createRadialGradient(half, half, 0, half, half, half);
+  mask.addColorStop(0, 'rgba(0,0,0,1)');
+  mask.addColorStop(0.5, 'rgba(0,0,0,0.9)');
+  mask.addColorStop(0.78, 'rgba(0,0,0,0.28)');
+  mask.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = mask;
+  g.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+
+// 暗场背景穹顶：上深下更深的竖向渐变 + 地平线一圈极淡的冷光，建筑不再贴在纯黑上
+function makeFocusBackdrop(center) {
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+    uniforms: {
+      uTop: { value: new THREE.Color(0x0a1724) },
+      uMid: { value: new THREE.Color(0x0d2230) },
+      uBot: { value: new THREE.Color(0x03070d) },
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uTop;
+      uniform vec3 uMid;
+      uniform vec3 uBot;
+      varying vec3 vDir;
+      void main() {
+        float h = vDir.y;
+        vec3 col = h > 0.0 ? mix(uMid, uTop, smoothstep(0.0, 0.75, h)) : mix(uMid, uBot, smoothstep(0.0, 0.35, -h));
+        // 地平线薄光
+        col += vec3(0.03, 0.10, 0.14) * exp(-abs(h) * 26.0);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1600, 32, 20), mat);
+  mesh.position.copy(center);
+  mesh.renderOrder = -20;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
 function makeFocusStage(bbox) {
   const cx = (bbox.min.x + bbox.max.x) / 2;
   const cz = (bbox.min.z + bbox.max.z) / 2;
   const y = bbox.min.y - 0.34;
-  const size = Math.max(190, (bbox.max.x - bbox.min.x) * 1.9, (bbox.max.z - bbox.min.z) * 1.9);
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d');
-  const grd = g.createRadialGradient(128, 128, 8, 128, 128, 128);
-  grd.addColorStop(0, 'rgba(25,63,78,0.96)');
-  grd.addColorStop(0.48, 'rgba(10,27,38,0.94)');
-  grd.addColorStop(1, 'rgba(3,8,15,0.98)');
-  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
+  const size = Math.max(240, Math.max(bbox.max.x - bbox.min.x, bbox.max.z - bbox.min.z) * 2.8);
   const group = new THREE.Group();
   const plane = new THREE.Mesh(
     new THREE.PlaneGeometry(size, size),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 1, depthWrite: false })
+    new THREE.MeshBasicMaterial({
+      map: focusStageTexture(), transparent: true, depthWrite: false,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false,
+    })
   );
   plane.rotation.x = -Math.PI / 2;
   plane.position.set(cx, y, cz);
   plane.renderOrder = -2;
   group.add(plane);
-
-  const grid = new THREE.GridHelper(size, 48, 0x1c5365, 0x0d2b37);
-  grid.position.set(cx, y + 0.02, cz);
-  grid.material.transparent = true;
-  grid.material.opacity = 0.22;
-  group.add(grid);
-
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(size * 0.23, size * 0.235, 72),
-    new THREE.MeshBasicMaterial({
-      color: 0x2e9fba, transparent: true, opacity: 0.34,
-      side: THREE.DoubleSide, depthWrite: false,
-    })
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.set(cx, y + 0.03, cz);
-  group.add(ring);
+  group.add(makeFocusBackdrop(new THREE.Vector3(cx, y + 60, cz)));
   return group;
 }
 
@@ -4532,8 +4618,6 @@ function enterDemo2Focus(bbox, state = demo2State) {
   for (const [g] of saved.groups) g.visible = false;
   scene.background.set(0x050b14);
   scene.fog.color.set(0x050b14);
-  scene.fog.near = 120;
-  scene.fog.far = 1500;
   renderer.toneMappingExposure = 0.95;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -4653,13 +4737,13 @@ function addFloorPlate(n, y, loop, bbox, replace = false, state = demo2State) {
   }
   const cz = (minZ + maxZ) / 2;
   const label = makeLabel(`${n}F`, 'rgba(6,24,36,0.9)', '#a8f0ff', 0.46);
-  label.position.set(maxX + 3.4, y + 1.1, cz);
+  label.position.set(minX - 3.4, y + 1.1, cz);
   label.material.depthTest = false;
   label.renderOrder = 300;
   label.visible = false;
   state.group.add(label);
   const leadGeo = new THREE.BufferGeometry();
-  leadGeo.setAttribute('position', new THREE.Float32BufferAttribute([maxX - 0.2, y + 0.1, cz, maxX + 3.4, y + 0.95, cz], 3));
+  leadGeo.setAttribute('position', new THREE.Float32BufferAttribute([minX + 0.2, y + 0.1, cz, minX - 3.4, y + 0.95, cz], 3));
   const lead = new THREE.LineSegments(leadGeo, new THREE.LineBasicMaterial({
     color: 0x9fe8ff, transparent: true, opacity: 0.55, depthWrite: false,
   }));
