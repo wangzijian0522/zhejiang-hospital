@@ -1262,7 +1262,7 @@ function loadRealModel() {
 }
 
 // 空闲预热：透视最贵的是壳体边线（2号楼约 13 万条边）和逐层截面扫描，
-// 提前在空闲时算好，双击进入就只剩 add + 相机飞行。
+// 提前在空闲时算好，单击进入就只剩 add + 相机飞行。
 let prewarmed = false;
 function prewarmDemos(retry = 0) {
   if (prewarmed) return;
@@ -1283,7 +1283,7 @@ function prewarmDemos(retry = 0) {
   }
   prewarmed = true;
   console.log('[预热] 2/6号楼壳体与楼层截面已就绪');
-  // 真机模型 8~12MB/台，也趁空闲先拉，双击进透视时就不用等
+  // 真机模型 8~12MB/台，也趁空闲先拉，单击进透视时就不用等
   setTimeout(prefetchRobotModels, 4000);
 }
 
@@ -1533,8 +1533,8 @@ function syncCruiseButtons() {
 function startCruise(automatic = false) {
   if (cruiseState.on || !realLoaded || pendingDemoLoads > 0) return;
   if (automatic && focusState.active) return; // 自动巡航不打断透视
-  if (demo6State.active) stopDemo6();
-  if (demo2State.active) stopDemo2();
+  if (demo6State.active) stopFocusDemo(demo6State);
+  if (demo2State.active) stopFocusDemo(demo2State);
   setDemoBack(false);
   document.body.classList.remove('panel-open');
   $('settings-btn').classList.remove('on');
@@ -1615,8 +1615,8 @@ setInterval(checkCruiseIdle, 1000);
 // 透视模式悬浮返回按钮
 function setDemoBack(on) { $('demo-back').style.display = on ? 'block' : 'none'; }
 $('demo-back').onclick = () => {
-  if (demo6State.active) stopDemo6();
-  if (demo2State.active) stopDemo2();
+  if (demo6State.active) stopFocusDemo(demo6State);
+  if (demo2State.active) stopFocusDemo(demo2State);
   setDemoBack(false);
 };
 setWeather('sunny');
@@ -3820,7 +3820,8 @@ const FLOOR_FIT = {
 };
 const floorInfoCache = new Map();
 const buildingVertexCache = new Map();
-const cadPlanCache = new Map();
+const cadPlanCache = new Map();   // 楼层 CAD 平面（promise 缓存）
+const cadResCache = new Map();    // /twin-resource 原始线段，按 resourceId 复用
 const cadPlanSync = new Map(); // 解析完成的平面，供实时落位同步取用
 
 // 楼栋全部顶点（world 坐标，扁平 Float32Array），供按高度带取截面
@@ -4429,123 +4430,141 @@ function spawnSimRobots(state, name, bbox, baseY, label) {
   selectFloor(state.selectedFloor, state);
 }
 
-function spawnDemo6Robots(bbox, baseY) { spawnSimRobots(demo6State, '6号楼', bbox, baseY, '6号楼模拟'); }
-function spawnDemo2Robots(bbox, baseY) { spawnSimRobots(demo2State, '2号楼', bbox, baseY, '2号楼模拟'); }
-const cadResCache = new Map();
-async function loadDemo6Cad() {
-  // 等待中控楼层目录（含 geometryResource 引用）
+// ---------- 2号楼 透视 + 双机模拟（整栋壳体 + CAD 楼层板 + 机器人轨迹） ----------
+const demo2State = {
+  active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
+  plates: new Map(), selectedFloor: null,
+};
+
+// ---------- 透视会话（2 号楼 / 6 号楼共用一套流程） ----------
+// 两栋楼只差「楼名 + 状态对象」；2 号楼额外要把原楼体和门头文字藏起来（用壳体重画）。
+const FOCUS_BTN = { '2号楼': 'demo2-btn', '6号楼': 'demo6-btn' };
+
+// 等中控楼层目录就绪后，把该楼每层 CAD 平面灌进侧栏平面图
+async function loadDemoCad(name) {
+  const tag = `[${name}模拟]`;
   const t0 = Date.now();
   while (Date.now() - t0 < 10000) {
-    if (Array.from(liveState.floors.keys()).some((k) => k.startsWith('1/B-'))) break;
+    if (Array.from(liveState.floors.values()).some((f) => f.buildingName === name)) break;
     await new Promise((r) => setTimeout(r, 500));
   }
   const floors = [...liveState.floors.values()]
-    .filter((f) => f.buildingName === '6号楼' && f.floorNumber >= 1)
+    .filter((f) => f.buildingName === name && f.floorNumber >= 1)
     .sort((a, b) => a.floorNumber - b.floorNumber);
-  if (!floors.length) { console.warn('[6号楼模拟] 无楼层 CAD 数据（中控目录未就绪）'); return; }
-  await calibrateBuilding('6号楼');
+  if (!floors.length) { console.warn(tag, '无楼层 CAD 数据（中控目录未就绪）'); return; }
+  await calibrateBuilding(name);
   let drawn = 0;
   for (const f of floors) {
-    const plan = await cadPlanFor('6号楼', f.floorNumber);
+    const plan = await cadPlanFor(name, f.floorNumber);
     if (!plan) continue;
-    const frame = floorFrame('6号楼', f.floorNumber, plan);
+    const frame = floorFrame(name, f.floorNumber, plan);
     if (!frame) continue;
     const segs = plan.segs.map(([x1, y1, x2, y2]) => {
       const [ax, az] = frame.toWorld(x1, y1);
       const [bx, bz] = frame.toWorld(x2, y2);
       return [ax, az, bx, bz];
     });
-    fpAddCadFloor('6号楼', f.floorNumber, segs, null);
+    fpAddCadFloor(name, f.floorNumber, segs, null);
     drawn++;
   }
-  console.log('[6号楼模拟] CAD 平面已就绪', drawn, '层');
+  console.log(tag, 'CAD 平面已就绪', drawn, '层');
 }
-async function startDemo6() {
-  if (demo6State.active) { stopDemo6(); return; }
-  if (demo2State.active) stopDemo2();
+
+async function startFocusDemo(name, state) {
+  const tag = `[${name}模拟]`;
+  if (state.active) { stopFocusDemo(state); return; }
+  const other = name === '2号楼' ? demo6State : demo2State;
+  if (other.active) stopFocusDemo(other);
   stopCruise();
-  const grp = realBuildings.get('6号楼');
-  if (!grp) { console.warn('[6号楼模拟] 精模中未找到 6号楼'); return; }
-  const btn = $('demo6-btn');
+  if (!realBuildings.get(name)) { console.warn(tag, `精模中未找到 ${name}`); return; }
+  const btn = $(FOCUS_BTN[name]);
   btn.classList.add('on');
-  btn.textContent = '退出 6号楼 模拟';
-  demo6State.active = true;
+  btn.textContent = `退出 ${name} 模拟`;
+  state.active = true;
   setDemoBack(true);
-  openFloorPlan('6号楼');
-  demo6State.group = new THREE.Group();
-  scene.add(demo6State.group);
+  openFloorPlan(name);
+  state.group = new THREE.Group();
+  scene.add(state.group);
   let bbox = null;
-  // 先把画面淡入遮住，壳体/楼层这类同步重活不会以掉帧的形式被看到
-  await focusVeil(true, '正在切入 6 号楼透视…');
+  // 先盖住画面：壳体/楼层这类同步重活不会以掉帧的形式被看到
+  await focusVeil(true, `正在切入 ${name} 透视…`);
   try {
-    const shell = prepareShell('6号楼');
-    if (!shell) throw new Error('6 号楼壳体不可用');
+    const shell = prepareShell(name);
+    if (!shell) throw new Error('壳体不可用');
     shell.bld.visible = true;
     scene.add(shell.bld);
-    demo6State.shellRef = shell;
+    state.shellRef = shell;
     bbox = shell.box.clone();
   } catch (e) {
-    console.warn('[6号楼模拟] 6号楼壳体构建失败', e);
+    console.warn(tag, '壳体构建失败', e);
   }
-  if (!bbox) { console.warn('[6号楼模拟] 无法定位 6号楼，退出'); stopDemo6(); return; }
-  demo6State.bbox = bbox;
-  demo6State.plates.clear();
-  demo6State.selectedFloor = null; // 进来先看整栋，选层才掀顶
-  buildFloorStack(demo6State, '6号楼');
-  enterDemo2Focus(bbox, demo6State);
+  if (!bbox) { console.warn(tag, `无法定位 ${name}，退出`); stopFocusDemo(state); return; }
+  state.bbox = bbox;
+  state.plates.clear();
+  state.selectedFloor = null; // 进来先看整栋，选层才掀顶
+  buildFloorStack(state, name);
+  enterDemo2Focus(bbox, state);
+  if (name === '2号楼') {
+    // 2 号楼整栋隐藏（含 <3m 的雨棚/门头薄板）；门头文字是独立节点，单独隐藏
+    const source = realBuildings.get('2号楼');
+    if (source) { state.source = source; source.visible = false; }
+    const signGroup = scene.getObjectByName('4d_model_20231191236540838');
+    if (signGroup) { state.signGroup = signGroup; signGroup.visible = false; }
+  }
   pendingDemoLoads++;
   syncCruiseButtons();
   try {
-    await spawnDemo6Robots(bbox, bbox.min.y);
-    await loadDemo6Cad();
+    await spawnSimRobots(state, name, bbox, bbox.min.y, `${name}模拟`);
+    await loadDemoCad(name);
   } finally {
     pendingDemoLoads--;
     syncCruiseButtons();
   }
   liveGroup.visible = $('tg-live').checked;
-  upgradeLiveMarkers('6号楼');
-  focusWhole(demo6State);
+  upgradeLiveMarkers(name);
+  // 相机：先给整栋，选层后由 focusFloor 切顶并压到 55° 俯视
+  focusWhole(state);
   focusVeil(false);
-  console.log('[6号楼模拟] 沉浸透视 + 楼层板已应用');
+  console.log(tag, '透视白膜 + 楼层板已应用');
 }
-function stopDemo6() {
-  if (!demo6State.active) return;
-  demo6State.active = false;
+
+function stopFocusDemo(state) {
+  if (!state.active) return;
+  const name = state === demo6State ? '6号楼' : '2号楼';
+  state.active = false;
   exitDemo2Focus();
   setDemoBack(false);
-  demo6State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
-  demo6State.robots = [];
-  if (demo6State.shellRef) {
-    scene.remove(demo6State.shellRef.bld);
-    demo6State.shellRef.bld.visible = false;
-    demo6State.shellRef = null;
+  for (const r of state.robots) { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); }
+  state.robots = [];
+  state.bbox = null;
+  if (state.source) { state.source.visible = true; state.source = null; }
+  if (state.signGroup) { state.signGroup.visible = true; state.signGroup = null; }
+  if (state.shellRef) {
+    scene.remove(state.shellRef.bld);
+    state.shellRef.bld.visible = false;
+    state.shellRef = null;
   }
-  if (demo6State.group) {
-    disposeDemoSubtree(demo6State.group, '6号楼');
-    scene.remove(demo6State.group);
-    demo6State.group = null;
+  if (state.group) {
+    disposeDemoSubtree(state.group, name);
+    scene.remove(state.group);
+    state.group = null;
   }
-  demo6State.plates.clear();
-  demo6State.walls?.clear();
-  demo6State.cages?.clear();
-  demo6State.frames?.clear();
-  demo6State.bbox = null;
-  demo6State.selectedFloor = null;
+  state.plates.clear();
+  state.walls?.clear();
+  state.cages?.clear();
+  state.frames?.clear();
+  state.selectedFloor = null;
   liveGroup.visible = false;
   refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
-  const btn = $('demo6-btn');
+  const btn = $(FOCUS_BTN[name]);
   btn.classList.remove('on');
-  btn.textContent = '透视 6号楼（双机模拟）';
+  btn.textContent = `透视 ${name}（双机模拟）`;
   if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
 }
-$('demo6-btn').onclick = () => (demo6State.active ? stopDemo6() : startDemo6());
 
-// ---------- 2号楼 透视 + 双机模拟（整栋壳体 + CAD 楼层板 + 机器人轨迹） ----------
-const demo2State = {
-  active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
-  plates: new Map(), selectedFloor: null,
-};
+$('demo6-btn').onclick = () => (demo6State.active ? stopFocusDemo(demo6State) : startFocusDemo('6号楼', demo6State));
+$('demo2-btn').onclick = () => (demo2State.active ? stopFocusDemo(demo2State) : startFocusDemo('2号楼', demo2State));
 // 舞台底图：中心亮、边缘渐隐的网格 + 环，一次画进贴图；方形边界用 destination-in 抹掉，
 // 否则暗场里能看到一块明显的方形底板
 function focusStageTexture(size = 1024) {
@@ -4852,6 +4871,37 @@ function selectFloor(n, state = demo2State) {
   }
 }
 
+function stepSimRobots(state, dt) {
+  if (!state.active) return;
+  for (const r of state.robots) {
+    pushTrail(r);
+    if (!r.wp) r.wp = { x: r.obj.position.x, z: r.obj.position.z };
+    const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.5) {
+      r.wait -= dt;
+      if (r.wait <= 0) {
+        r.wp = {
+          x: r.minX + Math.random() * Math.max(0.5, r.maxX - r.minX),
+          z: r.minZ + Math.random() * Math.max(0.5, r.maxZ - r.minZ),
+        };
+        r.wait = 2 + Math.random() * 5;
+      }
+      continue;
+    }
+    const step = Math.min(r.speed * dt, dist);
+    r.obj.position.x += (dx / dist) * step;
+    r.obj.position.z += (dz / dist) * step;
+    r.obj.rotation.y = Math.atan2(dx, dz);
+  }
+  const sel = state.plates.get(state.selectedFloor);
+  if (sel) {
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
+    sel.mesh.material.opacity = 0.15 + pulse * 0.03;
+    sel.edge.material.opacity = 0.82 + pulse * 0.16;
+  }
+}
+
 function makeTrail(color) {
   const max = 140;
   const geom = new THREE.BufferGeometry();
@@ -4906,151 +4956,6 @@ function pushTrail(r) {
   t.line.geometry.attributes.position.needsUpdate = true;
   t.colors.needsUpdate = true;
 }
-
-async function loadDemo2Cad() {
-  // 等待中控楼层目录（按 buildingName 过滤 2号楼）
-  const t0 = Date.now();
-  while (Date.now() - t0 < 10000) {
-    if (Array.from(liveState.floors.values()).some((f) => f.buildingName === '2号楼')) break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  const floors = [...liveState.floors.values()]
-    .filter((f) => f.buildingName === '2号楼' && f.floorNumber >= 1)
-    .sort((a, b) => a.floorNumber - b.floorNumber);
-  if (!floors.length) { console.warn('[2号楼模拟] 无 2号楼 楼层 CAD 数据（中控目录未就绪）'); return; }
-  let drawn = 0;
-  for (const f of floors) {
-    const plan = await cadPlanFor('2号楼', f.floorNumber);
-    if (!plan) continue;
-    const frame = floorFrame('2号楼', f.floorNumber, plan);
-    if (!frame) continue;
-    const segs = plan.segs.map(([x1, y1, x2, y2]) => {
-      const [ax, az] = frame.toWorld(x1, y1);
-      const [bx, bz] = frame.toWorld(x2, y2);
-      return [ax, az, bx, bz];
-    });
-    fpAddCadFloor('2号楼', f.floorNumber, segs, null);
-    drawn++;
-  }
-  console.log('[2号楼模拟] CAD 平面已就绪', drawn, '层');
-}
-// 两台模拟机器人的推进（2/6号楼共用一套逻辑）
-function stepSimRobots(state, dt) {
-  if (!state.active) return;
-  for (const r of state.robots) {
-    pushTrail(r);
-    if (!r.wp) r.wp = { x: r.obj.position.x, z: r.obj.position.z };
-    const dx = r.wp.x - r.obj.position.x, dz = r.wp.z - r.obj.position.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist < 0.5) {
-      r.wait -= dt;
-      if (r.wait <= 0) {
-        r.wp = {
-          x: r.minX + Math.random() * Math.max(0.5, r.maxX - r.minX),
-          z: r.minZ + Math.random() * Math.max(0.5, r.maxZ - r.minZ),
-        };
-        r.wait = 2 + Math.random() * 5;
-      }
-      continue;
-    }
-    const step = Math.min(r.speed * dt, dist);
-    r.obj.position.x += (dx / dist) * step;
-    r.obj.position.z += (dz / dist) * step;
-    r.obj.rotation.y = Math.atan2(dx, dz);
-  }
-  const sel = state.plates.get(state.selectedFloor);
-  if (sel) {
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.0022);
-    sel.mesh.material.opacity = 0.15 + pulse * 0.03;
-    sel.edge.material.opacity = 0.82 + pulse * 0.16;
-  }
-}
-async function startDemo2() {
-  if (demo2State.active) { stopDemo2(); return; }
-  if (demo6State.active) stopDemo6();
-  stopCruise();
-  const btn = $('demo2-btn');
-  btn.classList.add('on');
-  btn.textContent = '退出 2号楼 模拟';
-  demo2State.active = true;
-  setDemoBack(true);
-  openFloorPlan('2号楼');
-  demo2State.group = new THREE.Group();
-  scene.add(demo2State.group);
-  let bbox = null;
-  // 先把画面淡入遮住，壳体/楼层这类同步重活不会以掉帧的形式被看到
-  await focusVeil(true, '正在切入 2 号楼透视…');
-  try {
-    const shell = prepareShell('2号楼');
-    if (!shell) throw new Error('整体模型中的 2 号楼 尚未就绪');
-    shell.bld.visible = true;
-    scene.add(shell.bld);
-    demo2State.shellRef = shell;
-    bbox = shell.box.clone();
-  } catch (e) {
-    console.warn('[2号楼模拟] 2号楼模型加载失败', e);
-  }
-  if (!bbox) { console.warn('[2号楼模拟] 无法定位 2号楼，退出'); stopDemo2(); return; }
-  demo2State.bbox = bbox;
-  demo2State.plates.clear();
-  demo2State.selectedFloor = null; // 进来先看整栋，选层才掀顶
-  buildFloorStack(demo2State, '2号楼');
-  enterDemo2Focus(bbox);
-  // 原 2 号楼整栋隐藏（含 <3m 的雨棚/门头薄板）；门头文字是独立节点，单独隐藏
-  const source = realBuildings.get('2号楼');
-  if (source) { demo2State.source = source; source.visible = false; }
-  const signGroup = scene.getObjectByName('4d_model_20231191236540838');
-  if (signGroup) { demo2State.signGroup = signGroup; signGroup.visible = false; }
-  pendingDemoLoads++;
-  syncCruiseButtons();
-  try {
-    await spawnDemo2Robots(bbox, bbox.min.y);
-    await loadDemo2Cad();
-  } finally {
-    pendingDemoLoads--;
-    syncCruiseButtons();
-  }
-  liveGroup.visible = $('tg-live').checked;
-  upgradeLiveMarkers('2号楼');
-  // 相机：先给整栋，选层后由 focusFloor 切顶并压到 55° 俯视
-  focusWhole(demo2State);
-  focusVeil(false);
-  console.log('[2号楼模拟] 透视白膜 + 楼层板已应用，bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
-}
-function stopDemo2() {
-  if (!demo2State.active) return;
-  demo2State.active = false;
-  exitDemo2Focus();
-  setDemoBack(false);
-  demo2State.robots.forEach((r) => { const i = BEACONS.indexOf(r.beacon); if (i >= 0) BEACONS.splice(i, 1); });
-  demo2State.robots = [];
-  demo2State.bbox = null;
-  if (demo2State.source) { demo2State.source.visible = true; demo2State.source = null; }
-  if (demo2State.signGroup) { demo2State.signGroup.visible = true; demo2State.signGroup = null; }
-  if (demo2State.shellRef) {
-    scene.remove(demo2State.shellRef.bld);
-    demo2State.shellRef.bld.visible = false;
-    demo2State.shellRef = null;
-  }
-  if (demo2State.group) {
-    disposeDemoSubtree(demo2State.group, '2号楼');
-    scene.remove(demo2State.group);
-    demo2State.group = null;
-  }
-  demo2State.plates.clear();
-  demo2State.walls?.clear();
-  demo2State.cages?.clear();
-  demo2State.frames?.clear();
-  demo2State.selectedFloor = null;
-  liveGroup.visible = false;
-  refreshLiveMarkers();   // 退出后解除按层过滤
-  closeFloorPlan();
-  const btn = $('demo2-btn');
-  btn.classList.remove('on');
-  btn.textContent = '透视 2号楼（双机模拟）';
-  if (overviewCam) flyToPos(overviewCam.pos, overviewCam.look);
-}
-$('demo2-btn').onclick = () => (demo2State.active ? stopDemo2() : startDemo2());
 
 // ---------- 3D 拾取：点 2/6 号楼直接进入透视/分层 ----------
 // 只对可见精模做射线检测：透视进行中、精模开关关闭、或模型未就绪时一律不响应，
@@ -5107,8 +5012,8 @@ function handleCanvasClick(x, y) {
   }
   if (focusState.active) return;
   const name = pickBuildingAt(x, y);
-  if (name === '2号楼') startDemo2();
-  else if (name === '6号楼') startDemo6();
+  if (name === '2号楼') startFocusDemo('2号楼', demo2State);
+  else if (name === '6号楼') startFocusDemo('6号楼', demo6State);
 }
 // 左键同时是平移，必须把"点一下"和"拖视角"分开：位移 < 6px 且 < 500ms 才算点击
 let clickMark = null;
