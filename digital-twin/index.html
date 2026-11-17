@@ -606,6 +606,8 @@ const groundGeo = new THREE.PlaneGeometry(W, H);
 const groundPlainMat = new THREE.MeshLambertMaterial({ color: 0xe8ecf0 });
 const ground = new THREE.Mesh(groundGeo, groundPlainMat);
 ground.rotation.x = -Math.PI / 2;
+// 整体模型自带地形也落在 y=0，压 6cm 避免两块地面共面打架
+ground.position.y = -0.06;
 ground.receiveShadow = true;
 groundGroup.add(ground);
 // 总平图地面走受光材质：之前是 MeshBasicMaterial，太阳、楼影全都照不到它，
@@ -1143,6 +1145,41 @@ function computeCampusFocus() {
   return campusFocus;
 }
 
+// 新导出的树是 657 个独立 mesh，但只共享 10 个几何。直接开是 2100+ draw call
+// （实测 14ms/帧），合并成 InstancedMesh 后只剩 13 个 draw call，GPU 侧 9.7M
+// 三角形也只增加 ~0.1ms，院区绿化才开得起。
+function buildTreeInstances(root) {
+  const shu = root.getObjectByName('shu');
+  if (!shu) return null;
+  shu.updateWorldMatrix(true, true);
+  const inv = new THREE.Matrix4().copy(shu.matrixWorld).invert();
+  const meshes = [];
+  shu.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  if (!meshes.length) return null;
+  const buckets = new Map();
+  for (const m of meshes) {
+    const key = m.geometry.uuid + '|' + m.material.uuid;
+    if (!buckets.has(key)) buckets.set(key, { geo: m.geometry, mat: m.material, list: [] });
+    buckets.get(key).list.push(m);
+  }
+  const group = new THREE.Group();
+  group.name = '树木实例';
+  const mtx = new THREE.Matrix4();
+  for (const b of buckets.values()) {
+    const inst = new THREE.InstancedMesh(b.geo, b.mat, b.list.length);
+    b.list.forEach((m, i) => { mtx.multiplyMatrices(inv, m.matrixWorld); inst.setMatrixAt(i, mtx); });
+    inst.instanceMatrix.needsUpdate = true;
+    inst.castShadow = true;
+    inst.receiveShadow = true;
+    inst.frustumCulled = false;
+    group.add(inst);
+  }
+  for (const m of meshes) m.visible = false;
+  shu.add(group);
+  return group;
+}
+let treeInstances = null;
+
 // 模型导出时可能给节点名加序号（如 1号楼003），与中控 buildingName 对齐
 const NODE_NAME_FIX = { '1号楼003': '1号楼' };
 
@@ -1182,8 +1219,9 @@ function loadRealModel() {
         if (o.children.length) refBox.expandByObject(o);
       }
     });
-    const shuGroup = obj.getObjectByName('shu');
-    if (shuGroup) shuGroup.visible = false;
+    treeInstances = buildTreeInstances(obj);
+    // 树是纯锦上添花：14.8M 三角形只有独显/Apple GPU 吃得下，只在 high 档开
+    if (treeInstances) treeInstances.visible = QUALITY.value === 'high';
     if (refBox.isEmpty()) refBox.copy(box);
     const c = refBox.getCenter(new THREE.Vector3());
     // 旧版是按"整包几何中心"配准的，而整包中心比楼栋中心偏 (+25.9, -12.7)；
@@ -3027,6 +3065,7 @@ function applyQuality(q) {
     m.needsUpdate = true;
   }
   if (cityShellGroup) cityShellGroup.visible = q !== 'low';
+  if (treeInstances) treeInstances.visible = q === 'high';
   if (roofPropsGroup) roofPropsGroup.visible = q === 'high';
   if (aviationMat) aviationMat.size = q === 'high' ? 6 : 4.2;
   const px = q === 'high' ? 1.5 : q === 'medium' ? 1.25 : 1;
