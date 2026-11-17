@@ -224,10 +224,10 @@
     <button id="cruise-btn" style="margin-top:6px">自动巡航（360°逆时针）</button>
     <button id="demo6-btn" style="margin-top:6px">透视 6号楼（双机模拟）</button>
     <button id="demo2-btn" style="margin-top:6px">透视 2号楼（双机模拟）</button>
-    <div class="simhint">场景里双击 2/6 号楼也可直接进入透视</div>
+    <div class="simhint">场景里点一下 2/6 号楼即可进入透视；再点楼板选层</div>
   </div>
 </div>
-<div id="hint">左键拖拽移动 · 滚轮缩放 · 按住滚轮旋转</div>
+<div id="hint">拖拽平移 · 滚轮缩放 · 中键旋转 · 单击楼栋进入透视 · 单击楼面选层</div>
 <button id="demo-back" style="display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:56; background:rgba(20,30,40,.85); color:#cfe0f2; border:1px solid rgba(0,229,255,.4); border-radius:18px; padding:7px 24px; font-size:13px; letter-spacing:2px; cursor:pointer;">← 返回总览</button>
 <div id="topbar">
   <div class="tb-left">
@@ -315,7 +315,7 @@
 <div id="floor-plan">
   <div class="fp-head">
     <b id="fp-title">--</b>
-    <span id="fp-current">当前 3F</span>
+    <span id="fp-current">整栋</span>
     <span>楼层平面 · 点击机器人可定位</span>
     <button id="fp-close" title="收起">✕</button>
   </div>
@@ -1275,6 +1275,7 @@ const holoMat = new THREE.ShaderMaterial({
     uMaxO: { value: 0.62 },
     uPow: { value: 1.55 },
     uTime: { value: 0 },
+    uCutY: { value: 1e6 }, // 掀顶：世界 Y 高于此值的片元丢弃，默认不裁
     fogColor: { value: new THREE.Color(0xffffff) },
     fogNear: { value: 900 },
     fogFar: { value: 2600 },
@@ -1298,10 +1299,13 @@ const holoMat = new THREE.ShaderMaterial({
     uniform float uMaxO;
     uniform float uPow;
     uniform float uTime;
+    uniform float uCutY;
     varying vec3 vPosW;
     varying vec3 vNrmW;
     #include <fog_pars_fragment>
     void main() {
+      // 掀顶：选中层以上的壳体直接丢弃，留下剖口
+      if (vPosW.y > uCutY) discard;
       vec3 V = normalize(cameraPosition - vPosW);
       float ndv = abs(dot(normalize(vNrmW), V));
       float fr = pow(1.0 - ndv, uPow);
@@ -1315,6 +1319,25 @@ const holoMat = new THREE.ShaderMaterial({
   `,
 });
 function flyToPos(pos, look) { if (cruiseState.on) stopCruise(); flyTarget = { pos, look }; }
+
+// ---------- 掀顶：选中某层就把该层以上的壳体切掉 ----------
+// 网格走着色器 discard（holoMat 是自定义 ShaderMaterial，不吃 clippingPlanes），
+// 边线走内置材质的裁剪面；两者共用同一个 y，动画时一起往下走，看起来像顶盖被剖开。
+const CUT = { plane: new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e6), anim: null };
+function setCutY(y) {
+  holoMat.uniforms.uCutY.value = y;
+  CUT.plane.constant = y;
+}
+function cutTo(y, dur = 340) {
+  CUT.anim = { from: holoMat.uniforms.uCutY.value, to: y, t0: performance.now(), dur };
+}
+function stepCut() {
+  if (!CUT.anim) return;
+  const k = Math.min(1, (performance.now() - CUT.anim.t0) / CUT.anim.dur);
+  const e = 1 - (1 - k) ** 3;
+  setCutY(CUT.anim.from + (CUT.anim.to - CUT.anim.from) * e);
+  if (k >= 1) CUT.anim = null;
+}
 
 // ---------- 物流设备模型 ----------
 const DEVICES = [
@@ -1750,9 +1773,8 @@ function refreshLiveMarkers() {
       mk.floor = flNum;
       setBeaconTag(mk.beacon, flNum != null ? flNum + 'F' : '·');
     }
-    // 只显示「当前透视楼栋 + 当前层」的真机；其余一律隐藏（含另一栋楼）
-    const filter = demoFloorFilter(floor.buildingName);
-    mk.obj.visible = filter != null && filter === flNum;
+    // 只显示「当前透视楼栋」的真机：整栋态全显示，选层后只剩当前层，别栋一律隐藏
+    mk.obj.visible = !!st?.active && (st.selectedFloor == null || st.selectedFloor === flNum);
   }
   for (const [rid, r] of liveState.robots) {
     if (liveMarkers.has(rid)) continue;
@@ -4048,40 +4070,62 @@ async function buildFloorStack(state, name) {
     };
     addFloorPlate(n, y, rect, bbox, true, state);
   }
-  selectFloor(state.selectedFloor || info.floors[Math.min(2, info.floors.length - 1)], state);
+  selectFloor(state.selectedFloor, state);
   await buildFloorWalls(state, name);
 }
 
-// 透视会话正在看哪一层（非透视返回 null）
-function demoFloorFilter(buildingName) {
-  if (buildingName === '2号楼' && demo2State.active) return demo2State.selectedFloor;
-  if (buildingName === '6号楼' && demo6State.active) return demo6State.selectedFloor;
-  return null;
+// 取景：整栋态看全楼；选层后掀顶，机位按 55° 斜俯视压下来正对那层
+const FOCUS_ELEV = 55 * Math.PI / 180;
+function flyToBuilding(state, name) {
+  const box = state?.bbox;
+  if (!box) return;
+  const ctr = box.getCenter(new THREE.Vector3());
+  const h = box.max.y - box.min.y;
+  const look = new THREE.Vector3(ctr.x, box.min.y + h * 0.48, ctr.z);
+  const dir = new THREE.Vector3(0, Math.sin(FOCUS_ELEV * 0.62), Math.cos(FOCUS_ELEV * 0.62));
+  const dist = fitFocusDistance(box, camera, (d) => look.clone().addScaledVector(dir, d), look, 1.18);
+  flyToPos(look.clone().addScaledVector(dir, dist), look);
 }
-
-// 中控当前有可用位姿的楼层（真实机器人只在这些层能落位）
-function liveReadyFloor(name) {
-  for (const r of liveState.robots.values()) {
-    const loc = readyPose(r);
-    if (!loc) continue;
-    const f = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
-    if (f?.buildingName === name && f.floorNumber >= 1) return f.floorNumber;
-  }
-  return null;
-}
-
-// 取景：机位留在楼外看整栋，视线对准当前层——既不钻进楼里，也能一眼看出高亮的是哪层
 function flyToFloor(state, name, n) {
   const info = floorInfoFor(name);
   if (!info) return;
-  const box = state?.bbox || (state?.plates?.get(n) && new THREE.Box3().setFromObject(state.plates.get(n).mesh));
+  const box = (state?.plates?.get(n) && new THREE.Box3().setFromObject(state.plates.get(n).mesh)) || state?.bbox;
   if (!box) return;
+  // 取景要把该层的墙片算进去：墙片立在楼板上 2.6m 高，只按楼板裁会把近侧墙顶切出画面
+  box.max.y += Math.max(2.6, info.h - 1.0);
   const y = info.baseY + (n - 1) * info.h;
   const ctr = box.getCenter(new THREE.Vector3());
-  const midY = info.baseY + (info.topY - info.baseY) * 0.55;
-  const look = new THREE.Vector3(ctr.x, y + info.h * 0.9, ctr.z);
-  const dist = fitFocusDistance(box, camera, (d) => new THREE.Vector3(look.x, midY, look.z + d), look, 1.15);
-  flyToPos(new THREE.Vector3(look.x, midY, look.z + dist), look);
+  // 视线压到层内偏下一点，俯视时能同时看到近侧楼板与远侧墙线
+  const look = new THREE.Vector3(ctr.x, y + info.h * 0.28, ctr.z);
+  const dir = new THREE.Vector3(0, Math.sin(FOCUS_ELEV), Math.cos(FOCUS_ELEV));
+  const dist = fitFocusDistance(box, camera, (d) => look.clone().addScaledVector(dir, d), look, 1.2);
+  flyToPos(look.clone().addScaledVector(dir, dist), look);
+}
+
+// UI 入口：整栋 ⇄ 单层（选层 = 掀顶到该层顶板）
+function focusWhole(state = demo2State) {
+  selectFloor(null, state);
+  cutTo(state?.bbox ? state.bbox.max.y + 1 : 1e6);
+  flyToBuilding(state, state === demo6State ? '6号楼' : '2号楼');
+  if (fpState.floors.length) {
+    fpState.cur = -1;
+    buildFloorChips();
+    fpDraw(true);
+  }
+}
+function focusFloor(state, n) {
+  const name = state === demo6State ? '6号楼' : '2号楼';
+  selectFloor(n, state);
+  const info = floorInfoFor(name);
+  if (info) cutTo(info.baseY + n * info.h);
+  flyToFloor(state, name, n);
+  const i = fpState.floors.findIndex((f) => f.n === n);
+  if (i >= 0) {
+    fpState.cur = i;
+    fpState.userPicked = true;
+    buildFloorChips();
+    fpDraw(true);
+  }
 }
 
 // 每层墙体：全楼层铺极淡的地面墙线；当前层把墙线拉成「玻璃墙片」+ 顶部亮线，读起来是房间而不是涂鸦
@@ -4162,24 +4206,25 @@ async function buildFloorWalls(state, name) {
   selectFloor(state.selectedFloor, state);
 }
 
-// 楼层焦点：当前层墙片/顶线全开，相邻层留淡轮廓，其余只留地面墙线
+// 楼层焦点：整栋态（n=null）不聚焦，只留壳体；选中某层时该层墙片/顶线全开，上下各一层留淡轮廓
 function applyFloorFocus(state, n) {
   if (!state.walls) return;
+  const whole = n == null;
   for (const [num, line] of state.walls) {
-    const d = Math.abs(num - n);
+    const d = whole ? 99 : Math.abs(num - n);
     // 远处的楼层墙线全叠起来会糊成一张网，只留当前层和上下各一层
-    line.visible = d <= 1;
+    line.visible = !whole && d <= 1;
     line.material.opacity = d === 0 ? 0.45 : 0.09;
   }
   for (const [num, cage] of state.cages) {
-    const on = num === n;
+    const on = !whole && num === n;
     cage.panel.visible = on;
     cage.rail.visible = on;
   }
-  // 真机只显示「当前楼栋 + 当前层」，别栋的真机不出现
+  // 真机只显示「当前楼栋（+ 当前层）」，别栋的真机不出现
   const bname = state === demo6State ? '6号楼' : '2号楼';
   for (const mk of liveMarkers.values()) {
-    mk.obj.visible = mk.building === bname && mk.floor === n;
+    mk.obj.visible = mk.building === bname && (whole || mk.floor === n);
   }
 }
 
@@ -4228,7 +4273,7 @@ function dropShellCache() {
 }
 
 // ---------- 6号楼 透视白膜 + 双机模拟（3层/4层 缓慢移动，整体不拆分） ----------
-const demo6State = { active: false, robots: [], group: null, bbox: null, plates: new Map(), selectedFloor: 3 };
+const demo6State = { active: false, robots: [], group: null, bbox: null, plates: new Map(), selectedFloor: null };
 
 // 两台模拟机器人：先用发光占位块就位（进入透视不等 20MB 模型），模型到了再换上
 function spawnSimRobots(state, name, bbox, baseY, label) {
@@ -4297,7 +4342,7 @@ function spawnSimRobots(state, name, bbox, baseY, label) {
       }
     })();
   }
-  selectFloor(state.selectedFloor || 3, state);
+  selectFloor(state.selectedFloor, state);
 }
 
 function spawnDemo6Robots(bbox, baseY) { spawnSimRobots(demo6State, '6号楼', bbox, baseY, '6号楼模拟'); }
@@ -4361,7 +4406,7 @@ async function startDemo6() {
   if (!bbox) { console.warn('[6号楼模拟] 无法定位 6号楼，退出'); stopDemo6(); return; }
   demo6State.bbox = bbox;
   demo6State.plates.clear();
-  demo6State.selectedFloor = liveReadyFloor('6号楼') || 3;
+  demo6State.selectedFloor = null; // 进来先看整栋，选层才掀顶
   buildFloorStack(demo6State, '6号楼');
   enterDemo2Focus(bbox, demo6State);
   pendingDemoLoads++;
@@ -4375,7 +4420,7 @@ async function startDemo6() {
   }
   liveGroup.visible = $('tg-live').checked;
   upgradeLiveMarkers('6号楼');
-  flyToFloor(demo6State, '6号楼', demo6State.selectedFloor);
+  focusWhole(demo6State);
   focusVeil(false);
   console.log('[6号楼模拟] 沉浸透视 + 楼层板已应用');
 }
@@ -4401,7 +4446,7 @@ function stopDemo6() {
   demo6State.cages?.clear();
   demo6State.frames?.clear();
   demo6State.bbox = null;
-  demo6State.selectedFloor = 3;
+  demo6State.selectedFloor = null;
   liveGroup.visible = false;
   refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
@@ -4415,7 +4460,7 @@ $('demo6-btn').onclick = () => (demo6State.active ? stopDemo6() : startDemo6());
 // ---------- 2号楼 透视 + 双机模拟（整栋壳体 + CAD 楼层板 + 机器人轨迹） ----------
 const demo2State = {
   active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
-  plates: new Map(), selectedFloor: 3,
+  plates: new Map(), selectedFloor: null,
 };
 function makeFocusStage(bbox) {
   const cx = (bbox.min.x + bbox.max.x) / 2;
@@ -4496,6 +4541,11 @@ function enterDemo2Focus(bbox, state = demo2State) {
   const stage = makeFocusStage(bbox);
   state.group.add(stage);
   focusState.stage = stage;
+  // 掀顶用的裁剪面：只作用于壳体的边线（网格靠 uCutY discard），进楼先不裁
+  renderer.localClippingEnabled = true;
+  CUT.anim = null;
+  setCutY(1e6);
+  if (state.shellRef) state.shellRef.edgeMat.clippingPlanes = [CUT.plane];
   updateSun();
   updateSkyFog();
 }
@@ -4529,6 +4579,8 @@ function exitDemo2Focus() {
   }
   focusState.saved = null;
   focusState.center = null;
+  CUT.anim = null;
+  setCutY(1e6); // 退出透视恢复整栋壳体，避免下次进来还是剖开的
   updateSun();
   updateSkyFog();
 }
@@ -4610,26 +4662,31 @@ function addFloorPlate(n, y, loop, bbox, replace = false, state = demo2State) {
   lead.visible = false;
   state.group.add(lead);
   state.plates.set(n, { mesh, edge, label, lead, y });
-  selectFloor(state.selectedFloor || 3, state);
+  selectFloor(state.selectedFloor, state);
 }
 
+// 只改变视觉状态（楼板/墙线/机器人/标签），取景与掀顶由 focusWhole / focusFloor 负责
 function selectFloor(n, state = demo2State) {
   if (!state.plates.size) return;
-  state.selectedFloor = n;
-  applyFloorFocus(state, n);
+  const whole = n == null;
+  state.selectedFloor = whole ? null : n;
+  applyFloorFocus(state, state.selectedFloor);
   for (const [num, p] of state.plates) {
-    const on = num === n;
-    p.mesh.material.opacity = on ? 0.16 : 0.02;
-    p.mesh.material.emissiveIntensity = on ? 0.55 : 0.2;
-    p.edge.material.opacity = on ? 0.92 : 0.16;
-    p.edge.visible = on;
+    const on = !whole && num === n;
+    // 掀顶时选中层以上的楼板不画，否则从上往下看到的是一层层天花板
+    const above = !whole && num > n;
+    p.mesh.visible = !above;
+    p.mesh.material.opacity = whole ? 0.03 : on ? 0.16 : 0.02;
+    p.mesh.material.emissiveIntensity = whole ? 0.24 : on ? 0.55 : 0.2;
+    p.edge.visible = !above && (whole || on);
+    p.edge.material.opacity = whole ? 0.2 : on ? 0.92 : 0.14;
     p.label.visible = on;
     if (p.lead) p.lead.visible = on;
   }
   const cur = document.getElementById('fp-current');
-  if (cur) cur.textContent = '当前 ' + n + 'F';
+  if (cur) cur.textContent = whole ? '整栋' : '当前 ' + n + 'F';
   for (const r of state.robots) {
-    const on = r.floor === n;
+    const on = whole || r.floor === n;
     if (r.trail) {
       const lo = r.trail.line.material, po = r.trail.dots.material;
       if (lo.userData._base === undefined) lo.userData._base = lo.opacity;
@@ -4795,7 +4852,7 @@ async function startDemo2() {
   if (!bbox) { console.warn('[2号楼模拟] 无法定位 2号楼，退出'); stopDemo2(); return; }
   demo2State.bbox = bbox;
   demo2State.plates.clear();
-  demo2State.selectedFloor = liveReadyFloor('2号楼') || 3;
+  demo2State.selectedFloor = null; // 进来先看整栋，选层才掀顶
   buildFloorStack(demo2State, '2号楼');
   enterDemo2Focus(bbox);
   // 原 2 号楼整栋隐藏（含 <3m 的雨棚/门头薄板）；门头文字是独立节点，单独隐藏
@@ -4814,8 +4871,8 @@ async function startDemo2() {
   }
   liveGroup.visible = $('tg-live').checked;
   upgradeLiveMarkers('2号楼');
-  // 相机：正南侧正视，按当前层楼板取景
-  flyToFloor(demo2State, '2号楼', demo2State.selectedFloor);
+  // 相机：先给整栋，选层后由 focusFloor 切顶并压到 55° 俯视
+  focusWhole(demo2State);
   focusVeil(false);
   console.log('[2号楼模拟] 透视白膜 + 楼层板已应用，bbox中心', bbox.getCenter(new THREE.Vector3()).x.toFixed(1), bbox.getCenter(new THREE.Vector3()).z.toFixed(1));
 }
@@ -4843,7 +4900,7 @@ function stopDemo2() {
   demo2State.walls?.clear();
   demo2State.cages?.clear();
   demo2State.frames?.clear();
-  demo2State.selectedFloor = 3;
+  demo2State.selectedFloor = null;
   liveGroup.visible = false;
   refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
@@ -4869,20 +4926,74 @@ function pickBuildingAt(clientX, clientY) {
   return null;
 }
 const pickCanvas = renderer.domElement;
-// 双击 2/6 号楼进入透视：单击留给旋转视角，避免拖拽/误触把人拽进透视
-pickCanvas.addEventListener('dblclick', (e) => {
-  if (focusState.active || demo2State.active || demo6State.active) return;
-  const name = pickBuildingAt(e.clientX, e.clientY);
+// 透视态里点中哪一层：楼板和立面都算，取离相机更近的那个。
+// 只认楼板的话，整栋态下俯视时最上层楼板永远挡在最前面，点哪儿都是顶楼；
+// 认立面则"点楼体哪一段高度就是哪一层"，两种情况都对得上。
+function pickFloorAt(state, clientX, clientY) {
+  if (!state?.plates?.size) return null;
+  const name = state === demo6State ? '6号楼' : '2号楼';
+  const info = floorInfoFor(name);
+  if (!info) return null;
+  pickNdc.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
+  pickRay.setFromCamera(pickNdc, camera);
+  const plates = [];
+  for (const [, p] of state.plates) if (p.mesh.visible) plates.push(p.mesh);
+  const plateHit = plates.length ? pickRay.intersectObjects(plates, false)[0] || null : null;
+  const shell = state.shellRef?.bld;
+  // 掀顶后上部壳体只是被着色器丢弃，几何还在，必须按 uCutY 过滤，否则会点中看不见的楼层
+  const cutY = holoMat.uniforms.uCutY.value;
+  const shellHit = shell
+    ? pickRay.intersectObject(shell, true).find((h) => h.object.isMesh && h.point.y <= cutY) || null
+    : null;
+  if (shellHit && (!plateHit || shellHit.distance <= plateHit.distance)) {
+    const n = Math.floor((shellHit.point.y - info.baseY) / info.h) + 1;
+    return n >= 1 && n <= Math.max(...info.floors) ? n : null;
+  }
+  if (plateHit) {
+    for (const [n, p] of state.plates) if (p.mesh === plateHit.object) return n;
+  }
+  return null;
+}
+// 画布点击：总览态点 2/6 号楼进透视；透视态点楼板选层（再点一次 / 点空白回整栋）
+function handleCanvasClick(x, y) {
+  const state = demo2State.active ? demo2State : demo6State.active ? demo6State : null;
+  if (state) {
+    const n = pickFloorAt(state, x, y);
+    if (n == null) focusWhole(state);
+    else if (state.selectedFloor === n) focusWhole(state);
+    else focusFloor(state, n);
+    return;
+  }
+  if (focusState.active) return;
+  const name = pickBuildingAt(x, y);
   if (name === '2号楼') startDemo2();
   else if (name === '6号楼') startDemo6();
+}
+// 左键同时是平移，必须把"点一下"和"拖视角"分开：位移 < 6px 且 < 500ms 才算点击
+let clickMark = null;
+pickCanvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || activePointers.size > 1) { clickMark = null; return; }
+  clickMark = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId };
 });
+pickCanvas.addEventListener('pointerup', (e) => {
+  const m = clickMark;
+  clickMark = null;
+  if (!m || m.id !== e.pointerId) return;
+  if (Math.hypot(e.clientX - m.x, e.clientY - m.y) > 6) return;
+  if (performance.now() - m.t > 500) return;
+  handleCanvasClick(e.clientX, e.clientY);
+});
+pickCanvas.addEventListener('pointercancel', () => { clickMark = null; });
 let pickHoverAt = 0;
 pickCanvas.addEventListener('pointermove', (e) => {
-  if (e.buttons || focusState.active) { pickCanvas.style.cursor = ''; return; }
+  if (e.buttons) { pickCanvas.style.cursor = ''; return; }
   const now = performance.now();
   if (now - pickHoverAt < 90) return; // 悬停检测限频，鼠标移动时不必每次都打射线
   pickHoverAt = now;
-  pickCanvas.style.cursor = pickBuildingAt(e.clientX, e.clientY) ? 'pointer' : '';
+  const state = demo2State.active ? demo2State : demo6State.active ? demo6State : null;
+  if (state) pickCanvas.style.cursor = pickFloorAt(state, e.clientX, e.clientY) != null ? 'pointer' : '';
+  else if (focusState.active) pickCanvas.style.cursor = '';
+  else pickCanvas.style.cursor = pickBuildingAt(e.clientX, e.clientY) ? 'pointer' : '';
 });
 // 指针移到面板/图表等覆盖层上时 canvas 收不到 pointermove，必须在这里清掉手型光标
 pickCanvas.addEventListener('pointerleave', () => { pickCanvas.style.cursor = ''; });
@@ -4925,7 +5036,7 @@ function fpOpen(building) {
   fpState.building = building;
   fpState.floors = [];
   fpState.bounds = null;
-  fpState.cur = 0;
+  fpState.cur = -1; // 进透视先看整栋，平面图等用户选层再画
   fpState.userPicked = false;
   fpState.hidden = false;
   fpState.lastDraw = 0;
@@ -4933,6 +5044,7 @@ function fpOpen(building) {
   fpState.panX = 0;
   fpState.panY = 0;
   $('fp-title').textContent = building;
+  $('fp-current').textContent = '整栋';
   $('floor-plan').classList.add('show');
   fpHideCharts();
   fpDraw(true);
@@ -4942,23 +5054,31 @@ function fpClose() {
   fpState.building = null;
   fpState.floors = [];
   fpState.bounds = null;
-  fpState.cur = 0;
+  fpState.cur = -1;
   fpState.userPicked = false;
   fpRestoreCharts();
 }
 function openFloorPlan(building) { fpOpen(building); }
 function closeFloorPlan() { fpClose(); }
 function fpPickFloor(n) {
-  const i = fpState.floors.findIndex((f) => f.n === n);
-  fpState.cur = i >= 0 ? i : 0;
-  buildFloorChips();
-  const cur = document.getElementById('fp-current');
-  if (cur) cur.textContent = '当前 ' + n + 'F';
-  if (demo2State.active) selectFloor(n);
-  else if (demo6State.active) selectFloor(n, demo6State);
+  const state = demo2State.active ? demo2State : demo6State.active ? demo6State : null;
+  if (!state) return;
+  if (state.selectedFloor === n) focusWhole(state);
+  else focusFloor(state, n);
 }
 function fpAddCadFloor(building, n, segs, b) {
   if (fpState.building !== building) return;
+  // 没给包围盒就按线段自己算：否则面板永远停在"等待楼层数据…"，画不出平面
+  if (!b && segs && segs.length) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const [x1, z1, x2, z2] of segs) {
+      if (x1 < minX) minX = x1; if (x1 > maxX) maxX = x1;
+      if (x2 < minX) minX = x2; if (x2 > maxX) maxX = x2;
+      if (z1 < minZ) minZ = z1; if (z1 > maxZ) maxZ = z1;
+      if (z2 < minZ) minZ = z2; if (z2 > maxZ) maxZ = z2;
+    }
+    b = { minX, maxX, minZ, maxZ };
+  }
   if (b) {
     if (!fpState.bounds) {
       fpState.bounds = { ...b };
@@ -4973,7 +5093,7 @@ function fpAddCadFloor(building, n, segs, b) {
   if (!fpState.floors.some((f) => f.n === n)) {
     fpState.floors.push({ n, lines: segs, shafts: [], shaftRects: [] });
     fpState.floors.sort((a, b2) => a.n - b2.n);
-    if (!fpState.userPicked) fpPickFloor(fpState.floors.some((f) => f.n === 3) ? 3 : fpState.floors[0].n);
+    // 不再自动选中楼层：透视进来先看整栋，选层由用户点
   } else {
     const f = fpState.floors.find((x) => x.n === n);
     f.lines = segs;
@@ -4995,10 +5115,12 @@ function buildFloorChips() {
     el.dataset.n = f.n;
     el.innerHTML = f.n + 'F<span class="rd"></span>';
     el.onclick = () => {
-      fpState.cur = i; fpState.userPicked = true; fpState.zoom = 1; fpState.panX = 0; fpState.panY = 0;
-      buildFloorChips(); fpDraw(true);
-      if (demo2State.active) { selectFloor(f.n); flyToFloor(demo2State, '2号楼', f.n); }
-      else if (demo6State.active) { selectFloor(f.n, demo6State); flyToFloor(demo6State, '6号楼', f.n); }
+      const state = demo2State.active ? demo2State : demo6State.active ? demo6State : null;
+      if (!state) return;
+      fpState.zoom = 1; fpState.panX = 0; fpState.panY = 0;
+      // 再点一次当前层 = 收回整栋
+      if (state.selectedFloor === f.n) focusWhole(state);
+      else focusFloor(state, f.n);
     };
     wrap.appendChild(el);
   });
@@ -5070,7 +5192,13 @@ function fpDraw(force) {
   for (let gx = 20; gx < W; gx += 20) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
   for (let gy = 20; gy < H; gy += 20) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
   const fl = fpState.floors[fpState.cur];
-  if (!fl) return;
+  if (!fl) {
+    ctx.fillStyle = '#5b7a95';
+    ctx.font = '13px "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('选择楼层查看平面', W / 2, H / 2);
+    return;
+  }
   ctx.strokeStyle = 'rgba(140,220,255,.6)';
   ctx.lineWidth = 1.6;
   for (const [x1, z1, x2, z2] of fl.lines) {
@@ -5206,6 +5334,7 @@ $('fp-canvas').onclick = (e) => {
   const mx = (e.clientX - rect.left) * (cv.width / rect.width);
   const my = (e.clientY - rect.top) * (cv.height / rect.height);
   const fl = fpState.floors[fpState.cur];
+  if (!fl) return;
   const cur = fpCollectRobots().filter((r) => r.floor === fl.n);
   let best = null, bestD = 16;
   for (const r of cur) {
@@ -5356,6 +5485,7 @@ function animate() {
   if (controls.target.y < MIN_VIEW_Y) controls.target.y = MIN_VIEW_Y;
   if (camera.position.y < MIN_VIEW_Y) camera.position.y = MIN_VIEW_Y;
   clampView();
+  stepCut();
   updateLabelLOD();
   renderer.render(scene, camera);
 }
