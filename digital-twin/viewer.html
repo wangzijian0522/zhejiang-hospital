@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>整体模型查看器</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0d1420; }
+  canvas { display: block; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #7fa8c8; font: 13px/1.4 "Microsoft YaHei", sans-serif; letter-spacing: 1px; background: #0d1420; transition: opacity .6s ease; }
+  #loading.hide { opacity: 0; pointer-events: none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="loading">加载中 0%</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1420);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 5000);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+// 与主应用一致的鼠标操作：左键拖拽移动，按住滚轮旋转，滚轮缩放
+controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.ROTATE };
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444a55, 1.1);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(300, 500, 350);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xbfd4e8, 0.5);
+fill.position.set(-350, 200, -300);
+scene.add(fill);
+
+const draco = new DRACOLoader();
+draco.setDecoderPath('/node_modules/three/examples/jsm/libs/draco/');
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+
+const loadingEl = document.getElementById('loading');
+loader.load('/models/models/整体.glb', (gltf) => {
+  const obj = gltf.scene;
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  let s = 1;
+  if (Math.max(size.x, size.y, size.z) > 1000) s = 0.001; // mm → m
+  const c = box.getCenter(new THREE.Vector3());
+  obj.scale.setScalar(s);
+  obj.position.set(-c.x * s, -box.min.y * s, -c.z * s);
+  obj.traverse((o) => { if (o.isMesh) o.receiveShadow = false; });
+  scene.add(obj);
+  const r = Math.max(size.x, size.y, size.z) * s;
+  const az = 33 * Math.PI / 180, elev = 30 * Math.PI / 180, dist = r * 1.5;
+  camera.position.set(dist * Math.cos(elev) * Math.sin(az), dist * Math.sin(elev), dist * Math.cos(elev) * Math.cos(az));
+  controls.target.set(0, r * 0.15, 0);
+  controls.minDistance = 30;
+  controls.maxDistance = 1000; // 最远 1km
+  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.update();
+  loadingEl.classList.add('hide');
+}, (ev) => {
+  if (ev.total) loadingEl.textContent = '加载中 ' + Math.round((ev.loaded / ev.total) * 100) + '%';
+}, (e) => {
+  loadingEl.textContent = '加载失败：' + e.message;
+  console.error(e);
+});
+
+// 视角不得低于地面
+const MIN_Y = 0.6;
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  if (controls.target.y < MIN_Y) controls.target.y = MIN_Y;
+  if (camera.position.y < MIN_Y) camera.position.y = MIN_Y;
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
