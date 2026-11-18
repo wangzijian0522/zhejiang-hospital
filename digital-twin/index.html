@@ -5437,24 +5437,24 @@ function animate() {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
   const elapsed = timer.getElapsed();
-  // 自动画质：模型挂上来那几秒要传贴图、编译着色器、烘第一张阴影图、预热壳体，
-  // 帧率必然难看；拿这段时间的均值判档位，会把所有机器都判成 low。
-  // 所以等 6s 稳定后再采样，并用「帧间隔中位数」判档（中位数能滤掉偶发卡顿）。
-  // 采样窗口最长 8s：窗口被浏览器压制、样本太少时不下结论，保持 high。
+  // 自动画质：默认就是 high（演示机都是独显），只有测到「真的跑不动」才降档。
+  // 1) 先等 6s，让贴图上传 / 着色器编译 / 首张阴影图过去，否则帧率必然难看；
+  // 2) 采样期间窗口必须在前台可见且有焦点——后台或被遮挡的标签页会被浏览器压帧率，
+  //    拿那种数据判档，会把 4090 也判成 medium；
+  // 3) 用帧间隔中位数判档，样本不足 45 帧就不下结论，保持 high。
   if (QUALITY.mode === 'auto' && !QUALITY.done && realLoaded) {
     const now = performance.now();
+    const measurable = document.visibilityState === 'visible' && document.hasFocus();
     if (!QUALITY.settleAt) QUALITY.settleAt = now + 6000;
-    if (now >= QUALITY.settleAt) {
+    if (now >= QUALITY.settleAt && measurable) {
       if (!QUALITY.samples) { QUALITY.samples = []; QUALITY.sampleT0 = now; }
       QUALITY.samples.push(dt);
-      const full = QUALITY.samples.length >= 90;
-      const timeout = now - QUALITY.sampleT0 > 8000;
-      if (full || timeout) {
+      if (QUALITY.samples.length >= 90 || now - QUALITY.sampleT0 > 8000) {
         const arr = QUALITY.samples.slice().sort((a, b) => a - b);
         QUALITY.done = true;
-        if (arr.length >= 20) {
+        if (arr.length >= 45) {
           const fps = 1 / arr[arr.length >> 1];
-          const q = fps >= 45 ? 'high' : fps >= 28 ? 'medium' : 'low';
+          const q = fps >= 30 ? 'high' : fps >= 18 ? 'medium' : 'low';
           applyQuality(q);
           console.log('[画质] 自动', fps.toFixed(1), 'fps ->', q);
         } else {
