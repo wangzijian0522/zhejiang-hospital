@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>浙江省人民医院 数字孪生</title>
+<title>浙江省人民医院(朝晖院区) 医疗异构机器人系统</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
   #app { position: fixed; inset: 0; }
@@ -43,8 +43,10 @@
   #topbar { position: fixed; top: 0; left: 0; right: 0; height: 58px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, rgba(8,14,28,.95), rgba(10,18,34,.82)); border-bottom: 1px solid rgba(0,229,255,.22); box-shadow: 0 2px 16px rgba(0,0,0,.4); }
   .tb-left { display: flex; align-items: center; gap: 12px; }
   .tb-logo { width: 34px; height: 34px; background: linear-gradient(135deg, #00e5ff, #2b7fd4); clip-path: polygon(25% 2%, 75% 2%, 98% 50%, 75% 98%, 25% 98%, 2% 50%); display: flex; align-items: center; justify-content: center; color: #06283a; font-size: 20px; font-weight: 700; }
-  .tb-title .cn { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 2px; line-height: 1.15; }
-  .tb-title .en { font-size: 9px; color: #5b7a95; letter-spacing: 1.5px; }
+  .tb-title { min-width: 0; }
+  .tb-title .cn { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 2px; line-height: 1.15; white-space: nowrap; }
+  /* 项目名变长后英文副标会被挤成两行压到日期上，这里锁单行并收一点字号 */
+  .tb-title .en { font-size: 8.5px; color: #5b7a95; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tb-center { display: flex; flex-direction: column; align-items: center; gap: 3px; }
   .tb-pill { background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.4); color: #7fd4ff; font-size: 12px; letter-spacing: 1px; padding: 4px 18px; border-radius: 16px; }
   .tb-tag { font-size: 10px; color: #ffc84d; letter-spacing: 1px; }
@@ -185,7 +187,7 @@
 <div id="app"></div>
 <div id="panel">
   <button id="panel-close" title="关闭设置">✕</button>
-  <h1>浙江省人民医院数字孪生项目</h1>
+  <h1>浙江省人民医院(朝晖院区) 医疗异构机器人系统</h1>
   <div class="sub">数据：整体/2号/6号 GLB + 百度建筑轮廓 + 天地图卫星</div>
   <div class="toggles">
     <div class="tg-group">基础</div>
@@ -233,8 +235,8 @@
   <div class="tb-left">
     <div class="tb-logo">＋</div>
     <div class="tb-title">
-      <div class="cn">浙江省人民医院数字孪生项目</div>
-      <div class="en">ZHEJIANG PROVINCIAL PEOPLE'S HOSPITAL · DIGITAL TWIN CAMPUS</div>
+      <div class="cn">浙江省人民医院(朝晖院区) 医疗异构机器人系统</div>
+      <div class="en">ZHEJIANG PROVINCIAL PEOPLE'S HOSPITAL (ZHAOHUI CAMPUS) · HETEROGENEOUS MEDICAL ROBOT SYSTEM</div>
     </div>
   </div>
   <div class="tb-center">
