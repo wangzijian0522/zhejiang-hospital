@@ -1203,7 +1203,7 @@ function loadScenery(parent) {
 }
 
 function loadScatterTrees(parent) {
-  makeGLTFLoader().load('/models/models/树.glb?v=24fd89de', (gltf) => {
+  makeGLTFLoader().load('/models/models/树.glb?v=9ab27142', (gltf) => {
     const root = gltf.scene;
     root.name = '树木';
     parent.add(root);
@@ -1222,7 +1222,7 @@ function loadRealModel() {
   realLoading = true;
   showLoader('正在加载整体模型…');
   // ?v= 取模型文件 sha256 前 8 位：换模型时改这里，让已经缓存过旧文件的浏览器立即重新下载
-  makeGLTFLoader().load('/models/models/整体.glb?v=8c2135e1', async (gltf) => {
+  makeGLTFLoader().load('/models/models/整体.glb?v=49d65f22', async (gltf) => {
     const obj = gltf.scene;
     const rawBox = new THREE.Box3().setFromObject(obj);
     const rawSize = rawBox.getSize(new THREE.Vector3());
@@ -1233,6 +1233,9 @@ function loadRealModel() {
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
     // 先注册楼栋并顺手攒楼栋包围盒：配准基准必须取"楼栋"，不能取整包
+    // 配准基准只取"老院区"这七栋：新增的 8/9/10 号楼会把楼栋包围盒中心拉偏，
+    // 直接用会让整个院区相对底图/城市挪位。
+    const ANCHOR_BUILDINGS = new Set(['1号楼', '2号楼', '3号楼', '5号楼', '5号楼01', '6号楼', '7号楼', '12号楼']);
     const refBox = new THREE.Box3();
     obj.traverse((o) => {
       if (o.isMesh) {
@@ -1250,7 +1253,7 @@ function loadRealModel() {
         o.userData.buildingName = nm;
         o.traverse((c) => { if (c.isMesh) c.userData.buildingName = nm; });
         realBuildings.set(nm, o);
-        if (o.children.length) refBox.expandByObject(o);
+        if (o.children.length && ANCHOR_BUILDINGS.has(nm)) refBox.expandByObject(o);
       }
     });
     if (obj.getObjectByName('shu')) treeInstances = buildTreeInstances(obj);
@@ -1261,8 +1264,10 @@ function loadRealModel() {
     // 旧版是按"整包几何中心"配准的，而整包中心比楼栋中心偏 (+25.9, -12.7)；
     // 新导出多了地形和树，整包中心被拉走，所以基准改成"楼栋中心 + 这个历史偏移"，
     // 院区与底图/城市、以及 REAL_CAL 里的标定值都保持原样
-    const ANCHOR_FIX = { x: 25.9, z: -12.7 };
-    realModelRef = { obj, cx: c.x + ANCHOR_FIX.x, cy: refBox.min.y, cz: c.z + ANCHOR_FIX.z };
+    // 配准基准写死：几次导出里楼栋的建模坐标系一直没变，用常量比每次重算稳。
+    // 之前按"楼栋包围盒中心 + 偏移"算，新增 8/9/10 号楼或某栋楼体微调都会让院区漂 1~30m。
+    const ANCHOR = { x: 136.3, z: -22.35 };
+    realModelRef = { obj, cx: ANCHOR.x, cy: refBox.min.y, cz: ANCHOR.z };
     applyRealCal();
     console.log('[模型] 配准 旋转', REAL_CAL.rotDeg, '° 平移', REAL_CAL.x + 'm,' + REAL_CAL.z + 'm',
       '楼栋包围盒', refBox.getSize(new THREE.Vector3()).toArray().map((v) => +v.toFixed(1)).join('x'));
