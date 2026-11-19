@@ -1718,7 +1718,7 @@ const liveGroup = new THREE.Group();
 liveGroup.visible = false; // 真机只在透视模式里显示，总览不出现
 scene.add(liveGroup);
 const liveHud = $('live-hud');
-const liveState = { ws: null, connected: false, disabled: false, floors: new Map(), robots: new Map(), reconnectDelay: 1000 };
+const liveState = { ws: null, connected: false, disabled: false, floors: new Map(), robots: new Map(), elevators: new Map(), reconnectDelay: 1000 };
 const liveMarkers = new Map(); // robotId -> { obj, modelType }
 const liveBuildingXf = new Map(); // buildingName -> {cx, cz, baseY, s} 或 null
 const LIVE_TYPE_FILES = {
@@ -1910,8 +1910,10 @@ function handleLiveMessage(msg) {
     const e = msg.data.entities;
     liveState.floors.clear();
     liveState.robots.clear();
+    liveState.elevators.clear();
     (e.floors || []).forEach((f) => liveState.floors.set(f.sceneId + '/' + f.floorKey, f));
     (e.robots || []).forEach((r) => liveState.robots.set(r.robotId, r));
+    (e.elevators || []).forEach((el) => liveState.elevators.set(el.controllerId, el));
   }
   if (t === 'snapshot.end') refreshLiveMarkers();
   if (t === 'state.delta' && msg.data) {
@@ -1919,6 +1921,8 @@ function handleLiveMessage(msg) {
     (up.floors || []).forEach((f) => liveState.floors.set(f.sceneId + '/' + f.floorKey, f));
     (up.robots || []).forEach((r) => liveState.robots.set(r.robotId, r));
     (rm.robots || []).forEach((id) => liveState.robots.delete(id));
+    (up.elevators || []).forEach((el) => liveState.elevators.set(el.controllerId, el));
+    (rm.elevators || []).forEach((id) => liveState.elevators.delete(id));
     refreshLiveMarkers();
   }
   if (t === 'error' || t === 'auth.error') {
@@ -4466,6 +4470,136 @@ function spawnSimRobots(state, name, bbox, baseY, label) {
   selectFloor(state.selectedFloor, state);
 }
 
+// ---------- 透视电梯（6号楼，停靠点来自中控 elevators 数据，动画模拟上下行/开关门） ----------
+const ELEV_CAD_DEFAULT = { x: 2.31, y: -13.36 }; // 6号楼电梯 CAD 位置（中控 landings 实测值，与楼层底图红圈一致）
+async function spawnFocusElevator(state, name) {
+  if (name !== '6号楼') return;
+  const info = floorInfoFor(name);
+  if (!info) return;
+  const t0 = Date.now();
+  while (!(state.frames && state.frames.size) && state.active && Date.now() - t0 < 20000) {
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  if (!state.active) return;
+  const frame = state.frames.get(1) || state.frames.values().next().value;
+  if (!frame) { console.warn('[6号楼模拟] 电梯：楼层帧不可用'); return; }
+  // 电梯 CAD 位置与停靠楼层：优先中控 landings，缺省用标注值
+  let cadX = ELEV_CAD_DEFAULT.x, cadY = ELEV_CAD_DEFAULT.y;
+  let servedFloors = [1, 8, 9];
+  const elev = liveState.elevators.get('6');
+  if (elev && Array.isArray(elev.landings) && elev.landings.length) {
+    const ready = elev.landings.find((l) => l.projectionStatus === 'ready' && l.position);
+    if (ready) { cadX = ready.position.x; cadY = ready.position.y; }
+    const nums = [...new Set(elev.landings
+      .map((l) => liveState.floors.get(l.sceneId + '/' + l.floorKey))
+      .filter(Boolean)
+      .map((f) => f.floorNumber)
+      .filter((n) => n >= 1))].sort((a, b) => a - b);
+    if (nums.length >= 2) servedFloors = nums;
+  }
+  const [wx, wz] = frame.toWorld(cadX, cadY);
+  const bbox = state.bbox;
+  const H = bbox.max.y - bbox.min.y;
+  const grp = new THREE.Group();
+  grp.position.set(wx, bbox.min.y, wz);
+  // 井道：发光体 + 亮描边 + 停靠层圈，整体更醒目
+  const shaftGeo = new THREE.BoxGeometry(3.2, H + 1, 3.2);
+  const shaft = new THREE.Mesh(shaftGeo, new THREE.MeshBasicMaterial({
+    color: 0x2fb8e8, transparent: true, opacity: 0.1, depthWrite: false,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  }));
+  shaft.position.y = H / 2;
+  shaft.renderOrder = 18;
+  grp.add(shaft);
+  const shaftEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(shaftGeo),
+    new THREE.LineBasicMaterial({ color: 0x7fe8ff, transparent: true, opacity: 0.9, depthWrite: false }),
+  );
+  shaftEdges.position.y = H / 2;
+  shaftEdges.renderOrder = 19;
+  grp.add(shaftEdges);
+  // 每个停靠层一圈托盘边线
+  const ringMat = new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.75, depthWrite: false });
+  for (const n of servedFloors) {
+    const fy = info.baseY + (n - 1) * info.h - bbox.min.y;
+    const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(3.8, 0.12, 3.8));
+    const ring = new THREE.LineSegments(ringGeo, ringMat);
+    ring.position.y = fy + 0.06;
+    ring.renderOrder = 19;
+    grp.add(ring);
+  }
+  // 轿厢
+  const car = new THREE.Group();
+  const carGeo = new THREE.BoxGeometry(2.2, 2.6, 2.2);
+  const carMesh = new THREE.Mesh(carGeo, new THREE.MeshLambertMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false,
+  }));
+  car.add(carMesh);
+  const carEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(carGeo),
+    new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9, depthWrite: false }),
+  );
+  car.add(carEdges);
+  // 双扇门（前面 +Z，向两侧滑开）
+  const doorGeo = new THREE.BoxGeometry(1.02, 2.5, 0.08);
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.85, depthWrite: false });
+  const doorL = new THREE.Mesh(doorGeo, doorMat);
+  const doorR = new THREE.Mesh(doorGeo, doorMat);
+  doorL.position.set(-0.53, -0.03, 1.14);
+  doorR.position.set(0.53, -0.03, 1.14);
+  car.add(doorL, doorR);
+  grp.add(car);
+  state.group.add(grp);
+  const firstY = info.baseY + (servedFloors[0] - 1) * info.h + 1.35;
+  car.position.y = firstY - bbox.min.y;
+  state.elevator = {
+    car, doorL, doorR,
+    floors: servedFloors,
+    idx: servedFloors.length > 1 ? 1 : 0,
+    doorOpen: 0,
+    phase: 'doors-open',
+    timer: 1.0,
+    speed: 1.2,
+  };
+  console.log('[6号楼模拟] 电梯已就位 CAD', cadX.toFixed(1), cadY.toFixed(1), '停靠楼层', servedFloors.join(','));
+}
+function updateFocusElevator(state, dt) {
+  const el = state.elevator;
+  if (!el || !state.active) return;
+  const info = floorInfoFor('6号楼');
+  if (!info) return;
+  const baseY = state.bbox.min.y;
+  const yOf = (n) => info.baseY + (n - 1) * info.h + 1.35 - baseY;
+  if (el.phase === 'move') {
+    const ty = yOf(el.floors[el.idx]);
+    const cy = el.car.position.y;
+    const step = el.speed * dt;
+    if (Math.abs(ty - cy) <= step) {
+      el.car.position.y = ty;
+      el.phase = 'doors-open';
+      el.timer = 0.7;
+    } else {
+      el.car.position.y = cy + Math.sign(ty - cy) * step;
+    }
+  } else if (el.phase === 'doors-open') {
+    el.doorOpen = Math.min(1, el.doorOpen + dt / 0.7);
+    el.timer -= dt;
+    if (el.doorOpen >= 1 && el.timer <= 0) { el.phase = 'hold'; el.timer = 2.2; }
+  } else if (el.phase === 'hold') {
+    el.timer -= dt;
+    if (el.timer <= 0) el.phase = 'doors-close';
+  } else if (el.phase === 'doors-close') {
+    el.doorOpen = Math.max(0, el.doorOpen - dt / 0.7);
+    if (el.doorOpen <= 0 && el.floors.length > 1) {
+      el.idx = (el.idx + 1) % el.floors.length;
+      el.phase = 'move';
+    }
+  }
+  const slide = el.doorOpen * 0.52;
+  el.doorL.position.x = -0.53 - slide;
+  el.doorR.position.x = 0.53 + slide;
+}
+
 // ---------- 2号楼 透视 + 双机模拟（整栋壳体 + CAD 楼层板 + 机器人轨迹） ----------
 const demo2State = {
   active: false, robots: [], group: null, bbox: null, source: null, signGroup: null,
@@ -4552,6 +4686,7 @@ async function startFocusDemo(name, state) {
   try {
     await spawnSimRobots(state, name, bbox, bbox.min.y, `${name}模拟`);
     await loadDemoCad(name);
+    await spawnFocusElevator(state, name);
   } finally {
     pendingDemoLoads--;
     syncCruiseButtons();
@@ -4590,6 +4725,7 @@ function stopFocusDemo(state) {
   state.cages?.clear();
   state.frames?.clear();
   state.selectedFloor = null;
+  state.elevator = null;
   liveGroup.visible = false;
   refreshLiveMarkers();   // 退出后解除按层过滤
   closeFloorPlan();
@@ -5540,6 +5676,7 @@ function animate() {
   }
   stepSimRobots(demo6State, dt);
   stepSimRobots(demo2State, dt);
+  updateFocusElevator(demo6State, dt);
   holoMat.uniforms.uTime.value = elapsed;
   for (const b of BEACONS) {
     const k = 0.5 + 0.5 * Math.sin(elapsed * 2.4 + b.phase);
