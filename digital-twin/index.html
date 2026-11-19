@@ -1184,6 +1184,24 @@ let treeInstances = null;
 
 // 树木从整体模型里拆出来单独成包（树.glb）。它和整体模型共用同一套建模坐标，
 // 挂到模型节点下就自动继承配准（平移/旋转/缩放），不用另外算位置。
+// 地面/公园景观同样是从整体模型里拆出来的独立包，坐标与整体模型一致，
+// 照样挂到模型节点下继承配准；它们体量不大（12.7 万 / 49.8 万顶点），不用实例化。
+const SCENERY = [
+  { file: '/models/models/地面景观.glb?v=73be4a43', name: '地面景观' },
+  { file: '/models/models/公园景观.glb?v=71740f91', name: '公园景观' },
+];
+function loadScenery(parent) {
+  for (const item of SCENERY) {
+    makeGLTFLoader().load(item.file, (gltf) => {
+      const root = gltf.scene;
+      root.name = item.name;
+      root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      parent.add(root);
+      console.log('[场景]', item.name, '已加载');
+    }, undefined, (e) => console.warn('[场景]', item.name, '加载失败', e));
+  }
+}
+
 function loadScatterTrees(parent) {
   makeGLTFLoader().load('/models/models/树.glb?v=24fd89de', (gltf) => {
     const root = gltf.scene;
@@ -1251,6 +1269,7 @@ function loadRealModel() {
     realGroup.add(obj);
     realLoaded = true; // 6号楼 直接用整体模型里的节点（实测与独立 6号楼.glb 像素差 0.26%）
     loadScatterTrees(obj); // 树单独成包，异步补进来，不挡首屏
+    loadScenery(obj);      // 地面/公园景观同理
     schedulePrewarm();
     realLoading = false;
     realGroup.visible = document.getElementById('tg-real').checked;
