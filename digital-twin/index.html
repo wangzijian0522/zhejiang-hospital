@@ -7,94 +7,187 @@
 <style>
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
   #app { position: fixed; inset: 0; }
-  #hint { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(20,30,40,.72); color: #dfe8f0; font-size: 12px; padding: 5px 14px; border-radius: 14px; pointer-events: none; }
-  #panel { position: fixed; left: 50%; top: 50%; width: 340px; max-height: calc(100vh - 120px); transform: translate(-50%, -50%); overflow-y: auto; display: none; z-index: 60; background: linear-gradient(165deg, rgba(13,22,40,.97), rgba(8,14,28,.97)); border: 1px solid rgba(0,229,255,.3); border-radius: 12px; box-shadow: 0 0 30px rgba(0,188,212,.18), 0 8px 30px rgba(0,0,0,.5); font-size: 13px; color: #cfe0f2; }
-  body.panel-open #panel { display: block; animation: panel-pop .28s ease; }
-  @keyframes panel-pop { from { opacity: 0; transform: translate(-50%, -47%); } to { opacity: 1; transform: translate(-50%, -50%); } }
-  #panel::-webkit-scrollbar { width: 5px; }
-  #panel::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 3px; }
-  #panel h1 { font-size: 15px; margin: 0; padding: 14px 38px 4px 16px; color: #fff; letter-spacing: 1px; }
-  #panel .sub { font-size: 11px; color: #5b7a95; padding: 0 16px 8px; }
-  #panel-close { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border: 1px solid rgba(0,229,255,.35); background: rgba(0,229,255,.08); color: #7fd4ff; border-radius: 8px; font-size: 13px; cursor: pointer; }
-  #panel-close:hover { background: rgba(0,229,255,.25); color: #fff; }
-  .toggles { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 12px; border-bottom: 1px solid rgba(0,229,255,.15); }
-  .toggles label { font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer; background: rgba(0,229,255,.07); border: 1px solid rgba(0,229,255,.18); color: #a9c8e0; padding: 3px 9px; border-radius: 12px; }
-  .toggles label:hover { background: rgba(0,229,255,.16); }
-  .toggles input { accent-color: #00e5ff; }
-  .tg-group { width: 100%; font-size: 10px; color: #5b7a95; letter-spacing: 1px; margin: 6px 0 -2px; }
-  .qualitybox { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid rgba(0,229,255,.15); font-size: 12px; color: #a9c8e0; }
-  .qualitybox select { background: #0e1c30; color: #cfe0f2; border: 1px solid rgba(0,229,255,.3); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
-  .qualitybox .qnote { color: #5b7a95; font-size: 10px; }
-  .timebox, .weatherbox { padding: 8px 16px 8px; border-bottom: 1px solid rgba(0,229,255,.15); }
+  #hint { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(10,24,44,.78); color: #cfe4f2; font-size: 12px; padding: 5px 14px; border-radius: 14px; pointer-events: none; z-index: 30; }
+  #demo-back { z-index: 56; }
+  :root { --ac: #02b7ff; --ac2: #0289ff; --panel-bg: linear-gradient(180deg, rgba(6,18,36,.32), rgba(3,10,22,.4)); --panel-bd: rgba(2,183,255,.3); --txt: #e8f4ff; --sub: #8fb8d8; --dim: #5b7a95; }
+
+  /* ---------- 工作台设置弹窗（蓝湖设计稿样式） ---------- */
+  #panel { position: fixed; left: 50%; top: 50%; width: 440px; transform: translate(-50%, -50%); display: none; z-index: 70; color: var(--txt); font-size: 13px; }
+  body.panel-open #panel { display: block; animation: panel-pop .26s ease; }
+  @keyframes panel-pop { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+  .panel-box { position: relative; background: url('/digital-twin/assets/ui/modal-bg.png?v=e3310c35') center/100% 100% no-repeat, linear-gradient(165deg, #06375b, #032a44 45%, #021d31); border: 1px solid rgba(2,183,255,.35); border-radius: 14px; padding: 20px 22px 16px; box-shadow: 0 12px 44px rgba(0,20,40,.65), inset 0 1px 0 rgba(127,212,255,.18); }
+  .panel-title { text-align: center; font-size: 16px; font-weight: 700; color: #9fe8ff; letter-spacing: 3px; margin: 0 0 14px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .panel-title::before, .panel-title::after { content: ''; width: 26px; height: 8px; background: linear-gradient(90deg, transparent, rgba(2,183,255,.55)); }
+  .panel-title::after { background: linear-gradient(90deg, rgba(2,183,255,.55), transparent); }
+  #panel-close { position: absolute; top: 12px; right: 14px; width: 26px; height: 26px; border: none; background: url('/digital-twin/assets/ui/退出.png?v=f959bba3') center/contain no-repeat; opacity: .8; cursor: pointer; }
+  #panel-close:hover { opacity: 1; }
+  .panel-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 2px; border-bottom: 1px dashed rgba(2,183,255,.16); }
+  .panel-row:last-of-type { border-bottom: none; }
+  .panel-row .lb { font-size: 13px; color: #dff3ff; letter-spacing: 1px; }
+  .seg { display: flex; background: rgba(2,40,70,.6); border: 1px solid rgba(2,183,255,.3); border-radius: 14px; overflow: hidden; }
+  .seg button { border: none; background: transparent; color: #bfe4f5; font-size: 12px; padding: 4px 14px; cursor: pointer; font-family: inherit; }
+  .seg button.on { background: var(--ac2); color: #fff; }
+  .panel-slider { display: flex; align-items: center; gap: 8px; width: 220px; }
+  .panel-slider input { flex: 1; accent-color: var(--ac2); }
+  .panel-slider .pv { width: 40px; text-align: right; color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .panel-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .panel-foot button { font-size: 13px; padding: 6px 22px; border-radius: 15px; cursor: pointer; font-family: inherit; letter-spacing: 2px; }
+  #panel-cancel { background: rgba(2,30,54,.6); border: 1px solid rgba(2,183,255,.35); color: #bfe4f5; }
+  #panel-done { background: linear-gradient(180deg, #03a0f0, #0277d8); border: 1px solid #3cc0ff; color: #fff; }
+  .panel-more { margin-top: 12px; border-top: 1px solid rgba(2,183,255,.2); }
+  .panel-more summary { cursor: pointer; font-size: 12px; color: #8fd4f5; padding: 8px 2px 0; letter-spacing: 1px; list-style: none; }
+  .panel-more summary::before { content: '▸ '; }
+  .panel-more[open] summary::before { content: '▾ '; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 4px; }
+  .toggles label { font-size: 11.5px; display: flex; align-items: center; gap: 4px; cursor: pointer; background: rgba(2,183,255,.08); border: 1px solid rgba(2,183,255,.22); color: #a9c8e0; padding: 2px 9px; border-radius: 11px; }
+  .toggles label:hover { background: rgba(2,183,255,.18); }
+  .toggles input { accent-color: var(--ac2); }
+  .tg-group { width: 100%; font-size: 10px; color: var(--dim); letter-spacing: 1px; margin: 6px 0 -2px; }
+  .qualitybox { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; color: #a9c8e0; }
+  .qualitybox select { background: #06293f; color: #cfe0f2; border: 1px solid rgba(2,183,255,.35); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .qualitybox .qnote { color: var(--dim); font-size: 10px; }
+  .timebox, .weatherbox { padding: 4px 0; }
   .timebox .row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }
-  .timebox b, .weatherbox b { font-size: 12px; color: #7fd4ff; }
-  .timebox input[type=range] { width: 100%; accent-color: #00e5ff; }
+  .timebox b, .weatherbox b { font-size: 12px; color: #8fd4f5; }
+  .timebox input[type=range] { width: 100%; accent-color: var(--ac2); }
   #time-val { font-weight: bold; min-width: 38px; color: #fff; }
   .timebox button, .weatherbox button { font-size: 12px; border: 1px solid rgba(127,212,255,.35); background: rgba(127,212,255,.08); color: #a9c8e0; border-radius: 10px; padding: 2px 9px; cursor: pointer; }
   .weatherbox { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .weatherbox button.on { background: #00bcd4; color: #06283a; border-color: #00bcd4; font-weight: 600; }
-  .simbox { padding: 8px 16px 10px; border-bottom: 1px solid rgba(0,229,255,.15); }
-  .simbox button { width: 100%; font-size: 13px; border: 1px solid #2b7fd4; background: rgba(43,127,212,.85); color: #fff; border-radius: 8px; padding: 6px 0; cursor: pointer; }
+  .weatherbox button.on { background: #02b7ff; color: #04202f; border-color: #02b7ff; font-weight: 600; }
+  .simbox { padding: 4px 0; }
+  .simbox button { width: 100%; font-size: 12px; border: 1px solid #2b7fd4; background: rgba(43,127,212,.8); color: #fff; border-radius: 8px; padding: 5px 0; cursor: pointer; margin-top: 6px; }
   .simbox button:hover { background: #3a8fe6; }
   .simbox button.on { background: #b4552f; border-color: #b4552f; }
   .simhint { margin-top: 8px; font-size: 11px; line-height: 1.5; color: rgba(180, 214, 235, .75); }
 
-  /* 顶部标题栏 */
-  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 58px; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, rgba(8,14,28,.95), rgba(10,18,34,.82)); border-bottom: 1px solid rgba(0,229,255,.22); box-shadow: 0 2px 16px rgba(0,0,0,.4); }
-  .tb-left { display: flex; align-items: center; gap: 12px; }
-  .tb-logo { width: 34px; height: 34px; background: linear-gradient(135deg, #00e5ff, #2b7fd4); clip-path: polygon(25% 2%, 75% 2%, 98% 50%, 75% 98%, 25% 98%, 2% 50%); display: flex; align-items: center; justify-content: center; color: #06283a; font-size: 20px; font-weight: 700; }
-  .tb-title { min-width: 0; }
-  .tb-title .cn { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: 2px; line-height: 1.15; white-space: nowrap; }
-  /* 项目名变长后英文副标会被挤成两行压到日期上，这里锁单行并收一点字号 */
-  .tb-title .en { font-size: 8.5px; color: #5b7a95; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tb-center { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .tb-pill { background: rgba(0,229,255,.08); border: 1px solid rgba(0,229,255,.4); color: #7fd4ff; font-size: 12px; letter-spacing: 1px; padding: 4px 18px; border-radius: 16px; }
-  .tb-tag { font-size: 10px; color: #ffc84d; letter-spacing: 1px; }
-  .tb-right { display: flex; align-items: center; gap: 14px; }
-  .tb-weather { font-size: 12px; color: #8fb8d8; }
-  .tb-clock { text-align: right; line-height: 1.15; }
-  #rt-clock { font-size: 19px; font-weight: 700; color: #fff; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
-  #rt-date { font-size: 10px; color: #5b7a95; }
-  .tb-live { font-size: 11px; color: #4cd98a; display: flex; align-items: center; gap: 5px; }
-  .tb-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #4cd98a; box-shadow: 0 0 6px #4cd98a; }
-  .tb-btn { border: 1px solid rgba(0,229,255,.4); background: rgba(0,229,255,.08); color: #7fd4ff; font-size: 12px; padding: 5px 14px; border-radius: 8px; cursor: pointer; letter-spacing: 1px; transition: background .2s, color .2s; }
-  .tb-btn:hover { background: rgba(0,229,255,.22); color: #fff; }
-  .tb-btn.on { background: rgba(0,229,255,.3); color: #fff; box-shadow: 0 0 10px rgba(0,229,255,.35); }
-  #cruise-top-btn { min-width: 92px; flex-shrink: 0; white-space: nowrap; }
-  #cruise-top-btn:disabled { opacity: .5; cursor: wait; }
-  @media (max-width: 1500px) {
-    .tb-right { gap: 8px; }
-    .tb-weather, .tb-center { display: none; }
-  }
-  @media (max-width: 1100px) {
-    .tb-live, .tb-title .en { display: none; }
-    .tb-title .cn { font-size: 14px; letter-spacing: 0; }
-  }
+  /* ---------- 顶部标题栏（高保真切图：左侧品牌块 + 中央标题横幅 + 底部流光） ---------- */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 76px; z-index: 50; display: flex; align-items: center; padding: 0 24px; background: linear-gradient(90deg, #010a13 0%, #04213c 30%, #063154 50%, #04213c 70%, #010a13 100%); box-shadow: 0 3px 18px rgba(0,30,60,.45); }
+  .tb-hl { height: 76px; flex-shrink: 0; margin-left: -6px; margin-right: 14px; -webkit-mask-image: linear-gradient(90deg, black 78%, transparent 100%); mask-image: linear-gradient(90deg, black 78%, transparent 100%); }
+  .tb-hm { position: absolute; left: 50%; transform: translateX(-50%); height: 74px; max-width: 70vw; -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%); }
+  .tb-wave { position: absolute; left: 0; right: 0; bottom: 0; height: 28px; background: url('/digital-twin/assets/ui/header-wave.png?v=96f0f3d6') center/100% 100% no-repeat; mix-blend-mode: screen; pointer-events: none; }
+  .tb-weather { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #fff; white-space: nowrap; text-shadow: 0 1px 4px rgba(0,20,50,.8); z-index: 1; }
+  .tb-weather::before { content: '☀'; font-size: 16px; color: #ffd35c; text-shadow: 0 0 8px rgba(255,211,92,.85); }
+  .tb-right { display: flex; align-items: center; gap: 26px; margin-left: auto; z-index: 1; }
+  .tb-clock { text-align: right; line-height: 1.2; }
+  #rt-clock { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 1px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,20,50,.8); }
+  #rt-date { font-size: 10px; color: rgba(255,255,255,.8); }
+  .tb-btn { border: none; background: transparent; color: #fff; font-size: 13.5px; padding: 6px 0; cursor: pointer; letter-spacing: 2px; font-family: inherit; display: flex; align-items: center; gap: 6px; text-shadow: 0 1px 4px rgba(0,20,50,.8); position: relative; }
+  .tb-btn:hover { color: #cdefff; }
+  .tb-btn.on { font-weight: 700; }
+  .tb-btn.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, transparent, #4dd0ff, transparent); box-shadow: 0 0 8px rgba(77,208,255,.9); }
+  .tb-btn::before { content: '⌖'; font-size: 16px; color: #4dd0ff; text-shadow: 0 0 8px rgba(77,208,255,.9); }
+  #settings-btn::before { content: '⚙'; font-size: 17px; }
+  #cruise-top-btn { white-space: nowrap; }
+  #cruise-top-btn:disabled { opacity: .55; cursor: wait; }
+  @media (max-width: 1500px) { .tb-clock { display: none; } }
+  @media (max-width: 1100px) { .tb-weather { display: none; } .tb-hm { max-width: 62vw; } }
 
-  /* ECharts 指标面板（深色大屏风格，左右两列、不滚动） */
-  .charts-col { position: fixed; top: 68px; width: 348px; height: calc(100vh - 78px); overflow: hidden; z-index: 40; display: flex; flex-direction: column; gap: 12px; transition: transform .4s cubic-bezier(.22,.9,.3,1); }
-  #charts-panel { right: 12px; transform: translateX(380px); }
-  #charts-left { left: 12px; transform: translateX(-380px); }
+  /* ---------- 左右指标栏（蓝湖设计稿样式） ---------- */
+  .charts-col { position: fixed; top: 88px; width: min(438px, 26vw); height: calc(100vh - 100px); overflow: hidden; z-index: 40; display: flex; flex-direction: column; gap: 12px; transition: transform .4s cubic-bezier(.22,.9,.3,1); }
+  #charts-panel { right: 12px; transform: translateX(calc(100% + 40px)); }
+  #charts-left { left: 12px; transform: translateX(calc(-100% - 40px)); }
   #charts-left.show, #charts-panel.show { transform: translateX(0); }
-  .chart-card { position: relative; background: linear-gradient(160deg, rgba(11,19,34,.94), rgba(5,10,20,.96)); border: 1px solid rgba(0,229,255,.22); border-radius: 12px; padding: 12px 12px 10px; color: #e8f4ff; box-shadow: 0 4px 22px rgba(0,0,0,.4), inset 0 1px 0 rgba(127,212,255,.1); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-  .chart-card::before { content: ''; position: absolute; top: 0; left: 0; width: 30px; height: 2px; background: linear-gradient(90deg, #00e5ff, transparent); }
-  .chart-card::after { content: ''; position: absolute; top: 0; left: 0; width: 2px; height: 30px; background: linear-gradient(180deg, #00e5ff, transparent); }
-  .chart-card:has(.chart-box) { flex: 1 1 auto; }
-  .chart-card h4 { margin: 0 0 8px; font-size: 12px; color: #ffffff; font-weight: 600; letter-spacing: 1px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; padding-bottom: 6px; border-bottom: 1px solid rgba(0,229,255,.15); }
-  .chart-card h4 .num { font-size: 11px; color: #00e5ff; font-weight: 700; flex-shrink: 0; font-family: "Consolas", monospace; text-shadow: 0 0 8px rgba(0,229,255,.5); }
-  .chart-card h4 .en { font-size: 8.5px; color: #5f7f9e; letter-spacing: 1.6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .chart-card h4 .tag { margin-left: auto; font-size: 9.5px; color: #ffc84d; border: 1px solid rgba(255,200,77,.4); background: rgba(255,200,77,.08); border-radius: 8px; padding: 1px 6px; white-space: nowrap; flex-shrink: 0; }
-  .big-num { font-size: 24px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: 1px; text-shadow: 0 0 18px rgba(0,229,255,.3); }
-  .big-num small { font-size: 11px; color: #7a95b0; font-weight: 400; margin-left: 4px; text-shadow: none; }
-  .trend-up { color: #4cd98a; font-size: 11px; }
-  .metric-row { display: flex; gap: 8px; margin-top: 8px; }
-  .metric-item { flex: 1; background: linear-gradient(160deg, rgba(0,229,255,.1), rgba(43,127,212,.05)); border: 1px solid rgba(0,229,255,.18); border-radius: 8px; padding: 7px 9px; }
-  .metric-item .k { font-size: 10px; color: #7a95b0; margin-bottom: 2px; }
-  .metric-item .v { font-size: 12.5px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums; }
-  .chart-box { flex: 1 1 auto; min-height: 90px; }
+  /* 设计稿的左右面板底部渐变投影：外缘深色，往屏幕中间渐隐 */
+  #charts-left { background: linear-gradient(90deg, rgba(1,9,18,.78) 0%, rgba(1,9,18,.55) 25%, rgba(1,9,18,.39) 50%, rgba(1,9,18,.19) 75%, rgba(1,9,18,0) 100%); }
+  #charts-panel { background: linear-gradient(270deg, rgba(1,9,18,.78) 0%, rgba(1,9,18,.55) 25%, rgba(1,9,18,.39) 50%, rgba(1,9,18,.19) 75%, rgba(1,9,18,0) 100%); }
+  .chart-card { position: relative; background: url('/digital-twin/assets/ui/border.png?v=faae3fa8') center/100% 100% no-repeat, var(--panel-bg); border: none; border-radius: 12px; padding: 10px 12px 12px; color: var(--txt); box-shadow: 0 4px 22px rgba(0,10,24,.5); flex-shrink: 0; }
+  .chart-card h4 { margin: 0 0 8px; font-size: 13px; color: #fff; font-weight: 700; letter-spacing: 2px; display: flex; align-items: center; gap: 8px; white-space: nowrap; padding: 7px 12px 6px 48px; background: url('/digital-twin/assets/ui/card-title.png?v=0d6152f1') center/100% 100% no-repeat; }
+  .chart-card h4 .tag { margin-left: auto; font-size: 10px; color: #8fd4f5; border: 1px solid rgba(2,183,255,.4); background: rgba(2,183,255,.1); border-radius: 8px; padding: 1px 7px; white-space: nowrap; flex-shrink: 0; }
   .charts-anim { opacity: 0; transform: translateX(30px); transition: opacity .45s ease, transform .45s ease; }
+  .charts-col.show .charts-anim { opacity: 1; transform: translateX(0); }
 
-  /* 楼层平面图侧栏 */
+  /* 侧边「一键隐藏」竖向标签：贴着各栏的内侧边，收起后滑到屏幕边缘 */
+  .hide-tab { position: fixed; top: 50%; z-index: 41; transform: translateY(-50%); writing-mode: vertical-rl; letter-spacing: 5px; font-size: 12px; color: #bfe4f5; background: linear-gradient(180deg, rgba(3,103,196,.75), rgba(2,60,110,.85)); border: 1px solid rgba(2,183,255,.4); padding: 14px 6px; cursor: pointer; transition: left .4s cubic-bezier(.22,.9,.3,1), right .4s cubic-bezier(.22,.9,.3,1); font-family: inherit; }
+  #hide-left-btn { left: calc(12px + min(438px, 26vw) - 2px); border-radius: 10px 0 0 10px; }
+  #hide-right-btn { right: calc(12px + min(438px, 26vw) - 2px); border-radius: 0 10px 10px 0; }
+  #hide-left-btn.collapsed { left: 0; }
+  #hide-right-btn.collapsed { right: 0; }
+  .hide-tab:hover { background: rgba(3,123,214,.9); color: #fff; }
+
+  /* 设备看板：整卡用高保真切图做底，只叠加动态数字（青色发光） */
+  #devboard-card { background: url('/digital-twin/assets/ui/devboard-card.png?v=3ad9c711') center/100% 100% no-repeat; padding: 0; overflow: visible; }
+  #devboard-card .devboard { position: relative; width: 100%; aspect-ratio: 510/232; }
+  .dev-num { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
+  .dev-num .v { font-size: 19px; font-weight: 800; color: #6fe3ff; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(77,208,255,.9), 0 0 4px rgba(77,208,255,.8); }
+  #dev-online { left: 19.1%; top: 34.9%; }
+  #dev-busy { left: 66.2%; top: 34.9%; }
+  #dev-total { left: 42.6%; top: 61.6%; }
+  #dev-total .v { font-size: 24px; }
+  #dev-idle { left: 19.1%; top: 93.5%; }
+  #dev-alarm { left: 66.2%; top: 93.5%; }
+
+  /* 机器人设备列表：卡片固定占满剩余高度，列表内部滚动 */
+  #robot-card { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  #robot-card h4, .rb-tabs, .rb-bar { flex-shrink: 0; }
+  .rb-tabs, .tk-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .rb-tabs button, .tk-tabs button { border: 1px solid rgba(2,183,255,.3); background: rgba(2,183,255,.07); color: #9fc8e4; font-size: 11.5px; padding: 3px 10px; border-radius: 11px; cursor: pointer; font-family: inherit; }
+  .rb-tabs button.on, .tk-tabs button.on { background: var(--ac2); border-color: var(--ac2); color: #fff; }
+  .rb-bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .rb-bar input, .rb-bar select { flex: 1; min-width: 0; background: rgba(4,32,58,.7); border: 1px solid rgba(2,183,255,.25); color: #cfe4f2; font-size: 11.5px; padding: 4px 8px; border-radius: 8px; font-family: inherit; }
+  .rb-bar input::placeholder { color: #5b7a95; }
+  #robot-live-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding-right: 3px; scrollbar-width: thin; scrollbar-color: rgba(2,183,255,.3) transparent; }
+  #robot-live-list::-webkit-scrollbar { width: 4px; }
+  #robot-live-list::-webkit-scrollbar-thumb { background: rgba(2,183,255,.3); border-radius: 2px; }
+  .rb-item { display: flex; align-items: center; gap: 9px; background: linear-gradient(90deg, rgba(2,183,255,.09), rgba(2,183,255,.02)); border: 1px solid rgba(2,183,255,.16); border-radius: 9px; padding: 7px 9px; }
+  .rb-item:hover { border-color: rgba(2,183,255,.45); background: linear-gradient(90deg, rgba(2,183,255,.16), rgba(2,183,255,.04)); }
+  .rb-ico { width: 38px; height: 38px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 40% 35%, rgba(2,183,255,.28), rgba(2,183,255,.06)); border: 1px solid rgba(2,183,255,.3); border-radius: 9px; }
+  .rb-ico img { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(2,183,255,.55)); }
+  .rb-main { flex: 1; min-width: 0; }
+  .rb-name { font-size: 12.5px; color: #fff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rb-loc { font-size: 10.5px; color: var(--sub); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rb-loc::before { content: ''; display: inline-block; width: 8px; height: 10px; margin-right: 4px; vertical-align: -1px; background: linear-gradient(180deg, #3cc0ff, #0289ff); clip-path: polygon(50% 0, 100% 38%, 82% 100%, 50% 78%, 18% 100%, 0 38%); }
+  .rb-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+  .rb-badge { font-size: 10px; padding: 1px 8px; border-radius: 8px; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+  .rb-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 5px currentColor; }
+  .rb-badge.on { color: #4cd98a; background: rgba(76,217,138,.12); border: 1px solid rgba(76,217,138,.4); }
+  .rb-badge.busy { color: #4dc3ff; background: rgba(77,195,255,.12); border: 1px solid rgba(77,195,255,.4); }
+  .rb-badge.warn { color: #ffc84d; background: rgba(255,200,77,.12); border: 1px solid rgba(255,200,77,.4); }
+  .rb-badge.off { color: #7a95b0; background: rgba(122,149,176,.12); border: 1px solid rgba(122,149,176,.35); }
+  .rb-batt { display: flex; align-items: center; gap: 5px; }
+  .rb-batt .bar { width: 46px; height: 6px; background: rgba(2,183,255,.14); border-radius: 3px; overflow: hidden; }
+  .rb-batt .bar i { display: block; height: 100%; border-radius: 3px; }
+  .rb-batt .pct { font-size: 10px; color: #9fc8e4; font-variant-numeric: tabular-nums; }
+  .rl-empty { font-size: 11px; color: var(--dim); padding: 10px 6px; text-align: center; }
+
+  /* 任务看板 */
+  .tk-board { display: flex; align-items: center; gap: 12px; }
+  .tk-ring { position: relative; width: 118px; height: 118px; flex-shrink: 0; border-radius: 50%; background: conic-gradient(#4cd98a 0 62%, #3cc0ff 62% 90%, #ff8a6b 90% 100%); box-shadow: 0 0 18px rgba(2,183,255,.25); }
+  .tk-ring::after { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: #052036; border: 1px solid rgba(2,183,255,.25); }
+  .tk-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1; }
+  .tk-center .v { font-size: 27px; font-weight: 800; color: #fff; line-height: 1; text-shadow: 0 0 14px rgba(2,183,255,.6); font-variant-numeric: tabular-nums; }
+  .tk-center .k { font-size: 10.5px; color: #9fc8e4; margin-top: 3px; letter-spacing: 1px; }
+  .tk-stats { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .tk-stat { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #cfe4f2; }
+  .tk-stat .dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+  .tk-stat .nm { flex: 1; color: var(--sub); }
+  .tk-stat .v { font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+
+  /* 任务趋势 */
+  #trend-card { display: flex; flex-direction: column; }
+  .trend-tgl { display: flex; gap: 6px; align-items: center; }
+  .trend-tgl .sp { flex: 1; }
+  .trend-tgl button { border: 1px solid rgba(2,183,255,.3); background: rgba(2,183,255,.07); color: #9fc8e4; font-size: 11px; padding: 3px 12px; border-radius: 11px; cursor: pointer; font-family: inherit; }
+  .trend-tgl button.on { background: var(--ac2); border-color: var(--ac2); color: #fff; }
+  #ch-trend { height: 128px; margin-top: 4px; }
+
+  /* 今日任务记录 */
+  #record-card { display: flex; flex-direction: column; flex: 1.1 1 auto; min-height: 0; }
+  #record-card h4, #record-card .tk-tabs { flex-shrink: 0; }
+  #task-record-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 3px; scrollbar-width: thin; scrollbar-color: rgba(2,183,255,.3) transparent; }
+  #task-record-list::-webkit-scrollbar { width: 4px; }
+  #task-record-list::-webkit-scrollbar-thumb { background: rgba(2,183,255,.3); border-radius: 2px; }
+  .tk-item { display: flex; align-items: center; gap: 8px; border-bottom: 1px dashed rgba(2,183,255,.14); padding: 6px 2px; font-size: 12px; }
+  .tk-item:last-child { border-bottom: none; }
+  .tk-item .ty { color: #e8f4ff; font-weight: 600; flex-shrink: 0; }
+  .tk-item .id { color: var(--sub); font-size: 10.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tk-item .st { font-size: 10px; padding: 1px 8px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
+  .tk-item .st::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 5px currentColor; }
+  .tk-item .st.run { color: #4dc3ff; background: rgba(77,195,255,.12); border: 1px solid rgba(77,195,255,.4); }
+  .tk-item .st.ok { color: #4cd98a; background: rgba(76,217,138,.12); border: 1px solid rgba(76,217,138,.4); }
+  .tk-item .st.bad { color: #ff8a6b; background: rgba(255,138,107,.12); border: 1px solid rgba(255,138,107,.4); }
+  .tk-item .tm { font-size: 10px; color: var(--dim); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+  /* 楼层平面图侧栏（保持不变） */
   #floor-plan { position: fixed; right: 12px; bottom: 12px; width: 463px; z-index: 46; display: none; background: linear-gradient(160deg, rgba(11,19,34,.95), rgba(5,10,20,.97)); border: 1px solid rgba(0,229,255,.28); border-radius: 12px; box-shadow: 0 4px 22px rgba(0,0,0,.45), inset 0 1px 0 rgba(127,212,255,.1); color: #e8f4ff; }
   #floor-plan.show { display: block; animation: fp-in .3s ease; }
   @keyframes fp-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
@@ -128,50 +221,11 @@
   #fp-robots .fr .dot.sim { background: #4dc3ff; box-shadow: 0 0 5px #4dc3ff; }
   #fp-robots .fr .dot.live { background: #4cd98a; box-shadow: 0 0 5px #4cd98a; }
   #fp-robots .empty { font-size: 10px; color: #5b7a95; padding: 4px 6px; }
-  .charts-col.show .charts-anim { opacity: 1; transform: translateX(0); }
-  /* 机器人实时状态列表 */
-  #rb-card { flex: 1 1 auto; min-height: 0; }
-  #robot-live-list { flex: 1; min-height: 0; overflow-y: auto; margin: 2px -4px 0 0; padding-right: 4px; }
-  #robot-live-list::-webkit-scrollbar { width: 4px; }
-  #robot-live-list::-webkit-scrollbar-thumb { background: rgba(127,212,255,.25); border-radius: 2px; }
-  .rl-empty { font-size: 11px; color: #5b7a95; padding: 8px 4px; }
-  .rl-row { display: flex; align-items: center; gap: 7px; padding: 4px 4px; border-bottom: 1px dashed rgba(127,212,255,.08); }
-  .rl-row:last-child { border-bottom: none; }
-  .rl-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .rl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: #dfe9f2; }
-  .rl-sub { max-width: 92px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #8fb8d8; }
-  .rl-sub.pos { color: #4cd98a; }
-  .rl-sub.warn { color: #ffc84d; }
-  .rl-batt { width: 44px; height: 6px; flex-shrink: 0; background: rgba(0,229,255,.12); border-radius: 3px; overflow: hidden; }
-  .rl-batt i { display: block; height: 100%; border-radius: 3px; }
-  .rl-pct { width: 28px; flex-shrink: 0; text-align: right; font-size: 10.5px; color: #9fb8d0; font-variant-numeric: tabular-nums; }
-  .cost-list { margin-top: 6px; }
-  .cost-list .row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 2px; border-bottom: 1px dashed rgba(127,212,255,.1); }
-  .cost-list .row:last-child { border-bottom: none; }
-  .cost-list .dot { width: 8px; height: 8px; border-radius: 2px; box-shadow: 0 0 6px currentColor; }
-  .cost-list .val { margin-left: auto; color: #fff; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .progress-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 11.5px; }
-  .progress-row > span:first-child { white-space: nowrap; color: #9fb8d0; }
-  .progress-row b { color: #fff; font-weight: 600; }
-  .progress-row .bar { flex: 1; height: 7px; background: rgba(0,229,255,.12); border-radius: 4px; overflow: hidden; }
-  .progress-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#00e5ff,#2b7fd4); border-radius: 4px; box-shadow: 0 0 8px rgba(0,229,255,.45); transition: width .8s ease; }
-  .alert-item { display: flex; gap: 8px; align-items: flex-start; padding: 7px 2px; border-bottom: 1px solid rgba(127,212,255,.1); font-size: 12.5px; }
-  .alert-item:last-child { border-bottom: none; }
-  .alert-item .lv { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; }
-  .lv.mid { background: rgba(255,200,77,.15); color: #ffc84d; border: 1px solid rgba(255,200,77,.4); }
-  .lv.low { background: rgba(0,229,255,.1); color: #00e5ff; border: 1px solid rgba(0,229,255,.35); }
-  .lv.res { background: rgba(76,217,138,.1); color: #4cd98a; border: 1px solid rgba(76,217,138,.35); }
-  .alert-item .sub { font-size: 10.5px; color: #7a95b0; margin-top: 2px; }
-  .badge-count { background: #ff6b6b; color: #fff; border-radius: 8px; font-size: 10.5px; padding: 0 7px; }
-  .env-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .env-table td { padding: 4px 2px; border-bottom: 1px solid rgba(127,212,255,.12); }
-  .env-table .v { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .env-ok { color: #4cd98a; } .env-warn { color: #ffc84d; } .env-bad { color: #ff6b6b; }
-  .people-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; }
-  .people-row .nm { width: 52px; color: #8fb8d8; }
-  .people-row .bar { flex: 1; height: 6px; background: rgba(127,212,255,.12); border-radius: 3px; overflow: hidden; }
-  .people-row .bar i { display: block; height: 100%; background: linear-gradient(90deg,#00e5ff,#2b7fd4); border-radius: 3px; transition: width .8s ease; }
-  .people-row .val { width: 42px; text-align: right; font-weight: 600; color: #fff; }
+
+  @media (max-height: 800px) {
+    .devboard { max-height: 180px; }
+    #ch-trend { height: 100px; }
+  }
 
 </style>
 <script type="importmap">
@@ -186,73 +240,88 @@
 <body>
 <div id="app"></div>
 <div id="panel">
-  <button id="panel-close" title="关闭设置">✕</button>
-  <h1>浙江省人民医院(朝晖院区) 医疗异构机器人系统</h1>
-  <div class="sub">数据：整体/2号/6号 GLB + 百度建筑轮廓 + 天地图卫星</div>
-  <div class="toggles">
-    <div class="tg-group">基础</div>
-    <label><input type="checkbox" id="tg-real" checked> 整体模型</label>
-    <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
-    <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
-    <div class="tg-group">城市环境</div>
-    <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
-    <label><input type="checkbox" id="tg-road" checked> 路网</label>
-    <label><input type="checkbox" id="tg-water" checked> 水系</label>
-    <label><input type="checkbox" id="tg-green" checked> 绿地/公园</label>
-    <label><input type="checkbox" id="tg-viaduct" checked> 上塘高架</label>
-    <label><input type="checkbox" id="tg-bridge" checked> 桥梁</label>
-    <div class="tg-group">标注</div>
-    <label><input type="checkbox" id="tg-landmark" checked> 地标</label>
-    <label><input type="checkbox" id="tg-poi" checked> 名称标注</label>
-    <div class="tg-group">业务</div>
-    <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
-    <label><input type="checkbox" id="tg-live" checked> 真实机器人（仅透视）</label>
-  </div>
-  <div class="qualitybox"><b>画质</b><select id="quality-select"><option value="auto">自动</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select><span class="qnote">按帧率自动选择</span></div>
-  <div class="timebox">
-    <div class="row"><b>时间 / 太阳</b><span id="time-val">12:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime"> 实时</label></div>
-    <input type="range" id="time-slider" min="0" max="24" step="0.05" value="12">
-  </div>
-  <div class="weatherbox">
-    <b>天气</b>
-    <button data-w="sunny" class="on">晴天</button>
-    <button data-w="cloudy">多云</button>
-    <button data-w="rain">小雨</button>
-    <button data-w="storm">大雨</button>
-    <button data-w="snow">大雪</button>
-    <button data-w="fog">雾</button>
-  </div>
-  <div class="simbox">
-    <button id="cruise-btn" style="margin-top:6px">自动巡航（360°逆时针）</button>
-    <button id="demo6-btn" style="margin-top:6px">透视 6号楼（双机模拟）</button>
-    <button id="demo2-btn" style="margin-top:6px">透视 2号楼（双机模拟）</button>
-    <div class="simhint">场景里点一下 2/6 号楼即可进入透视；再点楼板选层</div>
+  <div class="panel-box">
+    <button id="panel-close" title="关闭设置"></button>
+    <div class="panel-title">工作台设置</div>
+    <div class="panel-row">
+      <span class="lb">渲染质量</span>
+      <span class="seg" id="quality-seg">
+        <button data-q="auto">均衡</button><button data-q="high">高画质</button><button data-q="low">流畅</button>
+      </span>
+    </div>
+    <div class="panel-row">
+      <span class="lb">显示周边建筑</span>
+      <span class="seg"><button data-k="tg-surround" data-v="1" class="on">显示</button><button data-k="tg-surround" data-v="0">关闭</button></span>
+    </div>
+    <div class="panel-row">
+      <span class="lb">显示建筑标记</span>
+      <span class="seg"><button data-k="tg-poi" data-v="1" class="on">显示</button><button data-k="tg-poi" data-v="0">关闭</button></span>
+    </div>
+    <div class="panel-row">
+      <span class="lb">建筑透明度</span>
+      <span class="panel-slider"><input type="range" id="bld-opacity" min="10" max="100" value="100" autocomplete="off"><span class="pv" id="bld-opacity-val">100%</span></span>
+    </div>
+    <details class="panel-more">
+      <summary>更多设置（场景 / 时间 / 天气 / 模拟）</summary>
+      <div class="qualitybox"><b>画质</b><select id="quality-select"><option value="auto">自动</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select><span class="qnote">按帧率自动选择</span></div>
+      <div class="timebox">
+        <div class="row"><b>时间 / 太阳</b><span id="time-val">12:00</span><button id="time-play">▶ 播放</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer"><input type="checkbox" id="time-realtime"> 实时</label></div>
+        <input type="range" id="time-slider" min="0" max="24" step="0.05" value="12">
+      </div>
+      <div class="weatherbox">
+        <b>天气</b>
+        <button data-w="sunny" class="on">晴天</button>
+        <button data-w="cloudy">多云</button>
+        <button data-w="rain">小雨</button>
+        <button data-w="storm">大雨</button>
+        <button data-w="snow">大雪</button>
+        <button data-w="fog">雾</button>
+      </div>
+      <div class="simbox">
+        <button id="cruise-btn">自动巡航（360°逆时针）</button>
+        <button id="demo6-btn">透视 6号楼（双机模拟）</button>
+        <button id="demo2-btn">透视 2号楼（双机模拟）</button>
+        <div class="simhint">场景里点一下 2/6 号楼即可进入透视；再点楼板选层</div>
+      </div>
+      <div class="toggles">
+        <div class="tg-group">基础</div>
+        <label><input type="checkbox" id="tg-real" checked> 整体模型</label>
+        <label><input type="checkbox" id="tg-tex" checked> 总平纹理</label>
+        <label><input type="checkbox" id="tg-map" checked> 卫星底图</label>
+        <div class="tg-group">城市环境</div>
+        <label><input type="checkbox" id="tg-surround" checked> 周边建筑</label>
+        <label><input type="checkbox" id="tg-road" checked> 路网</label>
+        <label><input type="checkbox" id="tg-water" checked> 水系</label>
+        <label><input type="checkbox" id="tg-green" checked> 绿地/公园</label>
+        <label><input type="checkbox" id="tg-viaduct" checked> 上塘高架</label>
+        <label><input type="checkbox" id="tg-bridge" checked> 桥梁</label>
+        <div class="tg-group">标注</div>
+        <label><input type="checkbox" id="tg-landmark" checked> 地标</label>
+        <label><input type="checkbox" id="tg-poi" checked> 名称标注</label>
+        <div class="tg-group">业务</div>
+        <label><input type="checkbox" id="tg-dev"> 物流设备模型</label>
+        <label><input type="checkbox" id="tg-live" checked> 真实机器人（仅透视）</label>
+      </div>
+    </details>
+    <div class="panel-foot">
+      <button id="panel-cancel">取消</button>
+      <button id="panel-done">完成</button>
+    </div>
   </div>
 </div>
 <div id="hint">拖拽平移 · 滚轮缩放 · 中键旋转 · 单击楼栋进入透视 · 单击楼面选层</div>
 <button id="demo-back" style="display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:56; background:rgba(20,30,40,.85); color:#cfe0f2; border:1px solid rgba(0,229,255,.4); border-radius:18px; padding:7px 24px; font-size:13px; letter-spacing:2px; cursor:pointer;">← 返回总览</button>
 <div id="topbar">
-  <div class="tb-left">
-    <div class="tb-logo">＋</div>
-    <div class="tb-title">
-      <div class="cn">浙江省人民医院(朝晖院区) 医疗异构机器人系统</div>
-      <div class="en">ZHEJIANG PROVINCIAL PEOPLE'S HOSPITAL (ZHAOHUI CAMPUS) · HETEROGENEOUS MEDICAL ROBOT SYSTEM</div>
-    </div>
-  </div>
-  <div class="tb-center">
-    <div class="tb-pill">园区总览&nbsp;|&nbsp;CAMPUS OVERVIEW</div>
-    <div class="tb-tag">浙江省人民医院朝晖院区</div>
-  </div>
+  <img class="tb-hl" src="/digital-twin/assets/ui/header-left.png?v=df9e47eb" alt="">
+  <div class="tb-weather" id="rt-weather">杭州 · 获取天气中…</div>  <img class="tb-hm" src="/digital-twin/assets/ui/header-title.png?v=bc4c1359" alt="浙江省人民医院机器人异构集群数字孪生">
+  <div class="tb-wave"></div>
   <div class="tb-right">
-    <div class="tb-weather" id="rt-weather">杭州 · 获取天气中…</div>
     <div class="tb-clock">
       <div id="rt-clock">--:--:--</div>
       <div id="rt-date">----.--.--</div>
     </div>
-    <div class="tb-live" id="live-hud">实时机器人：连接中…</div>
     <button id="cruise-top-btn" class="tb-btn" aria-pressed="false" title="围绕医院巡航；空闲 1 分钟自动开始，移动鼠标返回总览" disabled>开始巡航</button>
-    <button id="settings-btn" class="tb-btn">⚙ 设置</button>
-    <button id="charts-btn" class="tb-btn on">收起指标</button>
+    <button id="settings-btn" class="tb-btn" title="工作台设置">设置</button>
   </div>
 </div>
 <style>
@@ -260,58 +329,72 @@
   @keyframes lspin-rev { to { transform: rotate(-360deg); } }
   @keyframes lpulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
 </style>
+<button id="hide-left-btn" class="hide-tab" title="收起 / 展开左栏">一键隐藏</button>
+<button id="hide-right-btn" class="hide-tab" title="收起 / 展开右栏">一键隐藏</button>
 <div id="charts-left" class="charts-col show">
-  <div class="chart-card charts-anim" style="transition-delay:.04s">
-    <h4><span class="num">01</span>园区运营总览 <span class="en">CAMPUS OVERVIEW</span><span class="tag">实时</span></h4>
-    <div>今日用电量</div>
-    <div class="big-num"><span id="ov-power">19,833</span><small>kWh</small> <span class="trend-up" id="ov-trend">▲ 3.2%</span></div>
-    <div class="metric-row">
-      <div class="metric-item"><div class="k">在线设备</div><div class="v" id="ov-dev">328/342</div></div>
-      <div class="metric-item"><div class="k">设备在线率</div><div class="v" id="ov-rate">95.9%</div></div>
-      <div class="metric-item"><div class="k">实时告警</div><div class="v" id="ov-alert" style="color:#ffc84d">03 条</div></div>
+  <div class="chart-card charts-anim" id="devboard-card" style="transition-delay:.04s">
+    <div class="devboard">
+      <div class="dev-num" id="dev-online"><span class="v">--</span></div>
+      <div class="dev-num" id="dev-busy"><span class="v">--</span></div>
+      <div class="dev-num" id="dev-total"><span class="v">--</span></div>
+      <div class="dev-num" id="dev-idle"><span class="v">--</span></div>
+      <div class="dev-num" id="dev-alarm"><span class="v">--</span></div>
     </div>
   </div>
-  <div class="chart-card charts-anim" style="transition-delay:.1s">
-    <h4><span class="num">04</span>今日运营详情 <span class="en">DAILY OPERATIONS</span><span class="tag">运行平稳</span></h4>
-    <div>今日人流量</div>
-    <div class="big-num"><span id="op-flow">13,270</span><small>人次</small> <span class="trend-up" id="op-trend">+15.2%</span></div>
-    <div class="metric-row">
-      <div class="metric-item"><div class="k">当前在院</div><div class="v" id="op-in">1,162 人</div></div>
-      <div class="metric-item"><div class="k">门诊</div><div class="v" id="op-mz">740</div></div>
-      <div class="metric-item"><div class="k">住院</div><div class="v" id="op-zy">422</div></div>
+  <div class="chart-card charts-anim" id="robot-card" style="transition-delay:.1s">
+    <h4>机器人设备<span class="tag" id="live-hud">连接中…</span></h4>
+    <div class="rb-tabs" id="rb-tabs">
+      <button data-t="all" class="on">全部</button>
+      <button data-t="medicine">送药</button>
+      <button data-t="meal">送餐</button>
+      <button data-t="waste">送货</button>
+      <button data-t="medical">医废</button>
     </div>
-    <div class="chart-box" id="ch-flow"></div>
-    <div class="progress-row"><span>停车占用 <b id="pk-v">1,256</b>/1,500</span><span class="bar"><i id="pk-b" style="width:83%"></i></span></div>
-    <div class="progress-row"><span>执勤在岗 <b id="gd-v">290</b> 人</span><span class="bar"><i id="gd-b" style="width:97%"></i></span></div>
-  </div>
-  <div class="chart-card charts-anim" style="transition-delay:.16s">
-    <h4><span class="num">07</span>机器人实时状态 <span class="en">ROBOT LIVE</span><span class="tag">中控推送</span></h4>
-    <div class="metric-row">
-      <div class="metric-item"><div class="k">接入总数</div><div class="v" id="rb-total">--</div></div>
-      <div class="metric-item"><div class="k">已就位</div><div class="v" id="rb-ready">--</div></div>
-      <div class="metric-item"><div class="k">平均电量</div><div class="v" id="rb-batt">--</div></div>
+    <div class="rb-bar">
+      <input id="rb-search" type="text" placeholder="搜索机器人名称/编号">
+      <select id="rb-status">
+        <option value="all">全部状态</option>
+        <option value="online">在线</option>
+        <option value="busy">运行中</option>
+        <option value="free">空闲</option>
+        <option value="offline">离线</option>
+        <option value="alert">异常</option>
+      </select>
     </div>
-    <div class="metric-row">
-      <div class="metric-item"><div class="k">运行中</div><div class="v" id="rb-busy">--</div></div>
-      <div class="metric-item"><div class="k">充电中</div><div class="v" id="rb-chg">--</div></div>
-      <div class="metric-item"><div class="k">离线</div><div class="v" id="rb-off">--</div></div>
-    </div>
-    <div class="chart-box" id="ch-robot-type"></div>
-    <div style="font-size:11px;color:#5b7a95;margin-top:2px">楼栋分布：<span id="rb-floors">--</span></div>
+    <div id="robot-live-list"><div class="rl-empty">等待中控数据…</div></div>
   </div>
 </div>
 <div id="charts-panel" class="charts-col show">
-  <div class="chart-card charts-anim" id="rb-card" style="transition-delay:.04s">
-    <h4><span class="num">02</span>机器人实时状态 <span class="en">ROBOT STATUS</span><span class="tag" id="rb-live-count">--</span></h4>
-    <div id="robot-live-list"><div class="rl-empty">等待中控数据…</div></div>
-  </div>
-  <div class="chart-card charts-anim" style="transition-delay:.22s">
-    <h4><span class="num">06</span>实时告警 <span class="en">ALERT CENTER</span><span class="badge-count" id="al-count">3</span></h4>
-    <div id="alert-list">
-      <div class="alert-item"><span class="lv mid">中</span><div>住院楼 7F 回风温度偏高<div class="sub">空调机组 AHU-07 · <span class="al-time">11:44</span></div></div></div>
-      <div class="alert-item"><span class="lv low">低</span><div>能源站 1# 配电柜电流波动<div class="sub">配电柜 A 相 · <span class="al-time">11:37</span></div></div></div>
-      <div class="alert-item"><span class="lv res">复</span><div>门诊楼 2F 候诊区 CO₂ 偏高<div class="sub">新风机组已联动 · <span class="al-time">11:30</span></div></div></div>
+  <div class="chart-card charts-anim" id="taskboard-card" style="transition-delay:.04s">
+    <h4>任务看板<span class="tag" id="tk-tag">今日</span></h4>
+    <div class="tk-board">
+      <div class="tk-ring">
+        <div class="tk-center"><span class="v" id="tk-total">--</span><span class="k">今日总数</span></div>
+      </div>
+      <div class="tk-stats">
+        <div class="tk-stat"><i class="dot" style="background:#4cd98a;box-shadow:0 0 6px #4cd98a"></i><span class="nm">已完成</span><span class="v" id="tk-done">--</span></div>
+        <div class="tk-stat"><i class="dot" style="background:#3cc0ff;box-shadow:0 0 6px #3cc0ff"></i><span class="nm">执行中</span><span class="v" id="tk-running">--</span></div>
+        <div class="tk-stat"><i class="dot" style="background:#ff8a6b;box-shadow:0 0 6px #ff8a6b"></i><span class="nm">异常</span><span class="v" id="tk-fail">--</span></div>
+      </div>
     </div>
+  </div>
+  <div class="chart-card charts-anim" id="trend-card" style="transition-delay:.1s">
+    <div class="trend-tgl">
+      <h4 style="border:none;margin:0;padding-left:48px">近一周任务趋势</h4><span class="sp"></span>
+      <button id="trend-week" class="on">一周</button><button id="trend-day">今日</button>
+    </div>
+    <div id="ch-trend"></div>
+  </div>
+  <div class="chart-card charts-anim" id="record-card" style="transition-delay:.16s">
+    <h4>今日任务记录<span class="tag">实时</span></h4>
+    <div class="tk-tabs" id="tk-tabs">
+      <button data-t="all" class="on">全部</button>
+      <button data-t="medicine">送药</button>
+      <button data-t="meal">送餐</button>
+      <button data-t="waste">送货</button>
+      <button data-t="medical">医废</button>
+    </div>
+    <div id="task-record-list"><div class="rl-empty">暂无任务记录…</div></div>
   </div>
 </div>
 <div id="floor-plan">
@@ -1182,6 +1265,24 @@ function buildTreeInstances(root) {
 }
 let treeInstances = null;
 
+// 树叶本来是 BLEND 半透明（不写深度、进透明排序队列）：14.8M 三角形既慢，
+// 又会被画质档位/透明排序连带藏掉。改成 alphaTest 抠图后走不透明队列单遍绘制，
+// 又快又不会再凭空消失。
+function optimizeTreeMats(root) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (m.transparent && !m.alphaTest) {
+        m.alphaTest = 0.3;
+        m.transparent = false;
+        m.depthWrite = true;
+        m.needsUpdate = true;
+      }
+    }
+  });
+}
+
 // 树木从整体模型里拆出来单独成包（树.glb）。它和整体模型共用同一套建模坐标，
 // 挂到模型节点下就自动继承配准（平移/旋转/缩放），不用另外算位置。
 // 地面/公园景观同样是从整体模型里拆出来的独立包，坐标与整体模型一致，
@@ -1190,32 +1291,99 @@ const SCENERY = [
   { file: '/models/models/地面景观.glb?v=73be4a43', name: '地面景观' },
   { file: '/models/models/公园景观.glb?v=71740f91', name: '公园景观' },
 ];
+// 树木/景观异步加载完成前，自动画质不开始测帧率：实例化这类大几何的突发帧
+// 会拉低采样窗口的帧率，把本应 high 的机器误判成 medium，树就被隐藏了。
+let sceneDecorDone = false;
+let pendingDecor = 0;
+function markDecorDone() {
+  if (--pendingDecor <= 0) sceneDecorDone = true;
+}
 function loadScenery(parent) {
   for (const item of SCENERY) {
+    pendingDecor++;
     makeGLTFLoader().load(item.file, (gltf) => {
       const root = gltf.scene;
       root.name = item.name;
       root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       parent.add(root);
       console.log('[场景]', item.name, '已加载');
-    }, undefined, (e) => console.warn('[场景]', item.name, '加载失败', e));
+      markDecorDone();
+    }, undefined, (e) => { console.warn('[场景]', item.name, '加载失败', e); markDecorDone(); });
   }
 }
 
 function loadScatterTrees(parent) {
+  pendingDecor++;
+  const onDone = () => markDecorDone();
+  const onFail = () => {
+    console.warn('[树木] 加载失败，重试一次');
+    makeGLTFLoader().load('/models/models/树.glb?v=9ab27142', (gltf) => {
+      attachTreeGltf(gltf, parent);
+      onDone();
+    }, undefined, () => { console.warn('[树木] 重试仍失败'); onDone(); });
+  };
   makeGLTFLoader().load('/models/models/树.glb?v=9ab27142', (gltf) => {
-    const root = gltf.scene;
-    root.name = '树木';
-    parent.add(root);
-    treeInstances = buildTreeInstances(root);
-    if (treeInstances) treeInstances.visible = QUALITY.value === 'high';
-    console.log('[树木] 实例化', treeInstances ? treeInstances.children.length : 0, '组，',
-      treeInstances ? treeInstances.children.reduce((n, g) => n + g.count, 0) : 0, '棵');
-  }, undefined, (e) => console.warn('[树木] 加载失败', e));
+    attachTreeGltf(gltf, parent);
+    onDone();
+  }, undefined, onFail);
+}
+function attachTreeGltf(gltf, parent) {
+  const root = gltf.scene;
+  root.name = '树木';
+  parent.add(root);
+  const shuNode = root.getObjectByName('shu') || root;
+  optimizeTreeMats(shuNode);
+  treeInstances = buildTreeInstances(root);
+  if (treeInstances) treeInstances.visible = QUALITY.value !== 'low';
+  console.log('[树木] 实例化', treeInstances ? treeInstances.children.length : 0, '组，',
+    treeInstances ? treeInstances.children.reduce((n, g) => n + g.count, 0) : 0, '棵');
 }
 
 // 模型导出时可能给节点名加序号（如 1号楼003），与中控 buildingName 对齐
 const NODE_NAME_FIX = { '1号楼003': '1号楼' };
+
+// 建筑透明度（工作台设置）作用于精模全部楼栋 + 连廊，地形/斑马线保持实心。
+// 直接给楼栋开 transparent 会因为同一栋楼各材质块的排序随视角抖动而闪烁，
+// 所以先用只写深度的副本垫一遍（排在所有不透明物体之后），正片关深度写入、只叠最近一层表面。
+const bldFade = { mats: [], pre: null, on: null };
+function setupBuildingFade(obj) {
+  const cloned = new Map();
+  const seen = new Set();
+  const pre = new THREE.Group();
+  pre.name = '建筑深度预通道';
+  const preMat = (side) => new THREE.MeshBasicMaterial({
+    colorWrite: false, side, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+  });
+  const preFront = preMat(THREE.FrontSide), preDouble = preMat(THREE.DoubleSide);
+  const roots = [...realBuildings.values(), obj.getObjectByName('连廊')].filter(Boolean);
+  for (const root of roots) {
+    root.traverse((o) => {
+      if (!o.isMesh || !o.visible || seen.has(o) || Array.isArray(o.material)) return;
+      seen.add(o);
+      let m = cloned.get(o.material);
+      if (!m) {
+        // 克隆一份：楼栋与地形可能共用材质，不能把地形一起调透明
+        m = o.material.clone();
+        m.userData.fadeBase = { opacity: m.opacity, transparent: m.transparent, depthWrite: m.depthWrite, renderOrder: m.renderOrder };
+        cloned.set(o.material, m);
+        bldFade.mats.push(m);
+      }
+      o.material = m;
+      if (m.userData.fadeBase.transparent) return; // 原本就是混合材质（玻璃），只缩放不透明度
+      const d = new THREE.Mesh(o.geometry, m.side === THREE.DoubleSide ? preDouble : preFront);
+      // 世界矩阵直接抄源网格，保证两遍绘制的深度逐位一致
+      d.matrixAutoUpdate = false;
+      d.updateMatrixWorld = function () { this.matrixWorld.copy(o.matrixWorld); };
+      d.raycast = () => {};
+      d.renderOrder = 9999;
+      pre.add(d);
+    });
+  }
+  obj.add(pre);
+  bldFade.pre = pre;
+  bldFade.on = null;
+  syncOpacity();
+}
 
 function loadRealModel() {
   if (realLoaded || realLoading) return;
@@ -1256,9 +1424,10 @@ function loadRealModel() {
         if (o.children.length && ANCHOR_BUILDINGS.has(nm)) refBox.expandByObject(o);
       }
     });
-    if (obj.getObjectByName('shu')) treeInstances = buildTreeInstances(obj);
-    // 树是纯锦上添花：14.8M 三角形只有独显/Apple GPU 吃得下，只在 high 档开
-    if (treeInstances) treeInstances.visible = QUALITY.value === 'high';
+    const shuNode = obj.getObjectByName('shu');
+    if (shuNode) { optimizeTreeMats(shuNode); treeInstances = buildTreeInstances(shuNode); }
+    // 树只在手动“低”档关闭：自动画质最多降到“中”，树永远在
+    if (treeInstances) treeInstances.visible = QUALITY.value !== 'low';
     if (refBox.isEmpty()) refBox.copy(box);
     const c = refBox.getCenter(new THREE.Vector3());
     // 旧版是按"整包几何中心"配准的，而整包中心比楼栋中心偏 (+25.9, -12.7)；
@@ -1272,6 +1441,7 @@ function loadRealModel() {
     console.log('[模型] 配准 旋转', REAL_CAL.rotDeg, '° 平移', REAL_CAL.x + 'm,' + REAL_CAL.z + 'm',
       '楼栋包围盒', refBox.getSize(new THREE.Vector3()).toArray().map((v) => +v.toFixed(1)).join('x'));
     realGroup.add(obj);
+    setupBuildingFade(obj);
     realLoaded = true; // 6号楼 直接用整体模型里的节点（实测与独立 6号楼.glb 像素差 0.26%）
     loadScatterTrees(obj); // 树单独成包，异步补进来，不挡首屏
     loadScenery(obj);      // 地面/公园景观同理
@@ -1382,6 +1552,7 @@ const holoMat = new THREE.ShaderMaterial({
     uPow: { value: 1.55 },
     uTime: { value: 0 },
     uCutY: { value: 1e6 }, // 掀顶：世界 Y 高于此值的片元丢弃，默认不裁
+    uGain: { value: 1.0 }, // 建筑透明度（工作台设置）：整体乘在壳体透明度上
     fogColor: { value: new THREE.Color(0xffffff) },
     fogNear: { value: 900 },
     fogFar: { value: 2600 },
@@ -1406,6 +1577,7 @@ const holoMat = new THREE.ShaderMaterial({
     uniform float uPow;
     uniform float uTime;
     uniform float uCutY;
+    uniform float uGain;
     varying vec3 vPosW;
     varying vec3 vNrmW;
     #include <fog_pars_fragment>
@@ -1428,6 +1600,7 @@ const holoMat = new THREE.ShaderMaterial({
       }
       float band = fract(vPosW.y * 0.045 - uTime * 0.05);
       col += uRim * smoothstep(0.0, 0.10, band) * smoothstep(0.30, 0.10, band) * 0.55;
+      a = min(1.0, a * uGain);
       gl_FragColor = vec4(col, a);
       #include <fog_fragment>
     }
@@ -1708,10 +1881,12 @@ async function fetchRealWeather() {
     const j = await res.json();
     const code = j.current.weather_code;
     const temp = Math.round(j.current.temperature_2m);
-    rtWeather.textContent = `杭州实时 · ${WMO_TXT[code] || '多云'} ${temp}°C`;
+    rtWeather.textContent = `${WMO_TXT[code] || '多云'} ${temp}°C`;
+    rtWeather.title = '杭州实时天气';
     setWeather(weatherModeFromCode(code));
   } catch (e) {
-    rtWeather.textContent = '杭州 · 天气获取失败，可手动切换';
+    rtWeather.textContent = '天气获取失败';
+    rtWeather.title = '杭州实时天气（获取失败，可手动切换）';
     console.warn('实时天气获取失败', e);
   }
 }
@@ -1723,19 +1898,21 @@ const liveGroup = new THREE.Group();
 liveGroup.visible = false; // 真机只在透视模式里显示，总览不出现
 scene.add(liveGroup);
 const liveHud = $('live-hud');
-const liveState = { ws: null, connected: false, disabled: false, floors: new Map(), robots: new Map(), elevators: new Map(), reconnectDelay: 1000 };
+const liveState = { ws: null, connected: false, disabled: false, floors: new Map(), robots: new Map(), elevators: new Map(), tasks: new Map(), reconnectDelay: 1000 };
 const liveMarkers = new Map(); // robotId -> { obj, modelType }
 const liveBuildingXf = new Map(); // buildingName -> {cx, cz, baseY, s} 或 null
 const LIVE_TYPE_FILES = {
   medicine: '/models/models/detail/medicine.glb',
   meal: '/models/models/detail/meal.glb',
   waste: '/models/models/detail/waste.glb',
+  medical: '/models/models/detail/waste.glb',
   platform: '/models/models/detail/platform.glb',
 };
 function liveTypeOf(r) {
   const m = (r.model || '') + (r.name || '');
   if (/drug|medicine|med|送药/i.test(m)) return 'medicine';
   if (/meal|food|送餐|餐/i.test(m)) return 'meal';
+  if (/医废|医疗废物|感染性/i.test(m)) return 'medical';
   if (/waste|trash|污|垃圾/i.test(m)) return 'waste';
   return 'platform';
 }
@@ -1780,10 +1957,11 @@ function buildingTransformFor(floor) {
 function updateLiveHud() {
   const readyCount = Array.from(liveState.robots.values()).filter(readyPose).length;
   const stale = liveState.robots.size - readyCount;
-  if (liveState.disabled) liveHud.textContent = '实时机器人：中控凭证未配置';
-  else if (!liveState.connected) liveHud.textContent = '实时机器人：连接中…';
-  else liveHud.textContent = `实时机器人：${readyCount} 台就位${stale ? '（' + stale + ' 台未配准/离线）' : ''}`;
+  if (liveState.disabled) liveHud.textContent = '中控凭证未配置';
+  else if (!liveState.connected) liveHud.textContent = '连接中…';
+  else liveHud.textContent = `就位 ${readyCount}/${liveState.robots.size}${stale ? ' · ' + stale + ' 台未配准' : ''}`;
   renderRobotLiveList();
+  renderTaskRecords();
 }
 // 真机模型（每台 8~12MB）只在透视里才需要；总览用方块占位，避免首屏被模型拖垮
 async function loadLiveMarkerModel(mk, type, rid) {
@@ -1916,9 +2094,11 @@ function handleLiveMessage(msg) {
     liveState.floors.clear();
     liveState.robots.clear();
     liveState.elevators.clear();
+    liveState.tasks.clear();
     (e.floors || []).forEach((f) => liveState.floors.set(f.sceneId + '/' + f.floorKey, f));
     (e.robots || []).forEach((r) => liveState.robots.set(r.robotId, r));
     (e.elevators || []).forEach((el) => liveState.elevators.set(el.controllerId, el));
+    (e.tasks || []).forEach((tk) => { if (tk._recvAt == null) tk._recvAt = Date.now(); liveState.tasks.set(tk.intakeId, tk); });
   }
   if (t === 'snapshot.end') refreshLiveMarkers();
   if (t === 'state.delta' && msg.data) {
@@ -1928,6 +2108,8 @@ function handleLiveMessage(msg) {
     (rm.robots || []).forEach((id) => liveState.robots.delete(id));
     (up.elevators || []).forEach((el) => liveState.elevators.set(el.controllerId, el));
     (rm.elevators || []).forEach((id) => liveState.elevators.delete(id));
+    (up.tasks || []).forEach((tk) => { if (tk._recvAt == null) tk._recvAt = Date.now(); liveState.tasks.set(tk.intakeId, tk); });
+    (rm.tasks || []).forEach((id) => liveState.tasks.delete(id));
     refreshLiveMarkers();
   }
   if (t === 'error' || t === 'auth.error') {
@@ -1955,13 +2137,13 @@ function connectLive() {
     ws.onclose = () => {
       if (liveState.ws !== ws) return; // 已主动放弃（如凭证未配置）
       liveState.connected = false;
-      liveHud.textContent = '实时机器人：重连中…';
+      liveHud.textContent = '重连中…';
       setTimeout(connectLive, Math.min(liveState.reconnectDelay, 30000));
       liveState.reconnectDelay *= 2;
     };
     ws.onerror = () => {};
   } catch (e) {
-    liveHud.textContent = '实时机器人：不可用';
+    liveHud.textContent = '连接不可用';
     console.warn('[twin] 中继连接失败', e);
   }
 }
@@ -1969,21 +2151,67 @@ $('tg-live').onchange = (e) => { liveGroup.visible = e.target.checked && focusSt
 connectLive();
 setInterval(refreshLiveMarkers, 2000); // 兜底刷新位置
 
-// ---------- 设置面板（默认隐藏，顶部按钮弹出） ----------
+// ---------- 工作台设置弹窗（默认隐藏，顶部按钮弹出） ----------
+function closePanel() {
+  document.body.classList.remove('panel-open');
+  $('settings-btn').classList.remove('on');
+}
 $('settings-btn').onclick = () => {
   const open = document.body.classList.toggle('panel-open');
   $('settings-btn').classList.toggle('on', open);
 };
-$('panel-close').onclick = () => {
-  document.body.classList.remove('panel-open');
-  $('settings-btn').classList.remove('on');
-};
+$('panel-close').onclick = closePanel;
+$('panel-cancel').onclick = closePanel;
+$('panel-done').onclick = closePanel;
+// 渲染质量分段按钮 ↔ 画质下拉
+function syncQualitySeg() {
+  const q = $('quality-select').value;
+  document.querySelectorAll('#quality-seg button').forEach((b) => b.classList.toggle('on', b.dataset.q === q));
+}
+$('quality-select').addEventListener('change', syncQualitySeg);
+$('quality-seg').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  $('quality-select').value = b.dataset.q;
+  $('quality-select').dispatchEvent(new Event('change'));
+  syncQualitySeg();
+});
+syncQualitySeg();
+// 显示/关闭 分段按钮 ↔ 复选框
+document.querySelectorAll('#panel .seg button[data-k]').forEach((b) => {
+  b.addEventListener('click', () => {
+    const cb = $(b.dataset.k);
+    if (!cb) return;
+    cb.checked = b.dataset.v === '1';
+    cb.dispatchEvent(new Event('change'));
+    b.parentElement.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  });
+});
+// 建筑透明度：精模楼栋整体不透明度（100% = 实心）+ 透视壳体着色器增益
+function syncOpacity() {
+  const v = +$('bld-opacity').value;
+  $('bld-opacity-val').textContent = v + '%';
+  holoMat.uniforms.uGain.value = v / 100; // 默认 100% 时透视壳体保持原设计的观感
+  const on = v < 100;
+  for (const m of bldFade.mats) {
+    const b = m.userData.fadeBase;
+    m.opacity = b.opacity * v / 100;
+    // 只在跨过 100% 时切换混合模式：切换要重编着色器，拖动过程中不能每帧来一次
+    if (bldFade.on !== on) {
+      m.transparent = on || b.transparent;
+      m.depthWrite = on ? false : b.depthWrite;
+      m.renderOrder = on ? 10 : b.renderOrder; // 半透明楼栋永远画在虚化城市之后
+      m.needsUpdate = true;
+    }
+  }
+  if (bldFade.pre) bldFade.pre.visible = on;
+  bldFade.on = on;
+}
+$('bld-opacity').addEventListener('input', syncOpacity);
+syncOpacity();
 // 点击模拟/透视按钮后自动收起设置面板，避免居中弹窗挡住场景鼠标操作
 document.querySelectorAll('.simbox button').forEach((b) => {
-  b.addEventListener('click', () => {
-    document.body.classList.remove('panel-open');
-    $('settings-btn').classList.remove('on');
-  });
+  b.addEventListener('click', closePanel);
 });
 
 // ---------- ECharts 指标面板 ----------
@@ -2010,70 +2238,110 @@ async function initCharts() {
   }
   chartsState.inited = true;
   const mk = (id) => { const el = $(id); if (!el) return null; const c = window.echarts.init(el, null, { renderer: 'canvas' }); chartsState.charts[id] = c; return c; };
-  mk('ch-flow');
-  mk('ch-robot-type');
-  refreshCharts();
-  refreshRobotMetrics();
-  setInterval(refreshCharts, 3000);
-  setInterval(refreshRobotMetrics, 3000);
+  mk('ch-trend');
+  renderTrendChart();
+  refreshDeviceBoard();
+  refreshTaskBoard();
+  renderTaskRecords();
+  setInterval(refreshDeviceBoard, 3000);
+  setInterval(refreshTaskBoard, 3000);
+  setInterval(renderTrendChart, 30000);
   setTimeout(() => Object.values(chartsState.charts).forEach((c) => c.resize()), 1000);
   window.addEventListener('resize', () => { if ($('charts-panel').classList.contains('show')) Object.values(chartsState.charts).forEach((c) => c.resize()); });
 }
+// ---------- 左右指标栏（蓝湖设计稿）：数据对接 + 缺失数据造数 ----------
 const rnd = (a, b) => a + Math.random() * (b - a);
-const walk = (v, lo, hi, step) => Math.min(hi, Math.max(lo, v + rnd(-step, step)));
-const dashState = {
-  power: 19833, water: 334, gas: 1314,
-  load: 2987, flowWater: 16.5, flowGas: 68.8,
-  flow: 13270, inHosp: 1162, mz: 740, zy: 422,
-  pk: 1256, guard: 290,
-};
-const fmtK = (n) => Math.round(n).toLocaleString('en-US');
-function refreshCharts() {
-  if (!chartsState.inited) return;
-  const s = dashState;
-  // 01 总览
-  s.power = walk(s.power, 17000, 23000, 220);
-  s.load = walk(s.load, 2700, 3300, 60);
-  s.flowWater = walk(s.flowWater, 12, 22, 1.2);
-  s.flowGas = walk(s.flowGas, 55, 85, 3);
-  $('ov-power').textContent = fmtK(s.power);
-  $('ov-trend').textContent = '▲ ' + rnd(1.5, 4.5).toFixed(1) + '%';
-  $('ov-dev').textContent = (326 + Math.floor(rnd(0, 6))) + '/342';
-  $('ov-rate').textContent = (94 + rnd(0.5, 2.5)).toFixed(1) + '%';
-  // 04 运营详情
-  s.flow = walk(s.flow, 11500, 14500, 260);
-  s.inHosp = walk(s.inHosp, 1050, 1250, 25);
-  $('op-flow').textContent = fmtK(Math.round(s.flow));
-  $('op-trend').textContent = '+' + rnd(8, 20).toFixed(1) + '%';
-  $('op-in').textContent = fmtK(Math.round(s.inHosp)) + ' 人';
-  $('op-mz').textContent = Math.round(s.inHosp * 0.63);
-  $('op-zy').textContent = Math.round(s.inHosp * 0.37);
-  s.pk = walk(s.pk, 1100, 1400, 20);
-  s.guard = walk(s.guard, 270, 300, 3);
-  $('pk-v').textContent = Math.round(s.pk);
-  $('pk-b').style.width = (s.pk / 1500 * 100).toFixed(1) + '%';
-  $('gd-v').textContent = Math.round(s.guard);
-  $('gd-b').style.width = (s.guard / 300 * 100).toFixed(1) + '%';
-  const c4 = chartsState.charts['ch-flow'];
-  if (c4) c4.setOption({
+const pad2 = (n) => String(n).padStart(2, '0');
+const fmtTS = (t) => { const d = new Date(t); return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
+
+// 中控没任务时的兜底演示记录（造数）
+const MOCK_TASKS = [
+  { intakeId: 'mock-1', taskId: 'DT-20261120-0092', description: '常规配送', status: 'running', robotSn: '送餐机器人C-02', type: 'meal', _recvAt: Date.now() - 9 * 60000 },
+  { intakeId: 'mock-2', taskId: 'DT-20261120-0091', description: '药品配送', status: 'success', robotSn: '送药机器人M-01', type: 'medicine', _recvAt: Date.now() - 24 * 60000 },
+  { intakeId: 'mock-3', taskId: 'DT-20261120-0090', description: '物资转运', status: 'running', robotSn: '送货机器人G-03', type: 'waste', _recvAt: Date.now() - 35 * 60000 },
+  { intakeId: 'mock-4', taskId: 'DT-20261120-0089', description: '标本转运', status: 'failed', robotSn: '送药机器人M-02', type: 'medicine', _recvAt: Date.now() - 51 * 60000 },
+  { intakeId: 'mock-5', taskId: 'DT-20261120-0088', description: '常规配送', status: 'success', robotSn: '送餐机器人C-01', type: 'meal', _recvAt: Date.now() - 66 * 60000 },
+  { intakeId: 'mock-6', taskId: 'DT-20261120-0087', description: '医废清运', status: 'running', robotSn: '医废车Y-01', type: 'medical', _recvAt: Date.now() - 78 * 60000 },
+];
+
+// ---------- 近一周任务趋势（无历史数据，造数） ----------
+const trendData = { labels: null, week: null, todayLabels: null, day: null, todayTotal: null };
+function trendSeriesData() {
+  if (trendData.labels == null) {
+    const d = new Date();
+    trendData.labels = Array.from({ length: 7 }, (_, i) => { const t = new Date(d.getTime() - (6 - i) * 86400000); return (t.getMonth() + 1) + '/' + t.getDate(); });
+    let v = 220; trendData.week = [];
+    for (let i = 0; i < 7; i++) { v = Math.min(420, Math.max(120, v + rnd(-55, 55))); trendData.week.push(Math.round(v)); }
+    trendData.todayLabels = Array.from({ length: 12 }, (_, i) => pad2(i * 2) + ':00');
+    trendData.day = Array.from({ length: 12 }, () => Math.round(rnd(3, 24)));
+    trendData.todayTotal = trendData.day.reduce((a, b) => a + b, 0);
+  }
+  return trendData;
+}
+let trendMode = 'week';
+function renderTrendChart() {
+  const c = chartsState.charts['ch-trend'];
+  if (!c) return;
+  const td = trendSeriesData();
+  const isWeek = trendMode === 'week';
+  c.setOption({
     backgroundColor: 'transparent',
-    grid: { left: 32, right: 6, top: 8, bottom: 16 },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'category', data: ['08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18'], axisLabel: { color: '#7a95b0', fontSize: 10 }, axisLine: { lineStyle: { color: 'rgba(0,229,255,.25)' } } },
-    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,229,255,.1)' } }, axisLabel: { color: '#7a95b0', fontSize: 10 } },
+    grid: { left: 30, right: 8, top: 12, bottom: 18 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: 'rgba(2,183,255,.5)' } } },
+    xAxis: { type: 'category', boundaryGap: false, data: isWeek ? td.labels : td.todayLabels, axisLabel: { color: '#7a95b0', fontSize: 9.5 }, axisLine: { lineStyle: { color: 'rgba(2,183,255,.3)' } } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(2,183,255,.1)' } }, axisLabel: { color: '#7a95b0', fontSize: 9.5 } },
     series: [{
-      type: 'bar', barWidth: '55%',
-      data: [420, 980, 1350, 1620, 1480, 1560, 1420, 1180, 940, 720, 540].map((n) => Math.round(n + rnd(-60, 60))),
-      itemStyle: { borderRadius: [2, 2, 0, 0], color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#00e5ff' }, { offset: 1, color: 'rgba(43,127,212,.25)' }]) },
+      type: 'line', smooth: true, symbol: 'circle', symbolSize: 5, data: isWeek ? td.week : td.day,
+      lineStyle: { width: 2, color: '#3cc0ff', shadowColor: 'rgba(2,183,255,.6)', shadowBlur: 8 },
+      itemStyle: { color: '#9fe8ff', borderColor: '#0289ff' },
+      areaStyle: { color: new window.echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(2,183,255,.4)' }, { offset: 1, color: 'rgba(2,183,255,.02)' }]) },
     }],
   });
 }
-// 机器人实时状态列表（右侧面板，中控实时数据）
+
+// ---------- 设备看板（中控实时统计；未连接时演示数据） ----------
+function refreshDeviceBoard() {
+  const robots = Array.from(liveState.robots.values());
+  let total, online, busy, idle, alarm;
+  if (robots.length) {
+    total = robots.length;
+    online = robots.filter((r) => r.state && r.state.onlineStatus === 'online').length;
+    busy = robots.filter((r) => r.state && r.state.operationStatus === 'busy').length;
+    idle = robots.filter((r) => r.state && r.state.onlineStatus === 'online' && r.state.operationStatus !== 'busy').length;
+    alarm = robots.filter((r) => {
+      const st = r.state || {};
+      if (st.onlineStatus === 'offline') return true;
+      if (st.freshness === 'stale') return true;
+      const loc = (r.cadLocations || [])[0];
+      return !!loc && !!loc.projectionStatus && ['stale', 'unsupported'].includes(loc.projectionStatus);
+    }).length;
+  } else {
+    total = 12; online = 10; busy = 4; idle = 6; alarm = 2;
+    if (busy + idle > online) idle = Math.max(0, online - busy);
+  }
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set('dev-total', total); set('dev-online', online); set('dev-busy', busy); set('dev-idle', idle); set('dev-alarm', alarm);
+}
+
+// ---------- 机器人设备列表（左侧面板，中控实时数据 + 类型图标） ----------
 const ROBOT_REASON_TEXT = {
   POSE_STALE: '位姿过期', MAP_UNRESOLVED: '地图未解析', POSE_UNAVAILABLE: '无位姿',
   ROBOT_DISABLED: '已停用', ADAPTER_UNSUPPORTED: '适配不支持', REGISTRATION_MISSING: '缺配准', REGISTRATION_STALE: '配准过期',
 };
+const RB_ICONS = {
+  medicine: '/digital-twin/assets/ui/送药.png?v=cee57ecc',
+  meal: '/digital-twin/assets/ui/送餐.png?v=0a1a759b',
+  waste: '/digital-twin/assets/ui/送货.png?v=c64b734b',
+  medical: '/digital-twin/assets/ui/医废.png?v=3d808bfa',
+  platform: '/digital-twin/assets/ui/送货.png?v=c64b734b',
+};
+const RB_TAB_NAMES = { all: '全部', medicine: '送药', meal: '送餐', waste: '送货', medical: '医废' };
 const robotRows = new Map();
+let rbTab = 'all', rbStatusF = 'all', rbSearch = '';
+function displayTypeOf(r) {
+  const t = liveTypeOf(r);
+  return t === 'platform' ? 'waste' : t;
+}
 function robotStatusText(r) {
   const st = r.state || {};
   if (st.onlineStatus === 'online') return st.operationStatus === 'busy' ? '运行中' : st.operationStatus === 'free' ? '空闲' : '在线';
@@ -2084,61 +2352,88 @@ function robotLocText(r) {
   const loc = readyPose(r);
   if (loc) {
     const f = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
-    if (f) return { text: f.buildingName + ' ' + f.floorNumber + 'F', cls: 'pos' };
+    if (f) return f.buildingName + ' ' + f.floorNumber + 'F';
   }
   const lc = (r.cadLocations || [])[0];
-  const text = ROBOT_REASON_TEXT[lc && lc.reasonCode] || (lc && lc.reasonCode) || '';
-  return { text, cls: text ? 'warn' : '' };
+  return ROBOT_REASON_TEXT[lc && lc.reasonCode] || (lc && lc.reasonCode) || '未定位';
+}
+function robotBattery(r) {
+  const st = r.state || {};
+  if (st.batteryPercent != null) return st.batteryPercent;
+  // 中控没给电量时按编号生成稳定模拟值
+  let h = 0;
+  for (const ch of String(r.robotId || r.sn || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return 18 + (h % 79);
 }
 function buildRobotRow() {
   const root = document.createElement('div');
-  root.className = 'rl-row';
-  const dot = document.createElement('i'); dot.className = 'rl-dot';
-  const name = document.createElement('span'); name.className = 'rl-name';
-  const sub = document.createElement('span'); sub.className = 'rl-sub';
-  const batt = document.createElement('span'); batt.className = 'rl-batt';
-  const fill = document.createElement('i'); batt.appendChild(fill);
-  const pct = document.createElement('span'); pct.className = 'rl-pct';
-  root.append(dot, name, sub, batt, pct);
-  return { root, dot, name, sub, fill, pct };
+  root.className = 'rb-item';
+  const ico = document.createElement('span'); ico.className = 'rb-ico';
+  const img = document.createElement('img'); ico.appendChild(img);
+  const main = document.createElement('div'); main.className = 'rb-main';
+  const name = document.createElement('div'); name.className = 'rb-name';
+  const loc = document.createElement('div'); loc.className = 'rb-loc';
+  main.append(name, loc);
+  const side = document.createElement('div'); side.className = 'rb-side';
+  const badge = document.createElement('span'); badge.className = 'rb-badge';
+  const batt = document.createElement('span'); batt.className = 'rb-batt';
+  const bar = document.createElement('span'); bar.className = 'bar';
+  const fill = document.createElement('i'); bar.appendChild(fill);
+  const pct = document.createElement('span'); pct.className = 'pct';
+  batt.append(bar, pct);
+  side.append(badge, batt);
+  root.append(ico, main, side);
+  return { root, img, name, loc, badge, fill, pct };
 }
 function updateRobotRow(row, r) {
   const st = r.state || {};
   const online = st.onlineStatus;
-  row.dot.style.background = online === 'online' ? '#4cd98a' : online === 'offline' ? '#7a95b0' : '#ffc84d';
-  row.dot.style.boxShadow = online === 'online' ? '0 0 5px #4cd98a' : 'none';
+  const type = displayTypeOf(r);
+  const want = RB_ICONS[type] || RB_ICONS.platform;
+  if (row.img.getAttribute('src') !== want) row.img.src = want;
   row.name.textContent = r.name || r.sn || ('机器人 ' + r.robotId);
-  const loc = robotLocText(r);
-  let subText = robotStatusText(r);
-  if (st.freshness === 'stale') subText += ' · 过期';
-  row.sub.textContent = subText + (loc.text ? ' · ' + loc.text : '');
-  row.sub.className = 'rl-sub' + (loc.cls ? ' ' + loc.cls : '');
-  const batt = st.batteryPercent;
-  if (batt == null) {
-    row.fill.style.width = '0%';
-    row.fill.style.background = 'transparent';
-    row.pct.textContent = '--';
-    row.pct.style.color = '#5b7a95';
-  } else {
-    row.fill.style.width = batt + '%';
-    row.fill.style.background = batt >= 50 ? '#4cd98a' : batt >= 20 ? '#ffc84d' : '#ff6b6b';
-    row.pct.textContent = batt + '%';
-    row.pct.style.color = '#9fb8d0';
+  const locText = robotLocText(r);
+  row.loc.textContent = readyPose(r) ? locText : locText;
+  let cls = 'off', label = robotStatusText(r);
+  if (online === 'online') {
+    if (st.operationStatus === 'busy') { cls = 'busy'; label = '在线·运行中'; }
+    else { cls = 'on'; label = '在线·' + (st.operationStatus === 'free' ? '空闲' : '在线'); }
+    if (st.freshness === 'stale') { cls = 'warn'; label += '·过期'; }
+  } else if (online === 'unknown') { cls = 'warn'; label = '状态未知'; }
+  else { cls = 'off'; label = '离线'; }
+  row.badge.className = 'rb-badge ' + cls;
+  row.badge.textContent = label;
+  const batt = robotBattery(r);
+  row.fill.style.width = batt + '%';
+  row.fill.style.background = batt >= 50 ? '#4cd98a' : batt >= 20 ? '#ffc84d' : '#ff6b6b';
+  row.pct.textContent = '电量' + batt + '%';
+  row.root.title = row.name.textContent + ' · ' + locText + ' · ' + label + ' · 电量 ' + batt + '%';
+}
+function robotPassFilter(r) {
+  if (rbTab !== 'all' && displayTypeOf(r) !== rbTab) return false;
+  if (rbStatusF !== 'all') {
+    const st = r.state || {};
+    if (rbStatusF === 'online' && st.onlineStatus !== 'online') return false;
+    if (rbStatusF === 'busy' && st.operationStatus !== 'busy') return false;
+    if (rbStatusF === 'free' && !(st.onlineStatus === 'online' && st.operationStatus !== 'busy')) return false;
+    if (rbStatusF === 'offline' && !(st.onlineStatus && st.onlineStatus !== 'online')) return false;
+    if (rbStatusF === 'alert' && st.onlineStatus === 'online' && st.freshness !== 'stale' && readyPose(r)) return false;
   }
-  row.root.title = row.name.textContent + ' · ' + row.sub.textContent + ' · 电量 ' + row.pct.textContent;
+  if (rbSearch) {
+    const q = (r.name || '') + (r.sn || '') + (r.robotId || '');
+    if (!q.toLowerCase().includes(rbSearch.toLowerCase())) return false;
+  }
+  return true;
 }
 function renderRobotLiveList() {
   const box = $('robot-live-list');
   if (!box) return;
-  const robots = Array.from(liveState.robots.values());
-  const countEl = $('rb-live-count');
-  const online = robots.filter((r) => r.state && r.state.onlineStatus === 'online').length;
-  if (countEl) countEl.textContent = robots.length ? '在线 ' + online + '/' + robots.length : '--';
+  const robots = Array.from(liveState.robots.values()).filter(robotPassFilter);
   let empty = box.querySelector('.rl-empty');
   if (!robots.length) {
     for (const row of robotRows.values()) row.root.remove();
     robotRows.clear();
-    if (!empty) { empty = document.createElement('div'); empty.className = 'rl-empty'; empty.textContent = '等待中控数据…'; box.appendChild(empty); }
+    if (!empty) { empty = document.createElement('div'); empty.className = 'rl-empty'; empty.textContent = liveState.robots.size ? '没有符合条件的机器人' : '等待中控数据…'; box.appendChild(empty); }
     return;
   }
   if (empty) empty.remove();
@@ -2166,64 +2461,143 @@ function renderRobotLiveList() {
     robotRows.delete(id);
   }
 }
-// 机器人指标（中控实时数据）
-const ROBOT_TYPE_NAMES = { medicine: '送药', meal: '送餐', waste: '污物', platform: '平台' };function refreshRobotMetrics() {
-  if (!chartsState.inited) return;
-  const blank = () => {
-    for (const id of ['rb-total', 'rb-ready', 'rb-batt', 'rb-busy', 'rb-chg', 'rb-off']) $(id).textContent = '--';
-    $('rb-floors').textContent = '--';
-  };
-  const c = chartsState.charts['ch-robot-type'];
-  const robots = Array.from(liveState.robots.values());
-  if (!robots.length) { blank(); if (c) c.setOption({ series: [{ data: [] }] }); return; }
-  const ready = robots.filter(readyPose).length;
-  const batt = robots.map((r) => r.state && r.state.batteryPercent).filter((v) => v != null);
-  const busy = robots.filter((r) => r.state && r.state.operationStatus === 'busy').length;
-  const chg = robots.filter((r) => r.state && r.state.isCharging).length;
-  const off = robots.filter((r) => r.state && r.state.onlineStatus && r.state.onlineStatus !== 'online').length;
-  $('rb-total').textContent = robots.length;
-  $('rb-ready').textContent = ready;
-  $('rb-batt').textContent = batt.length ? Math.round(batt.reduce((a, b) => a + b, 0) / batt.length) + '%' : '--';
-  $('rb-busy').textContent = busy;
-  $('rb-chg').textContent = chg;
-  $('rb-off').textContent = off;
-  const types = {};
-  robots.forEach((r) => { const t = liveTypeOf(r); types[t] = (types[t] || 0) + 1; });
-  if (c) c.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', formatter: '{b}: {c} 台' },
-    legend: { bottom: 0, textStyle: { color: '#9fb8d0', fontSize: 11 }, itemWidth: 12, itemHeight: 7 },
-    series: [{
-      type: 'pie', radius: ['45%', '70%'], center: ['50%', '42%'],
-      label: { show: false },
-      data: Object.entries(types).map(([t, n]) => ({ name: ROBOT_TYPE_NAMES[t] || t, value: n })),
-      itemStyle: { borderRadius: 5, borderWidth: 0 },
-      color: ['#00e5ff', '#ffc84d', '#4cd98a', '#7f8cff'],
-    }],
-  });
-  const floors = {};
-  for (const r of robots) {
-    const loc = readyPose(r);
-    if (!loc) continue;
-    const f = liveState.floors.get(loc.sceneId + '/' + loc.floorKey);
-    const nm = f && f.buildingName ? f.buildingName : (loc.buildingId || '未定位');
-    floors[nm] = (floors[nm] || 0) + 1;
-  }
-  $('rb-floors').textContent = Object.entries(floors).map(([k, n]) => `${k}×${n}`).join(' · ') || '--';
+
+// ---------- 任务看板 + 今日任务记录（中控 tasks；缺失时造数） ----------
+const TASK_STATUS = {
+  pending_assignment: { n: '待分配', cls: 'warn' }, resolving: { n: '解析中', cls: 'run' },
+  ready: { n: '待执行', cls: 'run' }, assigned: { n: '已分配', cls: 'run' }, running: { n: '执行中', cls: 'run' },
+  resetting: { n: '重置中', cls: 'run' }, success: { n: '已完成', cls: 'ok' },
+  failed: { n: '异常', cls: 'bad' }, canceled: { n: '已取消', cls: 'bad' }, unknown: { n: '未知', cls: 'warn' },
+};
+function taskTypeName(tk) {
+  const biz = tk.visits && tk.visits.length && tk.visits[0].businesses && tk.visits[0].businesses[0];
+  if (biz && (biz.type || biz.description)) return biz.type || biz.description;
+  if (tk.description) return tk.description;
+  const r = liveState.robots.get(tk.robotId);
+  if (r) return RB_TAB_NAMES[displayTypeOf(r)] + '任务';
+  return '配送任务';
 }
-$('charts-btn').onclick = () => {
-  const left = $('charts-left');
-  const panel = $('charts-panel');
-  const show = !panel.classList.contains('show');
-  panel.classList.toggle('show', show);
-  left.classList.toggle('show', show);
-  $('charts-btn').classList.toggle('on', show);
-  $('charts-btn').textContent = show ? '收起指标' : '指标面板';
+function taskTabOf(tk) {
+  const r = liveState.robots.get(tk.robotId);
+  return r ? displayTypeOf(r) : (tk.type || 'waste');
+}
+function taskStatusInfo(tk) { return TASK_STATUS[tk.status] || { n: tk.status || '未知', cls: 'warn' }; }
+function refreshTaskBoard() {
+  const tasks = Array.from(liveState.tasks.values());
+  let total, done, running, fail;
+  if (tasks.length) {
+    total = tasks.length;
+    done = tasks.filter((t) => t.status === 'success').length;
+    running = tasks.filter((t) => ['pending_assignment', 'resolving', 'ready', 'assigned', 'running', 'resetting'].includes(t.status)).length;
+    fail = tasks.filter((t) => t.status === 'failed' || t.status === 'canceled').length;
+    const tag = $('tk-tag');
+    if (tag) tag.textContent = '中控推送';
+  } else {
+    // 演示基线（造数），随时间轻微漂移
+    total = 275 + Math.round(rnd(-3, 3));
+    done = 268 + Math.round(rnd(-2, 2));
+    running = Math.max(2, 5 + Math.round(rnd(-2, 2)));
+    fail = Math.max(1, 2 + Math.round(rnd(-1, 1)));
+    const tag = $('tk-tag');
+    if (tag) tag.textContent = '演示数据';
+  }
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set('tk-total', total); set('tk-done', done); set('tk-running', running); set('tk-fail', fail);
+  const ring = document.querySelector('#taskboard-card .tk-ring');
+  if (ring) {
+    const p1 = (done / total) * 100, p2 = ((done + running) / total) * 100;
+    ring.style.background = `conic-gradient(#4cd98a 0 ${p1}%, #3cc0ff ${p1}% ${p2}%, #ff8a6b ${p2}% 100%)`;
+  }
+}
+let tkTab = 'all';
+const tkRows = new Map();
+function renderTaskRecords() {
+  const box = $('task-record-list');
+  if (!box) return;
+  let tasks = Array.from(liveState.tasks.values());
+  const real = tasks.length > 0;
+  if (!real) tasks = MOCK_TASKS;
+  tasks = tasks.filter((t) => tkTab === 'all' || taskTabOf(t) === tkTab);
+  let empty = box.querySelector('.rl-empty');
+  if (!tasks.length) {
+    for (const row of tkRows.values()) row.root.remove();
+    tkRows.clear();
+    if (!empty) { empty = document.createElement('div'); empty.className = 'rl-empty'; empty.textContent = '暂无任务记录…'; box.appendChild(empty); }
+    return;
+  }
+  if (empty) empty.remove();
+  const seen = new Set();
+  tasks = tasks.slice().sort((a, b) => (b._recvAt || 0) - (a._recvAt || 0)).slice(0, 20);
+  for (const t of tasks) {
+    seen.add(t.intakeId);
+    let row = tkRows.get(t.intakeId);
+    if (!row) {
+      const root = document.createElement('div');
+      root.className = 'tk-item';
+      const ty = document.createElement('span'); ty.className = 'ty';
+      const id = document.createElement('span'); id.className = 'id';
+      const st = document.createElement('span'); st.className = 'st';
+      const tm = document.createElement('span'); tm.className = 'tm';
+      root.append(ty, id, st, tm);
+      row = { root, ty, id, st, tm };
+      tkRows.set(t.intakeId, row);
+    }
+    row.ty.textContent = taskTypeName(t);
+    row.id.textContent = t.taskId || t.intakeId;
+    const info = taskStatusInfo(t);
+    row.st.className = 'st ' + info.cls;
+    row.st.textContent = info.n;
+    row.tm.textContent = fmtTS(t._recvAt || Date.now());
+    box.appendChild(row.root);
+  }
+  for (const [id, row] of tkRows) {
+    if (seen.has(id)) continue;
+    row.root.remove();
+    tkRows.delete(id);
+  }
+}
+
+// ---------- 面板显隐 ----------
+function setChartsVisible(show) {
+  $('charts-left').classList.toggle('show', show);
+  $('charts-panel').classList.toggle('show', show);
+  $('hide-left-btn').classList.toggle('collapsed', !show);
+  $('hide-right-btn').classList.toggle('collapsed', !show);
   if (show) {
     initCharts();
     setTimeout(() => Object.values(chartsState.charts).forEach((c) => c.resize()), 450);
   }
+}
+$('hide-left-btn').onclick = () => {
+  const show = !$('charts-left').classList.contains('show');
+  $('charts-left').classList.toggle('show', show);
+  $('hide-left-btn').classList.toggle('collapsed', !show);
 };
+$('hide-right-btn').onclick = () => {
+  const show = !$('charts-panel').classList.contains('show');
+  $('charts-panel').classList.toggle('show', show);
+  $('hide-right-btn').classList.toggle('collapsed', !show);
+};
+// 机器人列表筛选
+document.querySelectorAll('#rb-tabs button').forEach((b) => {
+  b.addEventListener('click', () => {
+    rbTab = b.dataset.t;
+    document.querySelectorAll('#rb-tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    renderRobotLiveList();
+  });
+});
+$('rb-search').addEventListener('input', (e) => { rbSearch = e.target.value.trim(); renderRobotLiveList(); });
+$('rb-status').addEventListener('change', (e) => { rbStatusF = e.target.value; renderRobotLiveList(); });
+document.querySelectorAll('#tk-tabs button').forEach((b) => {
+  b.addEventListener('click', () => {
+    tkTab = b.dataset.t;
+    document.querySelectorAll('#tk-tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    renderTaskRecords();
+  });
+});
+// 趋势图切换
+$('trend-week').onclick = () => { trendMode = 'week'; $('trend-week').classList.add('on'); $('trend-day').classList.remove('on'); renderTrendChart(); };
+$('trend-day').onclick = () => { trendMode = 'day'; $('trend-day').classList.add('on'); $('trend-week').classList.remove('on'); renderTrendChart(); };
 // 首帧之后空闲时再加载图表库，避免和模型争夺带宽
 function scheduleCharts() {
   const run = () => { initCharts(); };
@@ -2850,6 +3224,29 @@ function buildRoofProps() {
   }
   console.log('[屋顶] 设备', boxes.length + tanks.length, '个 · 天线', antennas.length, '根');
 }
+
+// 周边城市体量虚化：半透明雾白 + 不写深度 + 关阴影，突出医院主体，也给树腾出 GPU 余量。
+// 各组合并网格都是单物体，透明排序按 renderOrder 分层：远景先画，近景/屋顶装饰后画。
+// 注意必须排在卫星底图 LOD 平面（renderOrder 2~3）之后：底图不写深度，从俯视看整屏都是底图，
+// 城市排在它前面会被整片盖住。
+const CITY_FADE_ORDER = { cityFarA: 4, cityFarB: 4, cityNearRes: 5, cityNearOffice: 5, cityNearMixed: 5, cityNearGlass: 5, cityShell: 6, roofProps: 7 };
+function softenCity() {
+  surroundGroup.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (m.transparent) continue; // 航空灯等本来就是混合材质的不动
+      m.transparent = true;
+      m.opacity = 0.5;
+      m.depthWrite = false;
+      m.color = new THREE.Color(0xb9ccd9);
+      m.needsUpdate = true;
+    }
+    o.castShadow = false;
+    o.receiveShadow = false;
+    o.renderOrder = CITY_FADE_ORDER[o.name] ?? CITY_FADE_ORDER[o.parent?.name] ?? 5;
+  });
+}
 function wallBucket() { return { pos: [], nrm: [], uv: [], col: [] }; }
 function pushWalls(dst, contour, h, color, u0, v0) {
   const m = contour.length;
@@ -3095,6 +3492,7 @@ function buildCity() {
 }
 buildCity();
 buildRoofProps();
+softenCity();
 surroundGroup.visible = $('tg-surround').checked;
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
 
@@ -3110,10 +3508,11 @@ function applyQuality(q) {
     m.needsUpdate = true;
   }
   if (cityShellGroup) cityShellGroup.visible = q !== 'low';
-  if (treeInstances) treeInstances.visible = q === 'high';
+  if (treeInstances) treeInstances.visible = q !== 'low';
   if (roofPropsGroup) roofPropsGroup.visible = q === 'high';
   if (aviationMat) aviationMat.size = q === 'high' ? 6 : 4.2;
-  const px = q === 'high' ? 1.5 : q === 'medium' ? 1.25 : 1;
+  // 全屏 1080p@1.5x 填充率吃紧：high 档渲染分辨率压到 1.25，观感几乎无损
+  const px = q === 'high' ? 1.25 : 1;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, px));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = q !== 'low';
@@ -4507,24 +4906,26 @@ async function spawnFocusElevator(state, name) {
   const H = bbox.max.y - bbox.min.y;
   const grp = new THREE.Group();
   grp.position.set(wx, bbox.min.y, wz);
+  // 与掀顶联动：选中某层时，该层以上的电梯部分一并裁掉
+  const clipMat = (m) => { m.clippingPlanes = [CUT.plane]; m.clipping = true; return m; };
   // 井道：发光体 + 亮描边 + 停靠层圈，整体更醒目
   const shaftGeo = new THREE.BoxGeometry(3.2, H + 1, 3.2);
-  const shaft = new THREE.Mesh(shaftGeo, new THREE.MeshBasicMaterial({
+  const shaft = new THREE.Mesh(shaftGeo, clipMat(new THREE.MeshBasicMaterial({
     color: 0x2fb8e8, transparent: true, opacity: 0.1, depthWrite: false,
     side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-  }));
+  })));
   shaft.position.y = H / 2;
   shaft.renderOrder = 18;
   grp.add(shaft);
   const shaftEdges = new THREE.LineSegments(
     new THREE.EdgesGeometry(shaftGeo),
-    new THREE.LineBasicMaterial({ color: 0x7fe8ff, transparent: true, opacity: 0.9, depthWrite: false }),
+    clipMat(new THREE.LineBasicMaterial({ color: 0x7fe8ff, transparent: true, opacity: 0.9, depthWrite: false })),
   );
   shaftEdges.position.y = H / 2;
   shaftEdges.renderOrder = 19;
   grp.add(shaftEdges);
   // 每个停靠层一圈托盘边线
-  const ringMat = new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.75, depthWrite: false });
+  const ringMat = clipMat(new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.75, depthWrite: false }));
   for (const n of servedFloors) {
     const fy = info.baseY + (n - 1) * info.h - bbox.min.y;
     const ringGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(3.8, 0.12, 3.8));
@@ -4536,18 +4937,18 @@ async function spawnFocusElevator(state, name) {
   // 轿厢
   const car = new THREE.Group();
   const carGeo = new THREE.BoxGeometry(2.2, 2.6, 2.2);
-  const carMesh = new THREE.Mesh(carGeo, new THREE.MeshLambertMaterial({
+  const carMesh = new THREE.Mesh(carGeo, clipMat(new THREE.MeshLambertMaterial({
     color: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false,
-  }));
+  })));
   car.add(carMesh);
   const carEdges = new THREE.LineSegments(
     new THREE.EdgesGeometry(carGeo),
-    new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9, depthWrite: false }),
+    clipMat(new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9, depthWrite: false })),
   );
   car.add(carEdges);
   // 双扇门（前面 +Z，向两侧滑开）
   const doorGeo = new THREE.BoxGeometry(1.02, 2.5, 0.08);
-  const doorMat = new THREE.MeshLambertMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.85, depthWrite: false });
+  const doorMat = clipMat(new THREE.MeshLambertMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.85, depthWrite: false }));
   const doorL = new THREE.Mesh(doorGeo, doorMat);
   const doorR = new THREE.Mesh(doorGeo, doorMat);
   doorL.position.set(-0.53, -0.03, 1.14);
@@ -5242,16 +5643,16 @@ function fpHideCharts() {
   if (fpChartsPrev) {
     panel.classList.remove('show');
     $('charts-left').classList.remove('show');
-    $('charts-btn').classList.remove('on');
-    $('charts-btn').textContent = '指标面板';
+    $('hide-left-btn').classList.add('collapsed');
+    $('hide-right-btn').classList.add('collapsed');
   }
 }
 function fpRestoreCharts() {
   if (fpChartsPrev) {
     $('charts-panel').classList.add('show');
     $('charts-left').classList.add('show');
-    $('charts-btn').classList.add('on');
-    $('charts-btn').textContent = '收起指标';
+    $('hide-left-btn').classList.remove('collapsed');
+    $('hide-right-btn').classList.remove('collapsed');
     fpChartsPrev = null;
   }
 }
@@ -5616,10 +6017,11 @@ function animate() {
   const elapsed = timer.getElapsed();
   // 自动画质：默认就是 high（演示机都是独显），只有测到「真的跑不动」才降档。
   // 1) 先等 6s，让贴图上传 / 着色器编译 / 首张阴影图过去，否则帧率必然难看；
+  //    并且必须等树木/景观实例化完成（sceneDecorDone），否则它们的突发帧会拉低采样；
   // 2) 采样期间窗口必须在前台可见且有焦点——后台或被遮挡的标签页会被浏览器压帧率，
   //    拿那种数据判档，会把 4090 也判成 medium；
   // 3) 用帧间隔中位数判档，样本不足 45 帧就不下结论，保持 high。
-  if (QUALITY.mode === 'auto' && !QUALITY.done && realLoaded) {
+  if (QUALITY.mode === 'auto' && !QUALITY.done && realLoaded && sceneDecorDone) {
     const now = performance.now();
     const measurable = document.visibilityState === 'visible' && document.hasFocus();
     if (!QUALITY.settleAt) QUALITY.settleAt = now + 6000;
@@ -5631,7 +6033,8 @@ function animate() {
         QUALITY.done = true;
         if (arr.length >= 45) {
           const fps = 1 / arr[arr.length >> 1];
-          const q = fps >= 30 ? 'high' : fps >= 18 ? 'medium' : 'low';
+          // 自动档最差只降到“中”：树只在手动“低”档关闭，自动采样永远不会把树关掉
+          const q = fps >= 20 ? 'high' : 'medium';
           applyQuality(q);
           console.log('[画质] 自动', fps.toFixed(1), 'fps ->', q);
         } else {
