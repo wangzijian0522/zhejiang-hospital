@@ -60,30 +60,21 @@
   .simbox button.on { background: #b4552f; border-color: #b4552f; }
   .simhint { margin-top: 8px; font-size: 11px; line-height: 1.5; color: rgba(180, 214, 235, .75); }
 
-  /* ---------- 顶部标题栏（高保真切图：左侧品牌块 + 中央标题横幅 + 底部流光） ---------- */
-  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 76px; z-index: 50; display: flex; align-items: center; padding: 0 24px; background: linear-gradient(90deg, #010a13 0%, #04213c 30%, #063154 50%, #04213c 70%, #010a13 100%); box-shadow: 0 3px 18px rgba(0,30,60,.45); }
-  .tb-hl { height: 76px; flex-shrink: 0; margin-left: -6px; margin-right: 14px; -webkit-mask-image: linear-gradient(90deg, black 78%, transparent 100%); mask-image: linear-gradient(90deg, black 78%, transparent 100%); }
-  .tb-hm { position: absolute; left: 50%; transform: translateX(-50%); height: 74px; max-width: 70vw; -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, black 7%, black 93%, transparent 100%); }
-  .tb-wave { position: absolute; left: 0; right: 0; bottom: 0; height: 28px; background: url('/digital-twin/assets/ui/header-wave.png?v=96f0f3d6') center/100% 100% no-repeat; mix-blend-mode: screen; pointer-events: none; }
-  .tb-weather { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #fff; white-space: nowrap; text-shadow: 0 1px 4px rgba(0,20,50,.8); z-index: 1; }
+  /* ---------- 顶部标题栏（高保真设计切图「一级标题.png」整幅作背景，栏本身透明） ---------- */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 76px; z-index: 50; display: flex; align-items: center; padding: 0 24px; background: url('/digital-twin/assets/ui/一级标题.png?v=ebf65518') center / auto 100% no-repeat; }
+  .tb-weather { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #fff; white-space: nowrap; text-shadow: 0 1px 4px rgba(0,20,50,.8); z-index: 1; margin-left: 205px; }
   .tb-weather::before { content: '☀'; font-size: 16px; color: #ffd35c; text-shadow: 0 0 8px rgba(255,211,92,.85); }
-  .tb-right { display: flex; align-items: center; gap: 26px; margin-left: auto; z-index: 1; }
-  .tb-clock { text-align: right; line-height: 1.2; }
-  #rt-clock { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 1px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,20,50,.8); }
-  #rt-date { font-size: 10px; color: rgba(255,255,255,.8); }
-  .tb-btn { border: none; background: transparent; color: #fff; font-size: 13.5px; padding: 6px 0; cursor: pointer; letter-spacing: 2px; font-family: inherit; display: flex; align-items: center; gap: 6px; text-shadow: 0 1px 4px rgba(0,20,50,.8); position: relative; }
-  .tb-btn:hover { color: #cdefff; }
-  .tb-btn.on { font-weight: 700; }
-  .tb-btn.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, transparent, #4dd0ff, transparent); box-shadow: 0 0 8px rgba(77,208,255,.9); }
-  .tb-btn::before { content: '⌖'; font-size: 16px; color: #4dd0ff; text-shadow: 0 0 8px rgba(77,208,255,.9); }
-  #settings-btn::before { content: '⚙'; font-size: 17px; }
-  #cruise-top-btn { white-space: nowrap; }
+  /* 三个头部按钮：切图库现成图（实时告警/开始巡航/设置.png）直接作背景，
+     定位用 calc(50% + 偏移) 与背景横幅同样居中，任何屏宽都贴合 */
+  .tb-img-btn { position: absolute; border: none; background: none; padding: 0; cursor: pointer; z-index: 1; background-repeat: no-repeat; background-size: 100% 100%; transform: scale(.88); transform-origin: 50% 50%; filter: brightness(1.32) drop-shadow(0 0 7px rgba(0,200,255,.75)); }
+  #alert-top-btn { left: calc(50% + 358px); top: 31px; width: 204px; height: 35px; background-image: url('/digital-twin/assets/ui/实时告警.png?v=ad9c2429'); }
+  #cruise-top-btn { left: calc(50% + 525px); top: 32px; width: 204px; height: 34px; background-image: url('/digital-twin/assets/ui/开始巡航.png?v=e1f3570b'); }
+  #settings-btn { left: calc(50% + 688px); top: 32px; width: 204px; height: 34px; background-image: url('/digital-twin/assets/ui/设置.png?v=dc677e1d'); }
   #cruise-top-btn:disabled { opacity: .55; cursor: wait; }
-  @media (max-width: 1500px) { .tb-clock { display: none; } }
-  @media (max-width: 1100px) { .tb-weather { display: none; } .tb-hm { max-width: 62vw; } }
+  @media (max-width: 1100px) { .tb-weather { display: none; } }
 
   /* ---------- 左右指标栏（蓝湖设计稿样式） ---------- */
-  .charts-col { position: fixed; top: 88px; width: min(438px, 26vw); height: calc(100vh - 100px); overflow: hidden; z-index: 40; display: flex; flex-direction: column; gap: 12px; transition: transform .4s cubic-bezier(.22,.9,.3,1); }
+  .charts-col { position: fixed; top: 88px; width: min(350px, 20.8vw); height: calc(100vh - 100px); overflow: hidden; z-index: 40; display: flex; flex-direction: column; gap: 12px; transition: transform .4s cubic-bezier(.22,.9,.3,1); }
   #charts-panel { right: 12px; transform: translateX(calc(100% + 40px)); }
   #charts-left { left: 12px; transform: translateX(calc(-100% - 40px)); }
   #charts-left.show, #charts-panel.show { transform: translateX(0); }
@@ -98,23 +89,24 @@
 
   /* 侧边「一键隐藏」竖向标签：贴着各栏的内侧边，收起后滑到屏幕边缘 */
   .hide-tab { position: fixed; top: 50%; z-index: 41; transform: translateY(-50%); writing-mode: vertical-rl; letter-spacing: 5px; font-size: 12px; color: #bfe4f5; background: linear-gradient(180deg, rgba(3,103,196,.75), rgba(2,60,110,.85)); border: 1px solid rgba(2,183,255,.4); padding: 14px 6px; cursor: pointer; transition: left .4s cubic-bezier(.22,.9,.3,1), right .4s cubic-bezier(.22,.9,.3,1); font-family: inherit; }
-  #hide-left-btn { left: calc(12px + min(438px, 26vw) - 2px); border-radius: 10px 0 0 10px; }
-  #hide-right-btn { right: calc(12px + min(438px, 26vw) - 2px); border-radius: 0 10px 10px 0; }
+  #hide-left-btn { left: calc(12px + min(350px, 20.8vw) - 2px); border-radius: 10px 0 0 10px; }
+  #hide-right-btn { right: calc(12px + min(350px, 20.8vw) - 2px); border-radius: 0 10px 10px 0; }
   #hide-left-btn.collapsed { left: 0; }
   #hide-right-btn.collapsed { right: 0; }
   .hide-tab:hover { background: rgba(3,123,214,.9); color: #fff; }
 
   /* 设备看板：整卡用高保真切图做底，只叠加动态数字（青色发光） */
-  #devboard-card { background: url('/digital-twin/assets/ui/devboard-card.png?v=3ad9c711') center/100% 100% no-repeat; padding: 0; overflow: visible; }
-  #devboard-card .devboard { position: relative; width: 100%; aspect-ratio: 510/232; }
-  .dev-num { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
-  .dev-num .v { font-size: 19px; font-weight: 800; color: #6fe3ff; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(77,208,255,.9), 0 0 4px rgba(77,208,255,.8); }
-  #dev-online { left: 19.1%; top: 34.9%; }
-  #dev-busy { left: 66.2%; top: 34.9%; }
-  #dev-total { left: 42.6%; top: 61.6%; }
+  /* 设备看板：切图「设备看板.png」菱形网络图作背景，动态数字叠在节点下方 */
+  #devboard-card .devboard { position: relative; width: 100%; aspect-ratio: 414/268; margin: 0 auto; background: url('/digital-twin/assets/ui/设备看板.png?v=c8acd5e7') center / 100% 100% no-repeat; }
+  .dev-num { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+  .dev-num .v { font-size: 20px; font-weight: 800; color: #6fe3ff; line-height: 1.2; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(77,208,255,.8); }
+  .dev-num .k { font-size: 12px; color: #eaf6ff; letter-spacing: 1px; }
+  #dev-online { left: 21.7%; top: 23%; }
+  #dev-busy { left: 79.6%; top: 23%; }
+  #dev-total { left: 50.6%; top: 54%; }
   #dev-total .v { font-size: 24px; }
-  #dev-idle { left: 19.1%; top: 93.5%; }
-  #dev-alarm { left: 66.2%; top: 93.5%; }
+  #dev-idle { left: 21.6%; top: 75%; }
+  #dev-alarm { left: 79.6%; top: 75%; }
 
   /* 机器人设备列表：卡片固定占满剩余高度，列表内部滚动 */
   #robot-card { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
@@ -149,18 +141,18 @@
   .rb-batt .pct { font-size: 10px; color: #9fc8e4; font-variant-numeric: tabular-nums; }
   .rl-empty { font-size: 11px; color: var(--dim); padding: 10px 6px; text-align: center; }
 
-  /* 任务看板 */
-  .tk-board { display: flex; align-items: center; gap: 12px; }
-  .tk-ring { position: relative; width: 118px; height: 118px; flex-shrink: 0; border-radius: 50%; background: conic-gradient(#4cd98a 0 62%, #3cc0ff 62% 90%, #ff8a6b 90% 100%); box-shadow: 0 0 18px rgba(2,183,255,.25); }
-  .tk-ring::after { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: #052036; border: 1px solid rgba(2,183,255,.25); }
-  .tk-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1; }
-  .tk-center .v { font-size: 27px; font-weight: 800; color: #fff; line-height: 1; text-shadow: 0 0 14px rgba(2,183,255,.6); font-variant-numeric: tabular-nums; }
-  .tk-center .k { font-size: 10.5px; color: #9fc8e4; margin-top: 3px; letter-spacing: 1px; }
-  .tk-stats { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-  .tk-stat { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #cfe4f2; }
-  .tk-stat .dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
-  .tk-stat .nm { flex: 1; color: var(--sub); }
-  .tk-stat .v { font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+  /* 任务看板：内部.png 全息底座图作背景，动态数字叠在对应节点上（高保真图） */
+  /* 容器保持切图原始宽高比，100% 拉伸就不会变形 */
+  .tk-holo { position: relative; aspect-ratio: 335 / 215; height: auto; background: url('/digital-twin/assets/ui/内部.png?v=189c9274') center / 100% 100% no-repeat; }
+  .tk-plat-txt { position: absolute; left: 47.8%; top: 21.9%; transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; align-items: center; }
+  .tk-plat-txt .k { font-size: 12px; color: #fff; letter-spacing: 2px; }
+  .tk-plat-txt .v { font-size: 22px; font-weight: 800; color: #6fe3ff; line-height: 1.2; text-shadow: 0 0 12px rgba(77,208,255,.9); font-variant-numeric: tabular-nums; }
+  .tk-node { position: absolute; width: 86px; text-align: center; z-index: 2; transform: translateX(-50%); }
+  .tk-node .v { display: block; font-size: 18px; font-weight: 800; color: #6fe3ff; line-height: 1.2; text-shadow: 0 0 10px rgba(77,208,255,.8); font-variant-numeric: tabular-nums; }
+  .tk-node .k { display: block; font-size: 12px; color: #eaf6ff; letter-spacing: 1px; }
+  .tk-node-l { left: 14.6%; top: 60.7%; }
+  .tk-node-r { left: 85.7%; top: 60.7%; }
+  .tk-node-c { left: 47.8%; top: 77.2%; }
 
   /* 任务趋势 */
   #trend-card { display: flex; flex-direction: column; }
@@ -312,17 +304,10 @@
 <div id="hint">拖拽平移 · 滚轮缩放 · 中键旋转 · 单击楼栋进入透视 · 单击楼面选层</div>
 <button id="demo-back" style="display:none; position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:56; background:rgba(20,30,40,.85); color:#cfe0f2; border:1px solid rgba(0,229,255,.4); border-radius:18px; padding:7px 24px; font-size:13px; letter-spacing:2px; cursor:pointer;">← 返回总览</button>
 <div id="topbar">
-  <img class="tb-hl" src="/digital-twin/assets/ui/header-left.png?v=df9e47eb" alt="">
-  <div class="tb-weather" id="rt-weather">杭州 · 获取天气中…</div>  <img class="tb-hm" src="/digital-twin/assets/ui/header-title.png?v=bc4c1359" alt="浙江省人民医院机器人异构集群数字孪生">
-  <div class="tb-wave"></div>
-  <div class="tb-right">
-    <div class="tb-clock">
-      <div id="rt-clock">--:--:--</div>
-      <div id="rt-date">----.--.--</div>
-    </div>
-    <button id="cruise-top-btn" class="tb-btn" aria-pressed="false" title="围绕医院巡航；空闲 1 分钟自动开始，移动鼠标返回总览" disabled>开始巡航</button>
-    <button id="settings-btn" class="tb-btn" title="工作台设置">设置</button>
-  </div>
+  <div class="tb-weather" id="rt-weather">杭州 · 获取天气中…</div>
+  <button id="alert-top-btn" class="tb-img-btn" title="实时告警"></button>
+  <button id="cruise-top-btn" class="tb-img-btn" aria-pressed="false" title="围绕医院巡航；空闲 1 分钟自动开始，移动鼠标返回总览" disabled></button>
+  <button id="settings-btn" class="tb-img-btn" title="工作台设置"></button>
 </div>
 <style>
   @keyframes lspin { to { transform: rotate(360deg); } }
@@ -333,12 +318,13 @@
 <button id="hide-right-btn" class="hide-tab" title="收起 / 展开右栏">一键隐藏</button>
 <div id="charts-left" class="charts-col show">
   <div class="chart-card charts-anim" id="devboard-card" style="transition-delay:.04s">
+    <h4>设备看板</h4>
     <div class="devboard">
-      <div class="dev-num" id="dev-online"><span class="v">--</span></div>
-      <div class="dev-num" id="dev-busy"><span class="v">--</span></div>
-      <div class="dev-num" id="dev-total"><span class="v">--</span></div>
-      <div class="dev-num" id="dev-idle"><span class="v">--</span></div>
-      <div class="dev-num" id="dev-alarm"><span class="v">--</span></div>
+      <div class="dev-num" id="dev-online"><span class="v">--</span><span class="k">在线设备</span></div>
+      <div class="dev-num" id="dev-busy"><span class="v">--</span><span class="k">执行中</span></div>
+      <div class="dev-num" id="dev-total"><span class="v">--</span><span class="k">设备总数</span></div>
+      <div class="dev-num" id="dev-idle"><span class="v">--</span><span class="k">空闲设备</span></div>
+      <div class="dev-num" id="dev-alarm"><span class="v">--</span><span class="k">异常设备</span></div>
     </div>
   </div>
   <div class="chart-card charts-anim" id="robot-card" style="transition-delay:.1s">
@@ -367,15 +353,11 @@
 <div id="charts-panel" class="charts-col show">
   <div class="chart-card charts-anim" id="taskboard-card" style="transition-delay:.04s">
     <h4>任务看板<span class="tag" id="tk-tag">今日</span></h4>
-    <div class="tk-board">
-      <div class="tk-ring">
-        <div class="tk-center"><span class="v" id="tk-total">--</span><span class="k">今日总数</span></div>
-      </div>
-      <div class="tk-stats">
-        <div class="tk-stat"><i class="dot" style="background:#4cd98a;box-shadow:0 0 6px #4cd98a"></i><span class="nm">已完成</span><span class="v" id="tk-done">--</span></div>
-        <div class="tk-stat"><i class="dot" style="background:#3cc0ff;box-shadow:0 0 6px #3cc0ff"></i><span class="nm">执行中</span><span class="v" id="tk-running">--</span></div>
-        <div class="tk-stat"><i class="dot" style="background:#ff8a6b;box-shadow:0 0 6px #ff8a6b"></i><span class="nm">异常</span><span class="v" id="tk-fail">--</span></div>
-      </div>
+    <div class="tk-holo">
+      <div class="tk-plat-txt"><span class="k">今日总数</span><span class="v" id="tk-total">--</span></div>
+      <div class="tk-node tk-node-l"><span class="v" id="tk-done">--</span><span class="k">已完成</span></div>
+      <div class="tk-node tk-node-c"><span class="v" id="tk-running">--</span><span class="k">执行中</span></div>
+      <div class="tk-node tk-node-r"><span class="v" id="tk-fail">--</span><span class="k">异常</span></div>
     </div>
   </div>
   <div class="chart-card charts-anim" id="trend-card" style="transition-delay:.1s">
@@ -709,6 +691,32 @@ new THREE.TextureLoader().load('/digital-twin/assets/site-plan.jpg', (t) => {
   if ($('tg-tex').checked) ground.material = groundMapMat;
 });
 
+// 医院外围暗角：中心（院区）透明、外圈压暗，突出主体建筑。
+// 透明平面贴地，建筑是不透明体有深度，不会被暗角盖住。
+let vignettePlane = null;
+function makeVignette() {
+  const size = 1500;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 512;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+  g.addColorStop(0, 'rgba(2,8,16,0)');
+  g.addColorStop(0.28, 'rgba(2,8,16,0)');
+  g.addColorStop(0.5, 'rgba(2,8,16,.45)');
+  g.addColorStop(0.72, 'rgba(2,8,16,.62)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 512);
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, toneMapped: false }),
+  );
+  plane.rotation.x = -Math.PI / 2;
+  plane.renderOrder = 4;
+  plane.position.set(0, 0.6, 0);
+  scene.add(plane);
+  vignettePlane = plane;
+}
+
 // ---------- 视角范围限制 ----------
 // 城市体量只生成到 1.5km，再往外就是生成的边缘。这里把视点锁在院区附近：
 // 目标点（平移）最多离院区中心 PAN_R，相机最多离中心 CAM_R，外圈只允许看到一部分。
@@ -881,8 +889,10 @@ function updateSkyFog() {
   const nightDim = 1 - nightK * 0.82;
   groundMapMat.color.copy(w.tintColor).multiplyScalar(nightDim);
   groundPlainMat.color.copy(w.tintColor).multiplyScalar(nightDim);
+  // 卫星底图整体压暗（0.42），突出医院主体；夜里随 nightDim 进一步变暗
+  const MAP_DIM = 0.42;
   for (const child of mapGroup.children) {
-    if (child.material && child.material.color) child.material.color.setRGB(nightDim * 0.9, nightDim * 0.95, nightDim * 1.04);
+    if (child.material && child.material.color) child.material.color.setRGB(nightDim * 0.9 * MAP_DIM, nightDim * 0.95 * MAP_DIM, nightDim * 1.04 * MAP_DIM);
   }
   // 天空穹顶与天气融合；白云在晴天/多云显示
   skyDomeMat.uniforms.weatherCol.value.set(w.sky);
@@ -1449,10 +1459,11 @@ function loadRealModel() {
     realLoading = false;
     realGroup.visible = document.getElementById('tg-real').checked;
     const r = Math.max(size.x, size.y, size.z) * s;
-    // 初始视角：医院主体居中，东南方位、30° 俯角鸟瞰
+    // 初始视角：主塔楼居左、38° 俯角鸟瞰（按用户截图的地标投影拟合）
     const focus = computeCampusFocus() || new THREE.Vector3(0, 0, 0);
+    if (vignettePlane) vignettePlane.position.set(focus.x, 0.6, focus.z);
     const rad = campusRadius;
-    const az = 33 * Math.PI / 180, elev = 34 * Math.PI / 180, dist = rad * 2.6;
+    const az = 8 * Math.PI / 180, elev = 38 * Math.PI / 180, dist = rad * 1.45;
     const iv = new THREE.Vector3(
       focus.x + dist * Math.cos(elev) * Math.sin(az),
       dist * Math.sin(elev),
@@ -1741,7 +1752,7 @@ function syncCruiseButtons() {
     btn.disabled = !realLoaded || pendingDemoLoads > 0;
     btn.classList.toggle('on', cruiseState.on);
     btn.setAttribute('aria-pressed', String(cruiseState.on));
-    btn.textContent = cruiseState.on ? '暂停巡航' : '开始巡航';
+    // 顶栏按钮是整块 PNG 切图，文字已烘在图片里，不再改文案
   }
 }
 function startCruise(automatic = false) {
@@ -1855,9 +1866,13 @@ timeRealtime.onchange = () => {
 timeSlider.disabled = timePlay.disabled = timeRealtime.checked; // 默认非实时：手动模式可用
 setInterval(() => {
   const d = hangzhouNow();
-  rtClock.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
-  const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
-  $('rt-date').textContent = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} 星期${week}`;
+  // 顶栏时钟已按设计稿移除，这里只保留实时模式下的场景时间推进
+  if (rtClock) rtClock.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+  const rtDate = $('rt-date');
+  if (rtDate) {
+    const week = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+    rtDate.textContent = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} 星期${week}`;
+  }
   if (timeRealtime.checked) {
     timeState.hour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     syncTimeUI();
@@ -2319,7 +2334,8 @@ function refreshDeviceBoard() {
     total = 12; online = 10; busy = 4; idle = 6; alarm = 2;
     if (busy + idle > online) idle = Math.max(0, online - busy);
   }
-  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  // 只写数字 span，保留「在线设备」等标签
+  const set = (id, v) => { const el = $(id); if (el) (el.querySelector('.v') || el).textContent = v; };
   set('dev-total', total); set('dev-online', online); set('dev-busy', busy); set('dev-idle', idle); set('dev-alarm', alarm);
 }
 
@@ -2503,11 +2519,6 @@ function refreshTaskBoard() {
   }
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
   set('tk-total', total); set('tk-done', done); set('tk-running', running); set('tk-fail', fail);
-  const ring = document.querySelector('#taskboard-card .tk-ring');
-  if (ring) {
-    const p1 = (done / total) * 100, p2 = ((done + running) / total) * 100;
-    ring.style.background = `conic-gradient(#4cd98a 0 ${p1}%, #3cc0ff ${p1}% ${p2}%, #ff8a6b ${p2}% 100%)`;
-  }
 }
 let tkTab = 'all';
 const tkRows = new Map();
@@ -3225,27 +3236,25 @@ function buildRoofProps() {
   console.log('[屋顶] 设备', boxes.length + tanks.length, '个 · 天线', antennas.length, '根');
 }
 
-// 周边城市体量虚化：半透明雾白 + 不写深度 + 关阴影，突出医院主体，也给树腾出 GPU 余量。
-// 各组合并网格都是单物体，透明排序按 renderOrder 分层：远景先画，近景/屋顶装饰后画。
-// 注意必须排在卫星底图 LOD 平面（renderOrder 2~3）之后：底图不写深度，从俯视看整屏都是底图，
-// 城市排在它前面会被整片盖住。
-const CITY_FADE_ORDER = { cityFarA: 4, cityFarB: 4, cityNearRes: 5, cityNearOffice: 5, cityNearMixed: 5, cityNearGlass: 5, cityShell: 6, roofProps: 7 };
-function softenCity() {
+// 周边城市体量：保留立面贴图但整体乘暗色调（约 85% 亮度），突出医院主体；关夜景发光与阴影
+function darkCity() {
+  const tint = new THREE.Color(0xd5dbe0);
   surroundGroup.traverse((o) => {
     if (!o.isMesh || !o.material) return;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     for (const m of mats) {
-      if (m.transparent) continue; // 航空灯等本来就是混合材质的不动
-      m.transparent = true;
-      m.opacity = 0.5;
-      m.depthWrite = false;
-      m.color = new THREE.Color(0xb9ccd9);
+      if (m.transparent) continue; // 航空灯等本来就透明的保持原样
+      m.color = tint;
+      m.emissiveMap = null;
+      m.emissive = new THREE.Color(0x000000);
+      m.emissiveIntensity = 0;
       m.needsUpdate = true;
     }
     o.castShadow = false;
     o.receiveShadow = false;
-    o.renderOrder = CITY_FADE_ORDER[o.name] ?? CITY_FADE_ORDER[o.parent?.name] ?? 5;
   });
+  if (cityShellGroup) cityShellGroup.visible = false;
+  if (roofPropsGroup) roofPropsGroup.visible = false;
 }
 function wallBucket() { return { pos: [], nrm: [], uv: [], col: [] }; }
 function pushWalls(dst, contour, h, color, u0, v0) {
@@ -3492,7 +3501,8 @@ function buildCity() {
 }
 buildCity();
 buildRoofProps();
-softenCity();
+darkCity();
+makeVignette();
 surroundGroup.visible = $('tg-surround').checked;
 $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; };
 
@@ -3500,16 +3510,10 @@ $('tg-surround').onchange = (e) => { surroundGroup.visible = e.target.checked; }
 const QUALITY = { mode: 'auto', value: 'high', done: false, started: false, frames: 0, t0: 0 };
 function applyQuality(q) {
   QUALITY.value = q;
-  for (const m of cityMats) {
-    const f = m.userData.facade;
-    if (!f) continue;
-    m.map = q === 'low' ? f.lowMap : f.highMap;
-    m.emissiveMap = q === 'low' ? f.lowEmissive : f.highEmissive;
-    m.needsUpdate = true;
-  }
-  if (cityShellGroup) cityShellGroup.visible = q !== 'low';
+  // 城市为白膜：无贴图可切换；屋顶装饰/壳层细节已移除
+  if (cityShellGroup) cityShellGroup.visible = false;
   if (treeInstances) treeInstances.visible = q !== 'low';
-  if (roofPropsGroup) roofPropsGroup.visible = q === 'high';
+  if (roofPropsGroup) roofPropsGroup.visible = false;
   if (aviationMat) aviationMat.size = q === 'high' ? 6 : 4.2;
   // 全屏 1080p@1.5x 填充率吃紧：high 档渲染分辨率压到 1.25，观感几乎无损
   const px = q === 'high' ? 1.25 : 1;
@@ -5247,7 +5251,7 @@ function makeFocusStage(bbox) {
 function enterDemo2Focus(bbox, state = demo2State) {
   if (focusState.active) return;
   const groups = [
-    mapGroup, surroundGroup, contextRoot, realGroup, groundGroup,
+    mapGroup, surroundGroup, contextRoot, realGroup, groundGroup, vignettePlane,
     devicesGroup, liveGroup, skyDome, cloudGroup, sunDisc, sunHalo, rain, snow,
   ];
   const saved = {
